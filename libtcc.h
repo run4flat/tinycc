@@ -103,6 +103,10 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	extended_symtab_lookup_by_number_callback new_number_callback
 );
 
+#ifndef SYM_EXTENDED
+	#define SYM_EXTENDED   0x80000000 /* extended symbol space */
+#endif
+
 #ifdef __cplusplus
 }
 #endif

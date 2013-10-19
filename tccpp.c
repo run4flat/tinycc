@@ -101,8 +101,8 @@ ST_FUNC void expect(const char *msg)
 /* -------------- Extended symbol table API -------------- */
 typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len);
 typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id);
-ST_DATA extended_symtab_lookup_by_name_callback tcc_extended_symbol_table_lookup_by_name_callback;
-ST_DATA extended_symtab_lookup_by_number_callback tcc_extended_symbol_table_lookup_by_number_callback;
+extended_symtab_lookup_by_name_callback tcc_extended_symbol_table_lookup_by_name_callback;
+extended_symtab_lookup_by_number_callback tcc_extended_symbol_table_lookup_by_number_callback;
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	extended_symtab_lookup_by_name_callback new_name_callback,
 	extended_symtab_lookup_by_number_callback new_number_callback
@@ -1050,6 +1050,10 @@ ST_FUNC void define_undef(Sym *s)
 {
     int v;
     v = s->v;
+    if (v & SYM_EXTENDED) {
+		/* XXX WORKING HERE - MAKE SURE #define DOESN'T HAVE A GLOBAL EFFECT
+		 * ON EXTENDED SYMBOL TABLES; should probably */
+	}
     if (v >= TOK_IDENT && v < tok_ident)
         table_ident[v - TOK_IDENT]->sym_define = NULL;
     s->v = 0;
@@ -1057,6 +1061,14 @@ ST_FUNC void define_undef(Sym *s)
 
 ST_INLN Sym *define_find(int v)
 {
+    if (v & SYM_EXTENDED) {
+		/* Extended symbol table lookup */
+		if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
+		TokenSym *ts = tcc_extended_symbol_table_lookup_by_number_callback(v);
+		if (ts == NULL) return NULL;
+		return ts->sym_define;
+	}
+	
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -2243,9 +2255,7 @@ maybe_newline:
             }
             /* If we are here, it's because we didn't find the token in
              * our current symbol table. Check if there is an extended
-             * symbol table entry. Such entries must be negative, and
-             * a zero return value will main that the check failed. */
-             /* Looks like int my_func(char * sym_name, int name_len) */
+             * symbol table entry. */
             if (tcc_extended_symbol_table_lookup_by_name_callback) {
 				ts = tcc_extended_symbol_table_lookup_by_name_callback(p1, len);
 				if (ts) goto token_found;

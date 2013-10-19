@@ -72,6 +72,10 @@ ST_DATA char *funcname;
 
 ST_DATA CType char_pointer_type, func_old_type, int_type, size_type;
 
+/* -------------- Extended symbol table API -------------- */
+extern extended_symtab_lookup_by_name_callback tcc_extended_symbol_table_lookup_by_name_callback;
+extern extended_symtab_lookup_by_number_callback tcc_extended_symbol_table_lookup_by_number_callback;
+
 /* ------------------------------------------------------------------------- */
 static void gen_cast(CType *type);
 static inline CType *pointed_type(CType *type);
@@ -192,9 +196,12 @@ ST_FUNC Sym *sym_find2(Sym *s, int v)
 /* structure lookup */
 ST_INLN Sym *struct_find(int v)
 {
-    if (v < 0) {
+    if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		return NULL;
+		if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
+		TokenSym *ts = tcc_extended_symbol_table_lookup_by_number_callback(v);
+		if (ts == NULL) return NULL;
+		return ts->sym_struct;
 	}
 	
     v -= TOK_IDENT;
@@ -206,9 +213,12 @@ ST_INLN Sym *struct_find(int v)
 /* find an identifier */
 ST_INLN Sym *sym_find(int v)
 {
-    if (v < 0) {
+    if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		return NULL;
+		if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
+		TokenSym *ts = tcc_extended_symbol_table_lookup_by_number_callback(v);
+		if (ts == NULL) return NULL;
+		return ts->sym_identifier;
 	}
 	
     v -= TOK_IDENT;
@@ -2292,9 +2302,11 @@ static void type_to_str(char *buf, int buf_size,
             tstr = "enum ";
         pstrcat(buf, buf_size, tstr);
         v = type->ref->v & ~SYM_STRUCT;
-        if (v >= SYM_FIRST_ANOM)
+        if ((v >= SYM_FIRST_ANOM && v < SYM_EXTENDED)
+			|| v >= (SYM_FIRST_ANOM & SYM_EXTENDED)
+        )
             pstrcat(buf, buf_size, "<anonymous>");
-        else
+        else /* XXX WORKING HERE double check get_tok_str */
             pstrcat(buf, buf_size, get_tok_str(v, NULL));
         break;
     case VT_FUNC:
