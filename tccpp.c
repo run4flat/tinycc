@@ -98,8 +98,18 @@ ST_FUNC void expect(const char *msg)
     tcc_error("%s expected", msg);
 }
 
-/* Extended symbol table API */
-ST_DATA TokenSym* (*tcc_extended_symbol_table_lookup_callback)(char * sym_name, int len);
+/* -------------- Extended symbol table API -------------- */
+typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len);
+typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id);
+ST_DATA extended_symtab_lookup_by_name_callback tcc_extended_symbol_table_lookup_by_name_callback;
+ST_DATA extended_symtab_lookup_by_number_callback tcc_extended_symbol_table_lookup_by_number_callback;
+LIBTCCAPI void tcc_set_extended_symtab_callbacks (
+	extended_symtab_lookup_by_name_callback new_name_callback,
+	extended_symtab_lookup_by_number_callback new_number_callback
+) {
+	tcc_extended_symbol_table_lookup_by_name_callback = new_name_callback;
+	tcc_extended_symbol_table_lookup_by_number_callback = new_number_callback;
+}
 
 /* ------------------------------------------------------------------------- */
 /* CString handling */
@@ -344,9 +354,15 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
             *p = '\0';
         } else if (v < tok_ident) {
             return table_ident[v - TOK_IDENT]->str;
-        } else if (v >= SYM_FIRST_ANOM) {
+        } else if (v >= SYM_FIRST_ANOM && v < SYM_EXTENDED) {
             /* special name for anonymous symbol */
             sprintf(p, "L.%u", v - SYM_FIRST_ANOM);
+        } else if (v >= SYM_EXTENDED) {
+			/* Get the symbol struct from the extended lookup callback */
+			if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
+			TokenSym* s = tcc_extended_symbol_table_lookup_by_number_callback(v);
+			if (s == NULL) return NULL;
+			return s->str;
         } else {
             /* should never happen */
             return NULL;
@@ -2230,8 +2246,8 @@ maybe_newline:
              * symbol table entry. Such entries must be negative, and
              * a zero return value will main that the check failed. */
              /* Looks like int my_func(char * sym_name, int name_len) */
-            if (tcc_extended_symbol_table_lookup_callback) {
-				ts = tcc_extended_symbol_table_lookup_callback(p1, len);
+            if (tcc_extended_symbol_table_lookup_by_name_callback) {
+				ts = tcc_extended_symbol_table_lookup_by_name_callback(p1, len);
 				if (ts) goto token_found;
 			}
             ts = tok_alloc_new(pts, p1, len);

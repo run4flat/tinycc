@@ -410,6 +410,7 @@ typedef struct AttributeDef {
 
 /* -------------------------------------------------- */
 
+#define SYM_EXTENDED   0x80000000 /* extended symbol space */
 #define SYM_STRUCT     0x40000000 /* struct/union/enum symbol space */
 #define SYM_FIELD      0x20000000 /* struct/union field symbol space */
 #define SYM_FIRST_ANOM 0x10000000 /* first anonymous sym */

@@ -192,6 +192,11 @@ ST_FUNC Sym *sym_find2(Sym *s, int v)
 /* structure lookup */
 ST_INLN Sym *struct_find(int v)
 {
+    if (v < 0) {
+		/* Extended symbol table lookup */
+		return NULL;
+	}
+	
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -201,6 +206,11 @@ ST_INLN Sym *struct_find(int v)
 /* find an identifier */
 ST_INLN Sym *sym_find(int v)
 {
+    if (v < 0) {
+		/* Extended symbol table lookup */
+		return NULL;
+	}
+	
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
