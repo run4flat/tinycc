@@ -98,6 +98,9 @@ ST_FUNC void expect(const char *msg)
     tcc_error("%s expected", msg);
 }
 
+/* Extended symbol table API */
+ST_DATA TokenSym* (*tcc_extended_symbol_table_lookup_callback)(char * sym_name, int len);
+
 /* ------------------------------------------------------------------------- */
 /* CString handling */
 static void cstr_realloc(CString *cstr, int new_size)
@@ -2222,6 +2225,15 @@ maybe_newline:
                     goto token_found;
                 pts = &(ts->hash_next);
             }
+            /* If we are here, it's because we didn't find the token in
+             * our current symbol table. Check if there is an extended
+             * symbol table entry. Such entries must be negative, and
+             * a zero return value will main that the check failed. */
+             /* Looks like int my_func(char * sym_name, int name_len) */
+            if (tcc_extended_symbol_table_lookup_callback) {
+				ts = tcc_extended_symbol_table_lookup_callback(p1, len);
+				if (ts) goto token_found;
+			}
             ts = tok_alloc_new(pts, p1, len);
         token_found: ;
         } else {
