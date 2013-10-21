@@ -1027,6 +1027,11 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->seg_size = 32;
 #endif
     s->runtime_main = "main";
+    
+    /* Extended symbol table API */
+    s->symtab_name_callback = 0;
+    s->symtab_number_callback = 0;
+    s->symtab_callback_data = 0;
     return s;
 }
 
@@ -1969,3 +1974,15 @@ PUB_FUNC void tcc_set_environment(TCCState *s)
         tcc_add_library_path(s, path);
     }
 }
+
+LIBTCCAPI LIBTCCAPI void tcc_set_extended_symtab_callbacks (
+	TCCState * s,
+	extended_symtab_lookup_by_name_callback new_name_callback,
+	extended_symtab_lookup_by_number_callback new_number_callback,
+	void * data
+) {
+	s->symtab_name_callback = new_name_callback;
+	s->symtab_number_callback = new_number_callback;
+	s->symtab_callback_data = data;
+}
+

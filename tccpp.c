@@ -98,19 +98,6 @@ ST_FUNC void expect(const char *msg)
     tcc_error("%s expected", msg);
 }
 
-/* -------------- Extended symbol table API -------------- */
-typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len);
-typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id);
-extended_symtab_lookup_by_name_callback tcc_extended_symbol_table_lookup_by_name_callback;
-extended_symtab_lookup_by_number_callback tcc_extended_symbol_table_lookup_by_number_callback;
-LIBTCCAPI void tcc_set_extended_symtab_callbacks (
-	extended_symtab_lookup_by_name_callback new_name_callback,
-	extended_symtab_lookup_by_number_callback new_number_callback
-) {
-	tcc_extended_symbol_table_lookup_by_name_callback = new_name_callback;
-	tcc_extended_symbol_table_lookup_by_number_callback = new_number_callback;
-}
-
 /* ------------------------------------------------------------------------- */
 /* CString handling */
 static void cstr_realloc(CString *cstr, int new_size)
@@ -359,8 +346,9 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
             sprintf(p, "L.%u", v - SYM_FIRST_ANOM);
         } else if (v >= SYM_EXTENDED) {
 			/* Get the symbol struct from the extended lookup callback */
-			if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
-			TokenSym* s = tcc_extended_symbol_table_lookup_by_number_callback(v);
+			if (tcc_state->symtab_number_callback == NULL) return NULL;
+			TokenSym* s = tcc_state->symtab_number_callback(v,
+				tcc_state->symtab_callback_data);
 			if (s == NULL) return NULL;
 			return s->str;
         } else {
@@ -2256,8 +2244,9 @@ maybe_newline:
             /* If we are here, it's because we didn't find the token in
              * our current symbol table. Check if there is an extended
              * symbol table entry. */
-            if (tcc_extended_symbol_table_lookup_by_name_callback) {
-				ts = tcc_extended_symbol_table_lookup_by_name_callback(p1, len);
+            if (tcc_state->symtab_name_callback) {
+				ts = tcc_state->symtab_name_callback(p1, len,
+					tcc_state->symtab_callback_data);
 				if (ts) goto token_found;
 			}
             ts = tok_alloc_new(pts, p1, len);

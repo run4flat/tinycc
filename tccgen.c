@@ -72,10 +72,6 @@ ST_DATA char *funcname;
 
 ST_DATA CType char_pointer_type, func_old_type, int_type, size_type;
 
-/* -------------- Extended symbol table API -------------- */
-extern extended_symtab_lookup_by_name_callback tcc_extended_symbol_table_lookup_by_name_callback;
-extern extended_symtab_lookup_by_number_callback tcc_extended_symbol_table_lookup_by_number_callback;
-
 /* ------------------------------------------------------------------------- */
 static void gen_cast(CType *type);
 static inline CType *pointed_type(CType *type);
@@ -198,8 +194,9 @@ ST_INLN Sym *struct_find(int v)
 {
     if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
-		TokenSym *ts = tcc_extended_symbol_table_lookup_by_number_callback(v);
+		if (tcc_state->symtab_lookup_by_number == NULL) return NULL;
+		TokenSym *ts = tcc_state->symtab_lookup_by_name(v,
+			tcc_state->symtab_callback_data);
 		if (ts == NULL) return NULL;
 		return ts->sym_struct;
 	}
@@ -215,8 +212,9 @@ ST_INLN Sym *sym_find(int v)
 {
     if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
-		TokenSym *ts = tcc_extended_symbol_table_lookup_by_number_callback(v);
+		if (tcc_state->symtab_lookup_by_number == NULL) return NULL;
+		TokenSym *ts = tcc_state->symtab_lookup_by_name(v,
+			tcc_state->symtab_callback_data);
 		if (ts == NULL) return NULL;
 		return ts->sym_identifier;
 	}
