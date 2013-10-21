@@ -347,8 +347,8 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
         } else if (v >= SYM_EXTENDED) {
 			/* Get the symbol struct from the extended lookup callback */
 			if (tcc_state->symtab_number_callback == NULL) return NULL;
-			TokenSym* s = tcc_state->symtab_number_callback(v,
-				tcc_state->symtab_callback_data);
+			TokenSym* s = tcc_state->symtab_number_callback(
+				v, tcc_state->symtab_callback_data);
 			if (s == NULL) return NULL;
 			return s->str;
         } else {
@@ -1051,8 +1051,9 @@ ST_INLN Sym *define_find(int v)
 {
     if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		if (tcc_extended_symbol_table_lookup_by_number_callback == NULL) return NULL;
-		TokenSym *ts = tcc_extended_symbol_table_lookup_by_number_callback(v);
+		if (tcc_state->symtab_number_callback == NULL) return NULL;
+		TokenSym *ts = tcc_state->symtab_number_callback(
+			v, tcc_state->symtab_callback_data);
 		if (ts == NULL) return NULL;
 		return ts->sym_define;
 	}
@@ -2245,8 +2246,8 @@ maybe_newline:
              * our current symbol table. Check if there is an extended
              * symbol table entry. */
             if (tcc_state->symtab_name_callback) {
-				ts = tcc_state->symtab_name_callback(p1, len,
-					tcc_state->symtab_callback_data);
+				ts = tcc_state->symtab_name_callback(
+					p1, len, tcc_state->symtab_callback_data);
 				if (ts) goto token_found;
 			}
             ts = tok_alloc_new(pts, p1, len);

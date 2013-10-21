@@ -1975,6 +1975,8 @@ PUB_FUNC void tcc_set_environment(TCCState *s)
     }
 }
 
+/* ---- Extended symbol table management ---- */
+
 LIBTCCAPI LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
 	extended_symtab_lookup_by_name_callback new_name_callback,

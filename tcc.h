@@ -696,7 +696,7 @@ struct TCCState {
     int gen_deps; /* option -MD  */
     char *deps_outfile; /* option -MF */
     
-    /* Extended symbol table handling */
+    /* ---- Extended symbol table handling ---- */
     extended_symtab_lookup_by_name_callback symtab_name_callback;
     extended_symtab_lookup_by_number_callback symtab_number_callback;
     void * symtab_callback_data;

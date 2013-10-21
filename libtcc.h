@@ -93,7 +93,7 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr);
 /* return symbol value or NULL if not found */
 LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 
-/* Extended symbol table management */
+/* ---- Extended symbol table management ---- */
 struct TokenSym;
 typedef struct TokenSym TokenSym;
 typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len, void * data);

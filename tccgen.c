@@ -194,9 +194,9 @@ ST_INLN Sym *struct_find(int v)
 {
     if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		if (tcc_state->symtab_lookup_by_number == NULL) return NULL;
-		TokenSym *ts = tcc_state->symtab_lookup_by_name(v,
-			tcc_state->symtab_callback_data);
+		if (tcc_state->symtab_number_callback == NULL) return NULL;
+		TokenSym *ts = tcc_state->symtab_number_callback(
+			v, tcc_state->symtab_callback_data);
 		if (ts == NULL) return NULL;
 		return ts->sym_struct;
 	}
@@ -212,9 +212,9 @@ ST_INLN Sym *sym_find(int v)
 {
     if (v & SYM_EXTENDED) {
 		/* Extended symbol table lookup */
-		if (tcc_state->symtab_lookup_by_number == NULL) return NULL;
-		TokenSym *ts = tcc_state->symtab_lookup_by_name(v,
-			tcc_state->symtab_callback_data);
+		if (tcc_state->symtab_number_callback == NULL) return NULL;
+		TokenSym *ts = tcc_state->symtab_number_callback(
+			v, tcc_state->symtab_callback_data);
 		if (ts == NULL) return NULL;
 		return ts->sym_identifier;
 	}
@@ -2304,7 +2304,7 @@ static void type_to_str(char *buf, int buf_size,
 			|| v >= (SYM_FIRST_ANOM & SYM_EXTENDED)
         )
             pstrcat(buf, buf_size, "<anonymous>");
-        else /* XXX WORKING HERE double check get_tok_str */
+        else
             pstrcat(buf, buf_size, get_tok_str(v, NULL));
         break;
     case VT_FUNC:
