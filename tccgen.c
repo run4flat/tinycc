@@ -196,7 +196,7 @@ ST_INLN Sym *struct_find(int v)
 		/* Extended symbol table lookup */
 		if (tcc_state->symtab_number_callback == NULL) return NULL;
 		TokenSym *ts = tcc_state->symtab_number_callback(
-			v, tcc_state->symtab_callback_data);
+			v, tcc_state->symtab_callback_data, 0);
 		if (ts == NULL) return NULL;
 		return ts->sym_struct;
 	}
@@ -214,9 +214,10 @@ ST_INLN Sym *sym_find(int v)
 		/* Extended symbol table lookup */
 		if (tcc_state->symtab_number_callback == NULL) return NULL;
 		TokenSym *ts = tcc_state->symtab_number_callback(
-			v, tcc_state->symtab_callback_data);
+			v, tcc_state->symtab_callback_data, 1);
 		if (ts == NULL) return NULL;
 		return ts->sym_identifier;
+		/* XXX WORKING HERE call callback to say "you will have to tell the compiler where to find this"? */
 	}
 	
     v -= TOK_IDENT;

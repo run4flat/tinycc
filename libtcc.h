@@ -96,8 +96,8 @@ LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 /* ---- Extended symbol table management ---- */
 struct TokenSym;
 typedef struct TokenSym TokenSym;
-typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len, void * data);
-typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id, void * data);
+typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len, void * data, int is_identifier);
+typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id, void * data, int is_identifier);
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * compiler_state,
 	extended_symtab_lookup_by_name_callback new_name_callback,
