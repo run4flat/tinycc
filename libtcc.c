@@ -813,6 +813,23 @@ static int tcc_compile(TCCState *s1)
     return s1->nb_errors != 0 ? -1 : 0;
 }
 
+LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num)
+{
+    int ret;
+
+    /* Open the buffer and copy the contents */
+    tcc_open_bf(s, filename, len + 1);
+    memcpy(file->buffer, str, len);
+    /* appending a trailing null */
+    file->buffer[len] = NULL;
+    /* Set the line number */
+    file->line_num = line_num;
+    /* Compile and cleanup */
+    ret = tcc_compile(s);
+    tcc_close();
+    return ret;
+}
+
 LIBTCCAPI int tcc_compile_string(TCCState *s, const char *str)
 {
     int len, ret;

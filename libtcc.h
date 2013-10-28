@@ -53,6 +53,11 @@ LIBTCCAPI int tcc_add_file(TCCState *s, const char *filename);
 /* compile a string containing a C source. Return -1 if error. */
 LIBTCCAPI int tcc_compile_string(TCCState *s, const char *buf);
 
+/* like tcc_compile_string, but also lets you specify the length of the
+ * string to compile, the filename, and the line number from whence this
+ * code came. */
+LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num)
+
 /*****************************/
 /* linking commands */
 
