@@ -3417,6 +3417,7 @@ static void type_decl(CType *type, AttributeDef *ad, int *v, int td)
     if (tok == TOK_ATTRIBUTE1 || tok == TOK_ATTRIBUTE2)
         parse_attribute(ad);
     
+    /* Done unless this is a function declaration. */
     if (!type1.t)
         return;
     /* append type at the end of type1 */

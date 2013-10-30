@@ -110,6 +110,11 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	void * data
 );
 
+LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s);
+LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym);
+LIBTCCAPI size_t tcc_tokensym_list_length (TokenSym ** list);
+LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym** my_extended_symtab);
+
 #ifndef SYM_EXTENDED
 	#define SYM_EXTENDED   0x80000000 /* extended symbol space */
 #endif

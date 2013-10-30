@@ -1026,6 +1026,12 @@ ST_INLN void define_push(int v, int macro_type, int *str, Sym *first_arg)
     s = define_find(v);
     if (s && !macro_is_equal(s->d, str))
         tcc_warning("%s redefined", get_tok_str(v, NULL));
+    if (v & SYM_EXTENDED) {
+		/* How do we prevent this #definefrom reaching outside its scope
+		 * and modifying the extended symbol tables? See TOK_DEFINE and
+		 * TOK_UNDEF in preprocess(). */
+		tcc_error("Re-defining an extended macro definition is not allowed; #undef first");
+	}
 
     s = sym_push2(&define_stack, v, macro_type, 0);
     s->d = str;
@@ -1033,14 +1039,39 @@ ST_INLN void define_push(int v, int macro_type, int *str, Sym *first_arg)
     table_ident[v - TOK_IDENT]->sym_define = s;
 }
 
-/* undefined a define symbol. Its name is just set to zero */
+/* undefine a define symbol. Its name is just set to zero */
 ST_FUNC void define_undef(Sym *s)
 {
     int v;
     v = s->v;
     if (v & SYM_EXTENDED) {
-		/* XXX WORKING HERE - MAKE SURE #define DOESN'T HAVE A GLOBAL EFFECT
-		 * ON EXTENDED SYMBOL TABLES; should probably */
+		/* To make sure this #undef doesn't reach outside its scope and
+		 * modify extended symbol tables, this creates a new macro
+		 * specifically for this compiler context and undefines it. The
+		 * local macro definition will take precedence over the global
+		 * macro in any future redefinitions. */
+		
+		/* Get the extended symbol token. */
+		if (tcc_state->symtab_number_callback == NULL) {
+			tcc_warning("Internal error: Trying to undefine a preprocessor macro that maps to an extended symbol number, yet no symtab callback function is defined");
+			return NULL;
+		}
+		TokenSym *ts = tcc_state->symtab_number_callback(
+			v, tcc_state->symtab_callback_data, 0);
+		if (ts == NULL) {
+			tcc_warning("Internal error: Trying to undefine a preprocessor macro that maps to an extended symbol number, yet the token could not be found");
+			return NULL;
+		}
+		
+		/* Allocate a new symbol token, which we will then undefine. */
+		TokenSym *ts2 = tok_alloc(ts->str, strlen(ts->str));
+		v = ts2->tok;
+		s = ts2->sym_define = sym_push2(&define_stack, v, MACRO_OBJ, 0);
+		
+		/* fall through to the symbol undefinition */
+		/* V */
+		/* V */
+		/* V */
 	}
     if (v >= TOK_IDENT && v < tok_ident)
         table_ident[v - TOK_IDENT]->sym_define = NULL;

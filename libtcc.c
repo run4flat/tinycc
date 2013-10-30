@@ -1994,7 +1994,10 @@ PUB_FUNC void tcc_set_environment(TCCState *s)
 
 /* ---- Extended symbol table management ---- */
 
-LIBTCCAPI LIBTCCAPI void tcc_set_extended_symtab_callbacks (
+/* Allow the user to provide custom symbol table lookup functions. They
+ * need to provide functions to look up symbols both by name and by
+ * number */
+LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
 	extended_symtab_lookup_by_name_callback new_name_callback,
 	extended_symtab_lookup_by_number_callback new_number_callback,
@@ -2005,3 +2008,320 @@ LIBTCCAPI LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	s->symtab_callback_data = data;
 }
 
+Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, Sym * stack) {
+	int offset = 0;
+	/* Handle the NULL case up-front */
+	if (old == NULL) return NULL;
+	while(stack != NULL) {
+		/* Return pointer to the new symbol's location if found */
+		if (stack == old) return new_list + offset;
+		/* Otherwise step to the next symbol */
+		offset++;
+		stack = stack->prev;
+	}
+	tcc_error("Unable to locate symbol offset");
+	return NULL;
+}
+
+Sym * get_new_symtab_pointer (Sym * old, Sym * new_list) {
+	return _get_new_sym_or_def_pointer(old, new_list, global_stack);
+}
+
+Sym * get_new_deftab_pointer (Sym * old, Sym * new_list) {
+	return _get_new_sym_or_def_pointer(old, new_list, define_stack);
+}
+
+/* Make a complete copy of the token-symbol table, the symbol stack, and
+ * the define stack XXX ??? XXX, though the user only thinks they have
+ * the token symbol table. */
+int _tcc_extended_symbol_counter = SYM_EXTENDED;
+LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
+    /* Do nothing if we have an emtpy TCCState. */
+    if (NULL == s) return NULL;
+	
+	/* Note: to prevent two extended symbols from clashing by number, we
+	 * use a revised symbol numbering system. This simply increments
+	 * _tcc_extended_symbol_counter with each new extended symbol. Among
+	 * other things, this guarantees that extended symbol numbers for a
+	 * specific extended symbol table lie within a contiguous range. */
+	
+    int i;
+    
+	/* Allocate the memory for the extended symbol table. The structure
+	 * for this table will be:
+	 * Sym* SymList
+	 * Sym* PastEndOfSymList
+	 * Sym* defineList
+	 * Sym* PastEndOfDefineList
+	 * TokenSym** TAIL (contains the address of the last TokenSym*)
+	 * TokenSym* = table_ident[0], <- returned pointer points here
+	 * TokenSym* = table_ident[1],
+	 * ...
+	 * TokenSym* = table_ident[n-1] <- TAIL points to this offset
+	 * 
+	 * So we need N_tokens + 5
+	 */
+    
+    /* XXXX TOK_IDENT (see global_identifier_push) XXXX */
+    
+    int N_tokens = tok_ident - TOK_IDENT;
+    (void *)* to_return = tcc_malloc(sizeof(void*) * (N_tokens + 5));
+    
+    /********* symbol stack *********/
+    
+    /* Calculate the number of symbols */
+    Sym * curr_Sym = global_stack;
+    int N_Syms = 1;
+    while(curr_Sym->prev != NULL) {
+		curr_Sym = curr_Sym->prev;
+		N_Syms++;
+	}
+    /* Allocate the Sym list; store the address of the last element */
+    Sym * sym_list = to_return[0] = tcc_malloc(sizeof(Sym) * N_Syms);
+    to_return[1] = sym_list + N_Syms;
+    
+    /* Copy the Sym list */
+    curr_Sym = global_stack;
+    for (i = 0; i < N_Syms; i++) {
+		/* See tcc.h around line 425 for descriptions of some of the
+		 * fields. */
+		 
+		/* Convert the symbol's token index based on what we will
+		 * allocate when we build the TokenSym list. */
+		sym_list[i].v = curr_Sym->v - table_ident[0].tok
+			+ _tcc_extended_symbol_counter; /* XXX double check */
+		
+		/* Copy the assembler label */
+		if (curr_Sym->asm_label != NULL) {
+			int asm_label_len = strlen(curr_Sym->asm_label) + 1;
+			sym_list[i].asm_label = tcc_malloc(asm_label_len);
+			memcpy(sym_list[i].asm_label, curr_Sym->asm_label,
+				asm_label_len);
+		}
+		else {
+			sym_list[i].asm_label = NULL;
+		}
+		
+		/* associated number (size, in bytes?) or function type. I
+		 * think this usually has to do with register values. I also
+		 * think it can just be copied straight. */
+		sym_list[i].r = curr_Sym->r;
+		
+		/* Set the type. Judging by the constants in tcc.h and code that
+		 * uses this field, I'm pretty sure that the .t field tells tcc
+		 * how to load the data into a register. Since that is not
+		 * something that can be extended at runtime, I should be able
+		 * to copy the value as-is. */
+		sym_list[i].type.t = curr_Sym->type.t;
+		/* I believe that nearly every Sym I would encounter in a type's
+		 * ref field would be on the global symbol stack. However, I
+		 * I am not sure how callback function pointer in the following
+		 * declaration would work. Would this be an anonymous type?
+		 * 
+		 *   int my_func(void (*callback)(int, int), int a, int b);
+		 * 
+		 * Judging by the call to sym_push in post_type (tccgen.c), I
+		 * highly suspect that all symbols, even anonymous ones in this
+		 * sort of function declaration, are located on the global
+		 * symbol stack. All I need to do when copying the Sym list is
+		 * to make sure that pointers to next are properly updated. */
+		sym_list[i].type.ref
+			= get_new_symtab_pointer(curr_Sym->type.ref, sym_list);
+		
+		/* Copy the c field, the "associated number." What the hell is
+		 * this? For functions, it's the  */
+		sym_list[i].c = curr_Sym->c;
+		
+		/* Copy the next symbol field. Labels and gotos and tracked in a
+		 * separate stack, so for these Symbols we focus on next, not
+		 * jnext. */
+		sym_list[i].next
+			= get_new_symtab_pointer(curr_Sym->next, sym_list);
+		
+		/* These are only needed for symbol table pushing/popping, so I
+		 * should be able to safely set them to null. */
+		sym_list[i].prev = NULL;
+		sym_list[i].prev_tok = NULL;
+	}
+    
+    /********* define stack *********/
+    
+    /* Calculate the number of defines */
+    Sym * curr_Def = define_stack;
+    int N_Defs = 0;
+    while(curr_Def != NULL) {
+		curr_Def = curr_Def->prev;
+		N_Defs++;
+	}
+    /* Allocate the Def list */
+    Sym * def_list = to_return[2] = tcc_malloc(sizeof(Sym) * N_Defs);
+    to_return[3] = def_list + N_Defs;
+    
+    /* Copy the define list */
+    curr_Def = define_stack;
+    for (i = 0; i < N_Defs; i++) {
+		/* See above for descriptions of some of the fields. */
+		 
+		/* Convert the symbol's token index. Undefined items are not
+		 * actually cleared from the stack; instead their v field is
+		 * simply set to zero. */
+		if (curr_Sym->v == NULL) {
+			def_list[i].v = NULL;
+		}
+		else {
+			def_list[i].v = curr_Sym->v - table_ident[0].tok
+				+ _tcc_extended_symbol_counter; /* XXX double check? */
+		}
+		
+		/* assembler label should be null for preprocessor stuff */
+		if (curr_Def->asm_label != NULL) {
+			tcc_warning("Unexpected assembler label for macro symbol");
+		}
+		def_list[i].asm_label = NULL;
+		
+		/* As far as I can tell, the 'r' field is not used by
+		 * preprocessor macros. Just copy it. */
+		def_list[i].r = curr_Def->r;
+		
+		/* Copy the define token stream. This is a null-terminated list
+		 * of TokenSym offsets, not a linked list, and needs to be
+		 * copied almost like a character string. */
+		if (curr_Def->d != NULL) {
+			int N_tokens_in_stream = 0;
+			int * curr_ts;
+			for (curr_ts = curr_Def->d; *curr_ts != 0; curr_ts++) {
+				N_tokens_in_stream++;
+			}
+			def_list[i].d = tcc_malloc(sizeof(int) * N_tokens_in_stream);
+			int j = 0;
+			curr_ts = curr_Def->d;
+			while (*curr_ts != 0; ) {
+				def_list[i].d[j] = *curr_ts - table_ident[0].tok
+					+ _tcc_extended_symbol_counter;
+				curr_ts++;
+				j++;
+			}
+		}
+		else {
+			def_list[i].d = NULL;
+		}
+		
+		/* Set the type. define_push and parse_define indicate that this
+		 * will be either MACRO_OBJ or MACRO_FUNC. */
+		def_list[i].type.t = curr_Def->type.t;
+		/* Macro types should be null; issue a warning if this is not
+		 * the case, just so we're aware. */
+		if (curr_Def->type.ref != NULL) {
+			tcc_warning("Unexpected type ref for macro symbol");
+		}
+		def_list[i].type.ref = NULL;
+		
+		/* Copy the macro token stream. All macro arguments are copied
+		 * to the define stack, according to the sym_push2 in
+		 * parse_define from tccpp.c. We only need to update this Sym's
+		 * next; the following Sym's next will be updated when it comes
+		 * across the loop. */
+		/* XXX is this interpretation correct? */
+		def_list[i].next
+			= get_new_deftab_pointer(curr_Def->next, def_list);
+		
+		/* These are only needed for symbol table pushing/popping and
+		 * label identification. Since these Sym objects will do no
+		 * such things, I should be able to safely set them to null. */
+		def_list[i].prev = NULL;
+		def_list[i].prev_tok = NULL;
+	}
+    
+    /* Set the tail pointer, which points to the first address past the
+     * last element. */
+    to_return[4] = to_return + N_tokens + 5;
+    to_return += 5;
+    
+    /********* TokenSym list *********/
+    
+    /* Copy the tokens */
+	for (i = 0; i < N_tokens; i++) {
+		TokenSym * tok_copy = table_ident[i];
+		int tokensym_size = tcc_malloc(sizeof(TokenSym) + tok_copy->len);
+		TokenSym * tok_sym = to_return[i] = tcc_malloc(tokensym_size);
+		
+		/* Follow the code from tok_alloc_new in tccpp.c */
+		tok_sym->tok = _tcc_extended_symbol_counter++;
+		tok_sym->sym_define
+			= get_new_deftab_pointer(tok_copy->sym_define, def_list);
+		tok_sym->sym_label = NULL; /* Not copying labels */
+		tok_sym->sym_struct
+			= get_new_symtab_pointer(tok_copy->sym_struct, sym_list);
+		tok_sym->sym_identifier
+			= get_new_symtab_pointer(tok_copy->sym_identifier, sym_list);
+		tok_sym->len = tok_copy->len;
+		tok_sym->hash_next = NULL;
+		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
+		tok_sym->str[tok_copy->len] = '\0';
+	}
+
+	/* NOTE II: The guarantee of contiguity means that this function is
+	 * not threadsafe as is. To make it threadsafe some day, the easiest
+	 * approach is probably to make the function somehow aware of
+	 * whether a function is currently copying a symbol table, and then
+	 * lend a hand to help finish that copy before starting on its own
+	 * copy. This way, the thread that was in the middle of its copy
+	 * gets a contiguous range without forcing the second thread to idle
+	 * while waiting. */
+	
+	/* Return a pointer to the first TokenSym* */
+	return (TokenSym**)to_return;
+}
+
+/* Frees memory associated with a copied extended symbol table. For a
+ * description of the structure of the allocated memory, see the copy
+ * function above. */
+LIBTCCAPI void tcc_delete_extended_symbol_table (
+	TokenSym** my_extended_symtab
+) {
+	/* clear out the symbol list */
+	int i;
+	Sym * sym_to_delete = my_extended_symtab[-5];
+	Sym * last = my_extended_symtab[-4];
+	while(sym_to_delete < last) {
+		tcc_free(sym_to_delete->asm_label);
+		sym_to_delete++;
+	}
+	free(my_extended_symtab[-5]);
+	
+	/* clear out the define list */
+	sym_to_delete = my_extended_symtab[-3];
+	last = my_extended_symtab[-2];
+	while(sym_to_delete < last) {
+		tcc_free(sym_to_delete->d);
+		sym_to_delete++;
+	}
+	free(my_extended_symtab[-3]);
+	
+	/* Clear out the allocated TokenSym pointers */
+	TokenSym** ts_to_delete = my_extended_symtab;
+	TokenSym** done = (TokenSym**)my_extended_symtab[-1];
+	while (ts_to_delete < done) {
+		tcc_free(ts_to_delete);
+		ts_to_delete++;
+	}
+	
+	/* Clear out the full memory allocation. */
+	tcc_free(my_extended_symtab - 3);
+}
+
+/* We don't expose the entire TokenSym structure to the user. Thus, we
+ * need to give them some way to at least know what symbol names they
+ * have on hand. */
+LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym) {
+	return &(tokensym->str);
+}
+
+/* We also don't provide a means for the user to know if they've reached
+ * the end of the list. Instead, we provide a function to get the number
+ * of TokenSyms. */
+LIBTCCAPI size_t tcc_tokensym_list_length (TokenSym ** list) {
+	TokenSym ** tail;
+	tail = (TokenSym**)(list - 1);
+	return (size_t)(tail - list);
+}
