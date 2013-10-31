@@ -703,10 +703,13 @@ ST_FUNC int tcc_open(TCCState *s1, const char *filename)
     return fd;
 }
 
+void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start);
+
 /* compile the C file opened in 'file'. Return non zero if errors. */
 static int tcc_compile(TCCState *s1)
 {
     Sym *define_start;
+    int tok_start;
     SValue *pvtop;
     char buf[512];
     volatile int section_sym;
@@ -715,6 +718,9 @@ static int tcc_compile(TCCState *s1)
     printf("%s: **** new file\n", file->filename);
 #endif
     preprocess_init(s1);
+    
+    /* Note where we start adding new tokens */
+    tok_start = tok_ident;
 
     cur_text_section = NULL;
     funcname = "";
@@ -800,6 +806,12 @@ static int tcc_compile(TCCState *s1)
     }
 
     s1->error_set_jmp_enabled = 0;
+    
+    /* Perform the symbol table callback, if requested */
+    if (s1->nb_errors == 0 && s1->symtab_copy_callback != NULL) {
+		/* XXX working here */
+		copy_extended_symtab(s1, define_start, tok_start);
+	}
 
     /* reset define stack, but leave -Dsymbols (may be incorrect if
        they are undefined) */
@@ -1999,10 +2011,12 @@ PUB_FUNC void tcc_set_environment(TCCState *s)
  * number */
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
+	extended_symtab_copy_callback new_copy_callback,
 	extended_symtab_lookup_by_name_callback new_name_callback,
 	extended_symtab_lookup_by_number_callback new_number_callback,
 	void * data
 ) {
+	s->symtab_copy_callback = new_copy_callback;
 	s->symtab_name_callback = new_name_callback;
 	s->symtab_number_callback = new_number_callback;
 	s->symtab_callback_data = data;
@@ -2035,9 +2049,10 @@ Sym * get_new_deftab_pointer (Sym * old, Sym * new_list) {
  * the define stack XXX ??? XXX, though the user only thinks they have
  * the token symbol table. */
 int _tcc_extended_symbol_counter = SYM_EXTENDED;
-LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
+void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
+
     /* Do nothing if we have an emtpy TCCState. */
-    if (NULL == s) return NULL;
+    if (NULL == s) return;
 	
 	/* Note: to prevent two extended symbols from clashing by number, we
 	 * use a revised symbol numbering system. This simply increments
@@ -2062,17 +2077,15 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 	 * So we need N_tokens + 5
 	 */
     
-    /* XXXX TOK_IDENT (see global_identifier_push) XXXX */
-    
-    int N_tokens = tok_ident - TOK_IDENT;
+    int N_tokens = tok_ident - tok_start;
     void ** to_return = tcc_malloc(sizeof(void*) * (N_tokens + 5));
     
     /********* symbol stack *********/
     
     /* Calculate the number of symbols */
     Sym * curr_Sym = global_stack;
-    int N_Syms = 1;
-    while(curr_Sym->prev != NULL) {
+    int N_Syms = 0;
+    while(curr_Sym != NULL) {
 		curr_Sym = curr_Sym->prev;
 		N_Syms++;
 	}
@@ -2088,7 +2101,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 		 
 		/* Convert the symbol's token index based on what we will
 		 * allocate when we build the TokenSym list. */
-		sym_list[i].v = curr_Sym->v - table_ident[0]->tok
+		sym_list[i].v = curr_Sym->v - tok_start
 			+ _tcc_extended_symbol_counter; /* XXX double check */
 		
 		/* Copy the assembler label */
@@ -2149,7 +2162,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
     /* Calculate the number of defines */
     Sym * curr_Def = define_stack;
     int N_Defs = 0;
-    while(curr_Def != NULL) {
+    while(curr_Def != define_start) {
 		curr_Def = curr_Def->prev;
 		N_Defs++;
 	}
@@ -2165,11 +2178,11 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 		/* Convert the symbol's token index. Undefined items are not
 		 * actually cleared from the stack; instead their v field is
 		 * simply set to zero. */
-		if (curr_Sym->v == 0) {
+		if (curr_Def->v == 0) {
 			def_list[i].v = 0;
 		}
 		else {
-			def_list[i].v = curr_Sym->v - table_ident[0]->tok
+			def_list[i].v = curr_Def->v - tok_start
 				+ _tcc_extended_symbol_counter; /* XXX double check? */
 		}
 		
@@ -2196,7 +2209,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 			int j = 0;
 			curr_ts = curr_Def->d;
 			while (*curr_ts != 0) {
-				def_list[i].d[j] = *curr_ts - table_ident[0]->tok
+				def_list[i].d[j] = *curr_ts - tok_start
 					+ _tcc_extended_symbol_counter;
 				curr_ts++;
 				j++;
@@ -2241,7 +2254,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
     
     /* Copy the tokens */
 	for (i = 0; i < N_tokens; i++) {
-		TokenSym * tok_copy = table_ident[i];
+		TokenSym * tok_copy = table_ident[tok_start + i - TOK_IDENT];
 		int tokensym_size = sizeof(TokenSym) + tok_copy->len;
 		TokenSym * tok_sym = to_return[i] = tcc_malloc(tokensym_size);
 		
@@ -2269,8 +2282,9 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 	 * gets a contiguous range without forcing the second thread to idle
 	 * while waiting. */
 	
-	/* Return a pointer to the first TokenSym* */
-	return (TokenSym**)to_return;
+	/* Send the pointer to the first TokenSym* to the callback */
+	extended_symtab_copy_callback to_call = s->symtab_copy_callback;
+	to_call((TokenSym**)to_return, s->symtab_callback_data);
 }
 
 /* Frees memory associated with a copied extended symbol table. For a
@@ -2301,12 +2315,12 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (
 	TokenSym** ts_to_delete = my_extended_symtab;
 	TokenSym** done = (TokenSym**)my_extended_symtab[-1];
 	while (ts_to_delete < done) {
-		tcc_free(ts_to_delete);
+		tcc_free(*ts_to_delete);
 		ts_to_delete++;
 	}
 	
 	/* Clear out the full memory allocation. */
-	tcc_free(my_extended_symtab - 3);
+	tcc_free(my_extended_symtab - 5);
 }
 
 /* We don't expose the entire TokenSym structure to the user. Thus, we
@@ -2316,11 +2330,28 @@ LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym) {
 	return tokensym->str;
 }
 
+LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym) {
+	return tokensym->sym_define != NULL;
+}
+LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym) {
+	return tokensym->sym_struct != NULL;
+}
+LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym) {
+	return tokensym->sym_identifier != NULL;
+}
+
+LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym ** list) {
+	if (tok < list[0]->tok) return 0;
+	TokenSym ** tail = *(TokenSym**)(list - 1) - 1;
+	if (tok > (*tail)->tok) return 0;
+	return 1;
+}
+
+
 /* We also don't provide a means for the user to know if they've reached
  * the end of the list. Instead, we provide a function to get the number
  * of TokenSyms. */
 LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list) {
-	TokenSym ** tail;
-	tail = (TokenSym**)(list - 1);
-	return (size_t)(tail - list);
+	TokenSym ** tail = *(TokenSym**)(list - 1);
+	return (int)(tail - list);
 }

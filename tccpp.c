@@ -1054,13 +1054,13 @@ ST_FUNC void define_undef(Sym *s)
 		/* Get the extended symbol token. */
 		if (tcc_state->symtab_number_callback == NULL) {
 			tcc_warning("Internal error: Trying to undefine a preprocessor macro that maps to an extended symbol number, yet no symtab callback function is defined");
-			return NULL;
+			return;
 		}
 		TokenSym *ts = tcc_state->symtab_number_callback(
 			v, tcc_state->symtab_callback_data, 0);
 		if (ts == NULL) {
 			tcc_warning("Internal error: Trying to undefine a preprocessor macro that maps to an extended symbol number, yet the token could not be found");
-			return NULL;
+			return;
 		}
 		
 		/* Allocate a new symbol token, which we will then undefine. */
