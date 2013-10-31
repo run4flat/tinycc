@@ -821,7 +821,7 @@ LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const
     tcc_open_bf(s, filename, len + 1);
     memcpy(file->buffer, str, len);
     /* appending a trailing null */
-    file->buffer[len] = NULL;
+    file->buffer[len] = 0;
     /* Set the line number */
     file->line_num = line_num;
     /* Compile and cleanup */
@@ -2065,7 +2065,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
     /* XXXX TOK_IDENT (see global_identifier_push) XXXX */
     
     int N_tokens = tok_ident - TOK_IDENT;
-    (void *)* to_return = tcc_malloc(sizeof(void*) * (N_tokens + 5));
+    void ** to_return = tcc_malloc(sizeof(void*) * (N_tokens + 5));
     
     /********* symbol stack *********/
     
@@ -2088,7 +2088,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 		 
 		/* Convert the symbol's token index based on what we will
 		 * allocate when we build the TokenSym list. */
-		sym_list[i].v = curr_Sym->v - table_ident[0].tok
+		sym_list[i].v = curr_Sym->v - table_ident[0]->tok
 			+ _tcc_extended_symbol_counter; /* XXX double check */
 		
 		/* Copy the assembler label */
@@ -2165,11 +2165,11 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 		/* Convert the symbol's token index. Undefined items are not
 		 * actually cleared from the stack; instead their v field is
 		 * simply set to zero. */
-		if (curr_Sym->v == NULL) {
-			def_list[i].v = NULL;
+		if (curr_Sym->v == 0) {
+			def_list[i].v = 0;
 		}
 		else {
-			def_list[i].v = curr_Sym->v - table_ident[0].tok
+			def_list[i].v = curr_Sym->v - table_ident[0]->tok
 				+ _tcc_extended_symbol_counter; /* XXX double check? */
 		}
 		
@@ -2195,8 +2195,8 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
 			def_list[i].d = tcc_malloc(sizeof(int) * N_tokens_in_stream);
 			int j = 0;
 			curr_ts = curr_Def->d;
-			while (*curr_ts != 0; ) {
-				def_list[i].d[j] = *curr_ts - table_ident[0].tok
+			while (*curr_ts != 0) {
+				def_list[i].d[j] = *curr_ts - table_ident[0]->tok
 					+ _tcc_extended_symbol_counter;
 				curr_ts++;
 				j++;
@@ -2242,7 +2242,7 @@ LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s) {
     /* Copy the tokens */
 	for (i = 0; i < N_tokens; i++) {
 		TokenSym * tok_copy = table_ident[i];
-		int tokensym_size = tcc_malloc(sizeof(TokenSym) + tok_copy->len);
+		int tokensym_size = sizeof(TokenSym) + tok_copy->len;
 		TokenSym * tok_sym = to_return[i] = tcc_malloc(tokensym_size);
 		
 		/* Follow the code from tok_alloc_new in tccpp.c */
@@ -2280,23 +2280,22 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (
 	TokenSym** my_extended_symtab
 ) {
 	/* clear out the symbol list */
-	int i;
-	Sym * sym_to_delete = my_extended_symtab[-5];
-	Sym * last = my_extended_symtab[-4];
+	Sym * sym_to_delete = (Sym*)my_extended_symtab[-5];
+	Sym * last = (Sym*)my_extended_symtab[-4];
 	while(sym_to_delete < last) {
 		tcc_free(sym_to_delete->asm_label);
 		sym_to_delete++;
 	}
-	free(my_extended_symtab[-5]);
+	tcc_free(my_extended_symtab[-5]);
 	
 	/* clear out the define list */
-	sym_to_delete = my_extended_symtab[-3];
-	last = my_extended_symtab[-2];
+	sym_to_delete = (Sym*)my_extended_symtab[-3];
+	last = (Sym*)my_extended_symtab[-2];
 	while(sym_to_delete < last) {
 		tcc_free(sym_to_delete->d);
 		sym_to_delete++;
 	}
-	free(my_extended_symtab[-3]);
+	tcc_free(my_extended_symtab[-3]);
 	
 	/* Clear out the allocated TokenSym pointers */
 	TokenSym** ts_to_delete = my_extended_symtab;
@@ -2314,13 +2313,13 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (
  * need to give them some way to at least know what symbol names they
  * have on hand. */
 LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym) {
-	return &(tokensym->str);
+	return tokensym->str;
 }
 
 /* We also don't provide a means for the user to know if they've reached
  * the end of the list. Instead, we provide a function to get the number
  * of TokenSyms. */
-LIBTCCAPI size_t tcc_tokensym_list_length (TokenSym ** list) {
+LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list) {
 	TokenSym ** tail;
 	tail = (TokenSym**)(list - 1);
 	return (size_t)(tail - list);

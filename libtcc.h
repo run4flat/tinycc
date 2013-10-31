@@ -56,7 +56,7 @@ LIBTCCAPI int tcc_compile_string(TCCState *s, const char *buf);
 /* like tcc_compile_string, but also lets you specify the length of the
  * string to compile, the filename, and the line number from whence this
  * code came. */
-LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num)
+LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num);
 
 /*****************************/
 /* linking commands */
@@ -99,7 +99,6 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr);
 LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 
 /* ---- Extended symbol table management ---- */
-struct TokenSym;
 typedef struct TokenSym TokenSym;
 typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len, void * data, int is_identifier);
 typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id, void * data, int is_identifier);
@@ -112,7 +111,7 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 
 LIBTCCAPI TokenSym** tcc_copy_extended_symbol_table (TCCState * s);
 LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym);
-LIBTCCAPI size_t tcc_tokensym_list_length (TokenSym ** list);
+LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list);
 LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym** my_extended_symtab);
 
 #ifndef SYM_EXTENDED
