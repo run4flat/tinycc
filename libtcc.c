@@ -1058,9 +1058,9 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->runtime_main = "main";
     
     /* Extended symbol table API */
-    s->symtab_name_callback = 0;
-    s->symtab_number_callback = 0;
-    s->symtab_callback_data = 0;
+    s->symtab_name_callback = NULL;
+    s->symtab_number_callback = NULL;
+    s->symtab_callback_data = NULL;
     return s;
 }
 
@@ -2022,10 +2022,27 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	s->symtab_callback_data = data;
 }
 
-Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, Sym * stack) {
-	int offset = 0;
-	/* Handle the NULL case up-front */
+int _sym_looks_weird(Sym * to_check) {
+	if (to_check == NULL) return 0;
+	if (
+		to_check->v == 0
+		&& to_check->asm_label == NULL
+		&& to_check->r == 0
+		&& to_check->c == 0
+		&& to_check->type.t == 0
+		/*&& to_check->type.ref == NULL*/
+		&& to_check->next == NULL
+		/*&& to_check->prev == NULL*/
+		&& to_check->prev_tok == NULL
+	) return 1;
+	return 0;
+}
+
+Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack) {
+	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
+	/* Otherwise, it should be on our stack, so find it */
+	int offset = 0;
 	while(stack != NULL) {
 		/* Return pointer to the new symbol's location if found */
 		if (stack == old) return new_list + offset;
@@ -2033,16 +2050,32 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, Sym * stack) {
 		offset++;
 		stack = stack->prev;
 	}
-	tcc_error("Unable to locate symbol offset");
-	return NULL;
+	/* There is this weird case where sometimes a symbol refers to this
+	 * strange empty symbol. Why the pointer points to it, instead of
+	 * null, is not clear to me. However, we have created just such a
+	 * pointer! So we use our own special empty Sym for this purpose.
+	 */
+	if (_sym_looks_weird(old)) return new_list + offset_of_last;
+	printf("In %s line %d, unable to locate symbol offset for old address %p:\n", __FILE__, __LINE__, old);
+	printf("  Symbol token: %X\n", old->v);
+/*	printf("  Assembler label %s\n", old->asm_label);*/
+	printf("  Associated register %d\n", old->r);
+	printf("  Associated number %d\n", old->c);
+	printf("  Type.t %X\n", old->type.t);
+	printf("  Type.ref %p\n", old->type.ref);
+	printf("  next symbol pointer %p\n", old->next);
+	printf("  previous symbol for this token at address %p\n", old->prev);
+	printf("  previous symbol on stack at address %p\n", old->prev_tok);
+/*	tcc_error("Unable to locate symbol offset for old address %p", old);
+*/	return NULL;
 }
 
-Sym * get_new_symtab_pointer (Sym * old, Sym * new_list) {
-	return _get_new_sym_or_def_pointer(old, new_list, global_stack);
+Sym * get_new_symtab_pointer (Sym * old, Sym * new_list, int offset_of_last) {
+	return _get_new_sym_or_def_pointer(old, new_list, offset_of_last, global_stack);
 }
 
-Sym * get_new_deftab_pointer (Sym * old, Sym * new_list) {
-	return _get_new_sym_or_def_pointer(old, new_list, define_stack);
+Sym * get_new_deftab_pointer (Sym * old, Sym * new_list, int offset_of_last) {
+	return _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
 }
 
 /* Make a complete copy of the token-symbol table, the symbol stack, and
@@ -2089,20 +2122,48 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		curr_Sym = curr_Sym->prev;
 		N_Syms++;
 	}
-    /* Allocate the Sym list; store the address of the last element */
-    Sym * sym_list = to_return[0] = tcc_malloc(sizeof(Sym) * N_Syms);
+    /* Allocate the Sym list; store the address of the last element,
+     * which is kept empty. */
+    Sym * sym_list = to_return[0] = tcc_malloc(sizeof(Sym) * (N_Syms + 1));
     to_return[1] = sym_list + N_Syms;
     
+	/* Zero out last sym */
+    sym_list[N_Syms].v = 0;
+    sym_list[N_Syms].asm_label = NULL;
+    sym_list[N_Syms].r = 0;
+    sym_list[N_Syms].c = 0;
+    sym_list[N_Syms].type.t = 0;
+    sym_list[N_Syms].type.ref = NULL;
+    sym_list[N_Syms].next = NULL;
+    sym_list[N_Syms].prev = NULL;
+    sym_list[N_Syms].prev_tok = NULL;
+    
     /* Copy the Sym list */
-    curr_Sym = global_stack;
-    for (i = 0; i < N_Syms; i++) {
+    for (curr_Sym = global_stack, i = 0; i < N_Syms; i++, curr_Sym = curr_Sym->prev) {
 		/* See tcc.h around line 425 for descriptions of some of the
 		 * fields. */
 		 
 		/* Convert the symbol's token index based on what we will
 		 * allocate when we build the TokenSym list. */
-		sym_list[i].v = curr_Sym->v - tok_start
-			+ _tcc_extended_symbol_counter; /* XXX double check */
+		if (curr_Sym->v == SYM_FIELD) {
+			/* Functions of type int (int) have a token type that is
+			 * always present in every compiler context and can be
+			 * copied without modification. */
+			sym_list[i].v = SYM_FIELD;
+		}
+		else {
+if (curr_Sym->v < tok_start) printf("In %s line %d, trying to copy token %X before the start token\n", __FILE__, __LINE__, curr_Sym->v);
+int flagless_original = curr_Sym->v & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+if (flagless_original < tok_start) {
+printf("In %s line %d, copying flagless token %X that 'falls' before tok_start\n", __FILE__, __LINE__, flagless_original);
+if (curr_Sym->v & SYM_STRUCT) printf("  had struct marker\n");
+if (curr_Sym->v & SYM_FIELD) printf("  had field marker\n");
+if (curr_Sym->v & SYM_FIRST_ANOM) printf("  had anonymous marker\n");
+}
+printf("In %s line %d, about to copy token %d to an extended symbol\n", __FILE__, __LINE__, flagless_original - tok_start);
+			sym_list[i].v = curr_Sym->v - tok_start
+				+ _tcc_extended_symbol_counter; /* XXX double check */
+		}
 		
 		/* Copy the assembler label */
 		if (curr_Sym->asm_label != NULL) {
@@ -2138,8 +2199,12 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * sort of function declaration, are located on the global
 		 * symbol stack. All I need to do when copying the Sym list is
 		 * to make sure that pointers to next are properly updated. */
+		if (_sym_looks_weird(curr_Sym->type.ref)) {
+			char * name = get_tok_str(curr_Sym->v, NULL);
+			printf("type.ref for %s looks weird\n", name);
+		}
 		sym_list[i].type.ref
-			= get_new_symtab_pointer(curr_Sym->type.ref, sym_list);
+			= get_new_symtab_pointer(curr_Sym->type.ref, sym_list, N_Syms);
 		
 		/* Copy the c field, the "associated number." What the hell is
 		 * this? For functions, it's the  */
@@ -2149,7 +2214,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * separate stack, so for these Symbols we focus on next, not
 		 * jnext. */
 		sym_list[i].next
-			= get_new_symtab_pointer(curr_Sym->next, sym_list);
+			= get_new_symtab_pointer(curr_Sym->next, sym_list, N_Syms);
 		
 		/* These are only needed for symbol table pushing/popping, so I
 		 * should be able to safely set them to null. */
@@ -2167,12 +2232,22 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		N_Defs++;
 	}
     /* Allocate the Def list */
-    Sym * def_list = to_return[2] = tcc_malloc(sizeof(Sym) * N_Defs);
+    Sym * def_list = to_return[2] = tcc_malloc(sizeof(Sym) * (N_Defs + 1));
     to_return[3] = def_list + N_Defs;
     
+	/* Zero out last sym */
+    def_list[N_Defs].v = 0;
+    def_list[N_Defs].asm_label = NULL;
+    def_list[N_Defs].r = 0;
+    def_list[N_Defs].d = NULL;
+    def_list[N_Defs].type.t = 0;
+    def_list[N_Defs].type.ref = NULL;
+    def_list[N_Defs].next = NULL;
+    def_list[N_Defs].prev = NULL;
+    def_list[N_Defs].prev_tok = NULL;
+    
     /* Copy the define list */
-    curr_Def = define_stack;
-    for (i = 0; i < N_Defs; i++) {
+    for (curr_Def = define_stack, i = 0; i < N_Defs; i++, curr_Def = curr_Def->prev) {
 		/* See above for descriptions of some of the fields. */
 		 
 		/* Convert the symbol's token index. Undefined items are not
@@ -2182,6 +2257,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			def_list[i].v = 0;
 		}
 		else {
+			int flagless_original = curr_Def->v & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 			def_list[i].v = curr_Def->v - tok_start
 				+ _tcc_extended_symbol_counter; /* XXX double check? */
 		}
@@ -2196,23 +2272,116 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * preprocessor macros. Just copy it. */
 		def_list[i].r = curr_Def->r;
 		
-		/* Copy the define token stream. This is a null-terminated list
-		 * of TokenSym offsets, not a linked list, and needs to be
-		 * copied almost like a character string. */
+		/* Copy the define token stream, which is a series of bytes.
+		 * The series of bytes are collections of integer => data pairs,
+		 * where the integer indicates the type (and thus size) of the
+		 * data that follows. For example, if we types TOK_PPNUM,
+		 * TOK_STR, or TOK_LSTR, then the next few bytes are a CString
+		 * struct (mostly filled with NULLs) followed by the associated
+		 * character string. It gets complicated, but once we have
+		 * computed the proper length of the stream, we can (with one
+		 * exception) copy it verbatim. The formats of the stream are
+		 * codified in tok_str_add2, which is defined in tccpp.c
+		 * 
+		 * The important exception noted above is that if the token is
+		 * not one of the known types, then it is a plain token, which
+		 * should exist on the define stack. In that case, we need to
+		 * update the token number to point to one of our (to be copied
+		 * further below) extended TokenSyms.
+		 */
 		if (curr_Def->d != NULL) {
-			int N_tokens_in_stream = 0;
-			int * curr_ts;
-			for (curr_ts = curr_Def->d; *curr_ts != 0; curr_ts++) {
-				N_tokens_in_stream++;
+			
+			/* First compute the length and copy it... */
+			int len = 0;
+			int * str = curr_Def->d;
+			while(str[len] != 0) {
+				/* One for the type */
+				len++;
+				switch(str[len-1]) {
+					case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
+					case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
+						len++;
+						break;
+					case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
+						{
+							CString *cstr = (CString *)(str + len);
+							/* XXX Doesn't this right shift assume a 32 bit compiler? */
+							len += (sizeof(CString) + cstr->size + 3) >> 2;
+						}
+						break;
+					case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
+				#if LDOUBLE_SIZE == 8
+					case TOK_CLDOUBLE:
+				#endif
+						len += 2;
+						break;
+				#if LDOUBLE_SIZE == 12
+					case TOK_CLDOUBLE:
+						len += 3;
+				#elif LDOUBLE_SIZE == 16
+					case TOK_CLDOUBLE:
+						len += 4;
+				#elif LDOUBLE_SIZE != 8
+				#error add long double size support
+				#endif
+						break;
+					default:
+						break;
+				}
 			}
-			def_list[i].d = tcc_malloc(sizeof(int) * N_tokens_in_stream);
-			int j = 0;
-			curr_ts = curr_Def->d;
-			while (*curr_ts != 0) {
-				def_list[i].d[j] = *curr_ts - tok_start
-					+ _tcc_extended_symbol_counter;
-				curr_ts++;
-				j++;
+			/* XXX See comment above about 32-bit compilers */
+			def_list[i].d = tcc_malloc(sizeof(int) * (len + 1));
+			memcpy(def_list[i].d, curr_Def->d, sizeof(int) * (len + 1));
+			
+			/* ... then update TokenSym references to point to our
+			 * extended symbol table.*/
+			for (len = 0; str[len] != 0;) {
+				len++;
+				switch(str[len-1]) {
+					case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
+					case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
+						/* Skip the next stream value */
+						len++;
+						break;
+					case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
+						{
+							CString *cstr = (CString *)(str + len);
+							/* XXX Doesn't this right shift assume a 32 bit compiler? */
+							len += (sizeof(CString) + cstr->size + 3) >> 2;
+					        /* Make sure the data points to the
+					         * allocated string.
+					         */
+					        cstr->data = (char *)cstr + sizeof(CString);
+						}
+						break;
+					case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
+				#if LDOUBLE_SIZE == 8
+					case TOK_CLDOUBLE:
+				#endif
+						len += 2;
+						break;
+				#if LDOUBLE_SIZE == 12
+					case TOK_CLDOUBLE:
+						len += 3;
+				#elif LDOUBLE_SIZE == 16
+					case TOK_CLDOUBLE:
+						len += 4;
+				#elif LDOUBLE_SIZE != 8
+				#error add long double size support
+				#endif
+						break;
+					default:
+						/* This is the case for a token stream! */
+						if (str[len] < tok_start) {
+printf("In %s line %d, copying weird token symbol %X\n", __FILE__, __LINE__, str[len]);
+						}
+						else {
+							def_list[i].d[len] = str[len] - tok_start
+								+ _tcc_extended_symbol_counter;
+						}
+						
+						break;
+				}
 			}
 		}
 		else {
@@ -2236,7 +2405,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * across the loop. */
 		/* XXX is this interpretation correct? */
 		def_list[i].next
-			= get_new_deftab_pointer(curr_Def->next, def_list);
+			= get_new_deftab_pointer(curr_Def->next, def_list, N_Defs);
 		
 		/* These are only needed for symbol table pushing/popping and
 		 * label identification. Since these Sym objects will do no
@@ -2260,13 +2429,15 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		
 		/* Follow the code from tok_alloc_new in tccpp.c */
 		tok_sym->tok = _tcc_extended_symbol_counter++;
+		/* Add all the appropriate flags, of course */
+		tok_sym->tok |= tok_copy->tok & (SYM_STRUCT | SYM_FIELD);
 		tok_sym->sym_define
-			= get_new_deftab_pointer(tok_copy->sym_define, def_list);
+			= get_new_deftab_pointer(tok_copy->sym_define, def_list, N_Defs);
 		tok_sym->sym_label = NULL; /* Not copying labels */
 		tok_sym->sym_struct
-			= get_new_symtab_pointer(tok_copy->sym_struct, sym_list);
+			= get_new_symtab_pointer(tok_copy->sym_struct, sym_list, N_Syms);
 		tok_sym->sym_identifier
-			= get_new_symtab_pointer(tok_copy->sym_identifier, sym_list);
+			= get_new_symtab_pointer(tok_copy->sym_identifier, sym_list, N_Syms);
 		tok_sym->len = tok_copy->len;
 		tok_sym->hash_next = NULL;
 		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
@@ -2306,6 +2477,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (
 	sym_to_delete = (Sym*)my_extended_symtab[-3];
 	last = (Sym*)my_extended_symtab[-2];
 	while(sym_to_delete < last) {
+		/* free the token stream */
 		tcc_free(sym_to_delete->d);
 		sym_to_delete++;
 	}
@@ -2330,6 +2502,10 @@ LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym) {
 	return tokensym->str;
 }
 
+LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym) {
+	return tokensym->tok;
+}
+
 LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym) {
 	return tokensym->sym_define != NULL;
 }
@@ -2339,11 +2515,22 @@ LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym) {
 LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym) {
 	return tokensym->sym_identifier != NULL;
 }
+LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym * tokensym) {
+	return	tokensym->sym_define != NULL
+			|| tokensym->sym_struct != NULL
+			|| tokensym->sym_identifier != NULL
+			;
+}
+
+LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok) {
+	return (~(SYM_STRUCT | SYM_FIELD) & tok);
+}
 
 LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym ** list) {
-	if (tok < list[0]->tok) return 0;
-	TokenSym ** tail = *(TokenSym**)(list - 1) - 1;
-	if (tok > (*tail)->tok) return 0;
+	int to_test = tcc_tokensym_no_extra_bits(tok);
+	if (to_test < tcc_tokensym_no_extra_bits(list[0]->tok)) return 0;
+	TokenSym ** tail = *(TokenSym***)(list - 1) - 1;
+	if (to_test > tcc_tokensym_no_extra_bits((*tail)->tok)) return 0;
 	return 1;
 }
 
@@ -2352,6 +2539,6 @@ LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym ** list) {
  * the end of the list. Instead, we provide a function to get the number
  * of TokenSyms. */
 LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list) {
-	TokenSym ** tail = *(TokenSym**)(list - 1);
+	TokenSym ** tail = *(TokenSym***)(list - 1);
 	return (int)(tail - list);
 }

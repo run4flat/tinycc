@@ -410,10 +410,10 @@ typedef struct AttributeDef {
 
 /* -------------------------------------------------- */
 
-#define SYM_EXTENDED   0x80000000 /* extended symbol space */
-#define SYM_STRUCT     0x40000000 /* struct/union/enum symbol space */
-#define SYM_FIELD      0x20000000 /* struct/union field symbol space */
-#define SYM_FIRST_ANOM 0x10000000 /* first anonymous sym */
+#define SYM_EXTENDED   0x40000000 /* extended symbol space */
+#define SYM_STRUCT     0x20000000 /* struct/union/enum symbol space */
+#define SYM_FIELD      0x10000000 /* struct/union field symbol space */
+#define SYM_FIRST_ANOM 0x08000000 /* first anonymous sym */
 
 #define VLA_SP_LOC_SET     0x01 /* Location of SP on stack has been allocated */
 #define VLA_SP_SAVED       0x02 /* SP has been saved to slot already */

@@ -1,9 +1,6 @@
 /*
- * Simple library to output tests using the Test Anything Protocol.
- * This is far from being a complete TAP producer. For that, see libtap.
- * For a discussion of the TAP output format, see
- * http://podwiki.hexten.net/TAP/TAP.html?page=TAP
- *
+ * Exercises and tests the basic symbol copy behavior of the extended
+ * symbol table API.
  */
 
 #include "tap.h"

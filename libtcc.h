@@ -111,16 +111,19 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	void * data
 );
 
-LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym);
 LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list);
 LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym ** list);
 LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym** my_extended_symtab);
+LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok);
+LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym * tokensym);
 
 #ifndef SYM_EXTENDED
-	#define SYM_EXTENDED   0x80000000 /* extended symbol space */
+	#define SYM_EXTENDED   0x40000000 /* extended symbol space */
 #endif
 
 #ifdef __cplusplus

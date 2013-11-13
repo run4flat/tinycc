@@ -16,7 +16,8 @@ endif
 TCC = $(TOP)/tcc $(TCCFLAGS)
 
 TESTS =	\
- 01-test-symtab-copy.test
+ 01-test-symtab-copy.test \
+ 10-link-two-contexts.test
 
 
 # some tests do not pass on all platforms, remove them for now
@@ -29,7 +30,7 @@ TESTS =	\
 
 %.test: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	./$@
+	./$@ lib_path=$(top_srcdir)
 	rm $@
 
 all test: $(TESTS)
