@@ -99,10 +99,10 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr);
 LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 
 /* ---- Extended symbol table management ---- */
-typedef struct TokenSym TokenSym;
-typedef TokenSym* (*extended_symtab_lookup_by_name_callback)(char * name, int len, void * data, int is_identifier);
-typedef TokenSym* (*extended_symtab_lookup_by_number_callback)(int tok_id, void * data, int is_identifier);
-typedef void (*extended_symtab_copy_callback)(TokenSym** new_symtab, void * data);
+typedef struct TokenSym* TokenSym_p;
+typedef TokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name, int len, void * data, int is_identifier);
+typedef TokenSym_p (*extended_symtab_lookup_by_number_callback)(int tok_id, void * data, int is_identifier);
+typedef void (*extended_symtab_copy_callback)(TokenSym_p* new_symtab, void * data);
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * compiler_state,
 	extended_symtab_copy_callback new_copy_callback,
@@ -111,16 +111,16 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	void * data
 );
 
-LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list);
-LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym ** list);
-LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym** my_extended_symtab);
-LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_list_length (TokenSym_p* list);
+LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym_p* list);
+LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym_p* my_extended_symtab);
+LIBTCCAPI char * tcc_tokensym_name (TokenSym_p tokensym);
+LIBTCCAPI int tcc_tokensym_tok (TokenSym_p tokensym);
 LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok);
-LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym);
-LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym * tokensym);
+LIBTCCAPI int tcc_tokensym_has_define (TokenSym_p tokensym);
+LIBTCCAPI int tcc_tokensym_has_struct (TokenSym_p tokensym);
+LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym_p tokensym);
+LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym_p tokensym);
 
 #ifndef SYM_EXTENDED
 	#define SYM_EXTENDED   0x40000000 /* extended symbol space */
