@@ -23,8 +23,8 @@ char to_compile[] =
 "#define PI 3.14159\n"
 ;
 
-void copy_symtab(TokenSym ** copied_symtab, void * data) {
-	TokenSym*** my_symtab_p = (TokenSym***)data;
+void copy_symtab(TokenSym_p* copied_symtab, void * data) {
+	TokenSym_p** my_symtab_p = (TokenSym_p**)data;
 	*my_symtab_p = copied_symtab;
 }
 
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 	pass("Set output type to memory");
 	
 	/* Set the copy callback */
-	TokenSym ** my_symtab;
+	TokenSym_p* my_symtab;
 	tcc_set_extended_symtab_callbacks(s, &copy_symtab, NULL, NULL, &my_symtab);
 	pass("Set the symtab copy function");
 

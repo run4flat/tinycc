@@ -41,24 +41,24 @@ char second_code[] =
 "}\n"
 ;
 
-void copy_symtab(TokenSym ** copied_symtab, void * data) {
-	TokenSym*** my_symtab_p = (TokenSym***)data;
+void copy_symtab(TokenSym_p* copied_symtab, void * data) {
+	TokenSym_p** my_symtab_p = (TokenSym_p**)data;
 	*my_symtab_p = copied_symtab;
 }
 
 typedef struct {
 	TCCState * first_context;
 	TCCState * second_context;
-	TokenSym ** first_symtab;
+	TokenSym_p* first_symtab;
 } second_callback_data;
 
-TokenSym * lookup_by_name (char * name, int len, void * data, int is_identifier) {
+TokenSym_p lookup_by_name (char * name, int len, void * data, int is_identifier) {
 	/* Extract the name from the full string passed in */
 	char name_to_find[len + 1];
 	strncpy(name_to_find, name, len);
 	name_to_find[len] = '\0';
 	/* Pull out the symtab */
-	TokenSym** my_symtab = ((second_callback_data*)data)->first_symtab;
+	TokenSym_p* my_symtab = ((second_callback_data*)data)->first_symtab;
 	int i;
 	for (i = 0; i < tcc_tokensym_list_length(my_symtab); i++) {
 		if (
@@ -75,19 +75,19 @@ TokenSym * lookup_by_name (char * name, int len, void * data, int is_identifier)
 	return NULL;
 }
 
-TokenSym * lookup_by_number (int tok_id, void * data, int is_identifier) {
+TokenSym_p lookup_by_number (int tok_id, void * data, int is_identifier) {
 	/* Unpack the data */
 	DIAG("Looking up tokensym for %X", tok_id);
 	second_callback_data * my_data = (second_callback_data *)data;
 	/* Is this token in our extended symtab? */
-	TokenSym** my_symtab = my_data->first_symtab;
+	TokenSym_p* my_symtab = my_data->first_symtab;
 	DIAG("First tokensym is for %X", tcc_tokensym_tok(my_symtab[0]));
 	if (!tcc_token_is_in_extended_symtab(tok_id, my_symtab)) return NULL;
 	/* If so, find it */
 	DIAG("It appears that %X is in our extended symtab", tok_id);
 	int first_tok = tcc_tokensym_no_extra_bits(tcc_tokensym_tok(my_symtab[0]));
 	tok_id = tcc_tokensym_no_extra_bits(tok_id);
-	TokenSym * to_return = my_symtab[tok_id - first_tok];
+	TokenSym_p to_return = my_symtab[tok_id - first_tok];
 
 #if 0	
 	/* If this is an identifier request, we should also add the pointer
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
     tcc_set_output_type(s1, TCC_OUTPUT_MEMORY);
 	
 	/* Set the copy callback */
-	TokenSym ** my_symtab;
+	TokenSym_p* my_symtab;
 	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &my_symtab);
 	pass("Set the symtab copy function");
 
