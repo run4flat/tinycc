@@ -809,7 +809,6 @@ static int tcc_compile(TCCState *s1)
     
     /* Perform the symbol table callback, if requested */
     if (s1->nb_errors == 0 && s1->symtab_copy_callback != NULL) {
-		/* XXX working here */
 		copy_extended_symtab(s1, define_start, tok_start);
 	}
 
@@ -2058,14 +2057,14 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 	if (_sym_is_all_zeros(old)) return new_list + offset_of_last;
 	printf("In %s line %d, unable to locate symbol offset for old address %p:\n", __FILE__, __LINE__, old);
 	printf("  Symbol token: %X\n", old->v);
-/*	printf("  Assembler label %s\n", old->asm_label);*/
-	printf("  Associated register %d\n", old->r);
-	printf("  Associated number %d\n", old->c);
+	printf("  Assembler label at address %p\n", old->asm_label);
+	printf("  Associated register %lX\n", old->r);
+	printf("  Associated number %lX\n", old->c);
 	printf("  Type.t %X\n", old->type.t);
 	printf("  Type.ref %p\n", old->type.ref);
 	printf("  next symbol pointer %p\n", old->next);
-	printf("  previous symbol for this token at address %p\n", old->prev);
-	printf("  previous symbol on stack at address %p\n", old->prev_tok);
+	printf("  previous symbol in stack at address %p\n", old->prev);
+	printf("  previous symbol for this token at address %p\n", old->prev_tok);
 /*	tcc_error("Unable to locate symbol offset for old address %p", old);
 */	return NULL;
 }
@@ -2084,7 +2083,7 @@ Sym * get_new_deftab_pointer (Sym * old, Sym * new_list, int offset_of_last) {
 int _tcc_extended_symbol_counter = SYM_EXTENDED;
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 
-    /* Do nothing if we have an emtpy TCCState. */
+    /* Do nothing if we have an empty TCCState. */
     if (NULL == s) return;
 	
 	/* Note: to prevent two extended symbols from clashing by number, we
@@ -2152,15 +2151,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			sym_list[i].v = SYM_FIELD;
 		}
 		else {
-if (curr_Sym->v < tok_start) printf("In %s line %d, trying to copy token %X before the start token\n", __FILE__, __LINE__, curr_Sym->v);
-int flagless_original = curr_Sym->v & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
-if (flagless_original < tok_start) {
-printf("In %s line %d, copying flagless token %X that 'falls' before tok_start\n", __FILE__, __LINE__, flagless_original);
-if (curr_Sym->v & SYM_STRUCT) printf("  had struct marker\n");
-if (curr_Sym->v & SYM_FIELD) printf("  had field marker\n");
-if (curr_Sym->v & SYM_FIRST_ANOM) printf("  had anonymous marker\n");
-}
-printf("In %s line %d, about to copy token %d to an extended symbol\n", __FILE__, __LINE__, flagless_original - tok_start);
 			sym_list[i].v = curr_Sym->v - tok_start
 				+ _tcc_extended_symbol_counter; /* XXX double check */
 		}
@@ -2214,10 +2204,14 @@ printf("In %s line %d, about to copy token %d to an extended symbol\n", __FILE__
 	}
 		
 		/* Copy the c field, the "associated number." What the hell is
-		 * this? For functions, it's the  */
+		 * this? For functions, it's one of FUNC_OLD, FUNC_ELLIPSIS, or
+		 * zero, meaning it's a normal function.
+		 * Line 5982 of tccgen.c seems to suggest that this needs to be
+		 * **negative** and we need VT_CONST in order to get external linkage. 
+		 */
 		sym_list[i].c = curr_Sym->c;
 		
-		/* Copy the next symbol field. Labels and gotos and tracked in a
+		/* Copy the next symbol field. Labels and gotos are tracked in a
 		 * separate stack, so for these Symbols we focus on next, not
 		 * jnext. */
 		sym_list[i].next
@@ -2380,7 +2374,6 @@ printf("In %s line %d, about to copy token %d to an extended symbol\n", __FILE__
 					default:
 						/* This is the case for a token stream! */
 						if (str[len] < tok_start) {
-printf("In %s line %d, copying weird token symbol %X\n", __FILE__, __LINE__, str[len]);
 						}
 						else {
 							def_list[i].d[len] = str[len] - tok_start
