@@ -2144,6 +2144,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 
 		/* Convert the symbol's token index based on what we will
 		 * allocate when we build the TokenSym list. */
+		int extra_flags = (curr_Sym->v & (SYM_FIELD | SYM_STRUCT | SYM_FIRST_ANOM));
+		int bare_v = curr_Sym->v - extra_flags;
 		if (curr_Sym->v == SYM_FIELD) {
 			/* Functions of type int (int) have a token type that is
 			 * always present in every compiler context and can be
@@ -2151,8 +2153,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			sym_list[i].v = SYM_FIELD;
 		}
 		else {
-			sym_list[i].v = curr_Sym->v - tok_start
-				+ _tcc_extended_symbol_counter; /* XXX double check */
+			sym_list[i].v = bare_v - tok_start
+				+ _tcc_extended_symbol_counter
+				+ extra_flags; /* XXX double check */
 		}
 		
 		/* Copy the assembler label */
@@ -2258,7 +2261,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			def_list[i].v = 0;
 		}
 		else {
-			int flagless_original = curr_Def->v & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 			def_list[i].v = curr_Def->v - tok_start
 				+ _tcc_extended_symbol_counter; /* XXX double check? */
 		}
@@ -2430,7 +2432,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		/* Follow the code from tok_alloc_new in tccpp.c */
 		tok_sym->tok = _tcc_extended_symbol_counter++;
 		/* Add all the appropriate flags, of course */
-		tok_sym->tok |= tok_copy->tok & (SYM_STRUCT | SYM_FIELD);
+		tok_sym->tok |= tok_copy->tok & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 		tok_sym->sym_define
 			= get_new_deftab_pointer(tok_copy->sym_define, def_list, N_Defs);
 		tok_sym->sym_label = NULL; /* Not copying labels */
