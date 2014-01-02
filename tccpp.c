@@ -342,7 +342,6 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
         } else if (v < tok_ident) {
             return table_ident[v - TOK_IDENT]->str;
         } else if (v >= SYM_FIRST_ANOM && v < SYM_EXTENDED) {
-/*printf("In %s line %d, anonymous is %X, extended is %X, v is %X, which is %X less than extended\n", __FILE__, __LINE__, SYM_FIRST_ANOM, SYM_EXTENDED, v, SYM_EXTENDED - v);*/
             /* special name for anonymous symbol */
             sprintf(p, "L.%u", v - SYM_FIRST_ANOM);
         } else if (v >= SYM_EXTENDED) {
@@ -1089,13 +1088,6 @@ ST_INLN Sym *define_find(int v)
 		TokenSym *ts = tcc_state->symtab_number_callback(
 			v, tcc_state->symtab_callback_data, 0);
 		if (ts == NULL) return NULL;
-printf("In %s line %d, got extended symbol with tok v %X\n", __FILE__, __LINE__, ts->tok);
-if (ts->sym_define != NULL) {
-printf("In %s line %d, returning define Sym with tok v %X\n", __FILE__, __LINE__, ts->sym_define->v);
-}
-else {
-printf("In %s line %d, about to return a NULL sym_identifier\n", __FILE__, __LINE__);
-}
 		return ts->sym_define;
 	}
 	
@@ -2289,7 +2281,6 @@ maybe_newline:
             if (tcc_state->symtab_name_callback) {
 				ts = tcc_state->symtab_name_callback(
 					p1, len, tcc_state->symtab_callback_data, 0);
-if (ts) printf("In %s line %d, got extended symbol with tok v %X\n", __FILE__, __LINE__, ts->tok);
 				if (ts) goto token_found;
 			}
             ts = tok_alloc_new(pts, p1, len);
