@@ -2038,15 +2038,18 @@ int _sym_is_all_zeros(Sym * to_check) {
 }
 
 Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack) {
-	/* Handle the null case up-front */
-	if (old == NULL) return NULL;
-	/* Otherwise, it should be on our stack, so find it */
+	/* We assume that old IS NOT null; this must be checked by the higher-level
+	 * functions that call this one. */
+	
+	/* Determine the offset of the to-be-generated list of symbols and return the
+	 * pointer to that offset. Note that the list will only include non-extended
+	 * symbols, so we do not increment our offset when we encounter one of those. */
 	int offset = 0;
 	while(stack != NULL) {
 		/* Return pointer to the new symbol's location if found */
 		if (stack == old) return new_list + offset;
-		/* Otherwise step to the next symbol */
-		offset++;
+		/* Advance to the next symbol */
+		if (stack->v < SYM_EXTENDED) offset++;
 		stack = stack->prev;
 	}
 	/* There is this weird case where sometimes a symbol refers to this
@@ -2069,11 +2072,66 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 */	return NULL;
 }
 
-Sym * get_new_symtab_pointer (Sym * old, Sym * new_list, int offset_of_last) {
+Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
+	/* Handle the null case up-front */
+	if (old == NULL) return NULL;
+	
+	/* Handle the extended case next. We know that copies of the extended symbols live
+	 * outside of the "global" symbol stack, but "old" points to a copy that lives on
+	 * the global symbol stack and will be destroyed after copy_extended_symtab returns.
+	 * Since we know that the original extended symbol will stick around, we simply
+	 * use that. */
+	if (old->v >= SYM_EXTENDED) {
+		TokenSym* tsym;
+		/* Call the extended symbol lookup. */
+		if (s->symtab_number_callback == NULL) {
+			tcc_warning("Internal error: Found extended symbol but no symtab_number_callback???");
+			return NULL;
+		}
+		tsym = s->symtab_number_callback(old->v, s->symtab_callback_data, 0);
+		if (tsym == NULL) {
+			tcc_warning("Internal error: unable to locate extended symbol");
+			return NULL;
+		}
+		if (old->v & SYM_STRUCT) {
+			if (tsym->sym_struct == NULL) tcc_warning("Internal error: extended struct symbol is null???");
+			return tsym->sym_struct;
+		}
+		if (tsym->sym_identifier == NULL) tcc_warning("Internal error: extended identifier symbol is null???");
+		return tsym->sym_identifier;
+	}
+	/* Otherwise use the non-extended symbol lookup */
 	return _get_new_sym_or_def_pointer(old, new_list, offset_of_last, global_stack);
 }
 
-Sym * get_new_deftab_pointer (Sym * old, Sym * new_list, int offset_of_last) {
+Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
+	/* Handle the null case up-front */
+	if (old == NULL) return NULL;
+	
+	/* Handle the extended case next. We know that copies of the extended symbols live
+	 * outside of the "global" symbol stack, but "old" points to a copy that lives on
+	 * the global symbol stack and will be destroyed after copy_extended_symtab returns.
+	 * Since we know that the original extended symbol will stick around, we simply
+	 * use that. */
+	if (old->v >= SYM_EXTENDED) {
+		TokenSym* tsym;
+		/* Call the extended symbol lookup. */
+		if (s->symtab_number_callback == NULL) {
+			tcc_warning("Internal error: Found extended symbol but no symtab_number_callback???");
+			return NULL;
+		}
+		tsym = s->symtab_number_callback(old->v, s->symtab_callback_data, 0);
+		if (tsym == NULL) {
+			tcc_warning("Internal error: unable to locate extended symbol");
+			return NULL;
+		}
+		if (tsym->sym_define == NULL) {
+			tcc_warning("Internal error: extended preprocessor symbol is null???");
+		}
+		return tsym->sym_define;
+	}
+	
+	/* Otherwise use the non-extended symbol lookup */
 	return _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
 }
 
@@ -2118,8 +2176,10 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     Sym * curr_Sym = global_stack;
     int N_Syms = 0;
     while(curr_Sym != NULL) {
+    	/* We only track non-extended symbols */
+		if (curr_Sym->v < SYM_EXTENDED) N_Syms++;
+		/* Step to the next symbol in the list */
 		curr_Sym = curr_Sym->prev;
-		N_Syms++;
 	}
     /* Allocate the Sym list; store the address of the last element,
      * which is kept empty. */
@@ -2138,9 +2198,14 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     sym_list[N_Syms].prev_tok = NULL;
     
     /* Copy the Sym list */
-    for (curr_Sym = global_stack, i = 0; i < N_Syms; i++, curr_Sym = curr_Sym->prev) {
+    for (curr_Sym = global_stack, i = 0; i < N_Syms; curr_Sym = curr_Sym->prev) {
+    	/* only copy non-extended symbols */
+    	if (curr_Sym->v >= SYM_EXTENDED) continue;
+    	
 		/* See tcc.h around line 425 for descriptions of some of the
-		 * fields. */
+		 * fields. See also tccgen.c line 5987 to see what needs to happen for
+		 * function declarations to work properly (and, in turn, line 446
+		 * for how to push a forward reference). */
 		 
 		/* Convert the symbol's token index based on what we will
 		 * allocate when we build the TokenSym list. */
@@ -2203,7 +2268,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			}
 /* XXX Is "the type.ref for the *first* element something weird? */
 			sym_list[i].type.ref
-				= get_new_symtab_pointer(curr_Sym->type.ref, sym_list, N_Syms);
+				= get_new_symtab_pointer(s, curr_Sym->type.ref, sym_list, N_Syms);
 	}
 		
 		/* Copy the c field, the "associated number." What the hell is
@@ -2218,12 +2283,15 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * separate stack, so for these Symbols we focus on next, not
 		 * jnext. */
 		sym_list[i].next
-			= get_new_symtab_pointer(curr_Sym->next, sym_list, N_Syms);
+			= get_new_symtab_pointer(s, curr_Sym->next, sym_list, N_Syms);
 		
 		/* These are only needed for symbol table pushing/popping, so I
 		 * should be able to safely set them to null. */
 		sym_list[i].prev = NULL;
 		sym_list[i].prev_tok = NULL;
+		
+		/* Move on to the next symbol. */
+		i++;
 	}
     
     /********* define stack *********/
@@ -2407,7 +2475,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * across the loop. */
 		/* XXX is this interpretation correct? */
 		def_list[i].next
-			= get_new_deftab_pointer(curr_Def->next, def_list, N_Defs);
+			= get_new_deftab_pointer(s, curr_Def->next, def_list, N_Defs);
 		
 		/* These are only needed for symbol table pushing/popping and
 		 * label identification. Since these Sym objects will do no
@@ -2434,12 +2502,12 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		/* Add all the appropriate flags, of course */
 		tok_sym->tok |= tok_copy->tok & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 		tok_sym->sym_define
-			= get_new_deftab_pointer(tok_copy->sym_define, def_list, N_Defs);
+			= get_new_deftab_pointer(s, tok_copy->sym_define, def_list, N_Defs);
 		tok_sym->sym_label = NULL; /* Not copying labels */
 		tok_sym->sym_struct
-			= get_new_symtab_pointer(tok_copy->sym_struct, sym_list, N_Syms);
+			= get_new_symtab_pointer(s, tok_copy->sym_struct, sym_list, N_Syms);
 		tok_sym->sym_identifier
-			= get_new_symtab_pointer(tok_copy->sym_identifier, sym_list, N_Syms);
+			= get_new_symtab_pointer(s, tok_copy->sym_identifier, sym_list, N_Syms);
 		tok_sym->len = tok_copy->len;
 		tok_sym->hash_next = NULL;
 		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);

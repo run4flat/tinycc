@@ -210,12 +210,23 @@ ST_INLN Sym *struct_find(int v)
 /* find an identifier */
 ST_INLN Sym *sym_find(int v)
 {
-    if (v == SYM_EXTENDED || v & SYM_EXTENDED) {
-		/* Extended symbol table lookup */
+    if (v & SYM_EXTENDED) {
+		/* Extended symbol table lookup. First check our local collection. */
+		/* Sym *s; */
+		/* s = find_local_copy_of_sym_for(v); */
+		/* if (s) return s; */
 		if (tcc_state->symtab_number_callback == NULL) return NULL;
 		TokenSym *ts = tcc_state->symtab_number_callback(
 			v, tcc_state->symtab_callback_data, 1);
 		if (ts == NULL) return NULL;
+		
+		/* Push this symbol to our local collection of extended symbols */
+		/* Sym* s_global = ts->sym_identifier; */
+		/* Use sym_push2 for our own custom stack? */
+        /* s = sym_push(v, s_global->type, s_global->r | VT_CONST | VT_SYM, 0); */
+        /* s->asm_label = s_global->asm_label; */
+        /* s->type.t |= VT_EXTERN; */
+		/* return s; */
 		return ts->sym_identifier;
 	}
 	
@@ -240,9 +251,11 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
     s->r = r;
     /* don't record fields or anonymous symbols */
     /* XXX: simplify */
-    if (!(v & SYM_FIELD) && (v & ~SYM_STRUCT) < SYM_FIRST_ANOM) {
+    if (!(v & SYM_FIELD) && (v & ~(SYM_STRUCT|SYM_EXTENDED)) < SYM_FIRST_ANOM) {
         /* record symbol in token array */
-        ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
+        if (v & SYM_EXTENDED) ts = tcc_state->symtab_number_callback(
+				v, tcc_state->symtab_callback_data, 0);
+        else ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
         if (v & SYM_STRUCT)
             ps = &ts->sym_struct;
         else
@@ -250,6 +263,9 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
         s->prev_tok = *ps;
         *ps = s;
     }
+    else if (v >= SYM_EXTENDED) {
+printf("In %s line %d XXX WORKING HERE XXX update sym_push, global_identifier_push, sym_pop\n", __FILE__, __LINE__);
+	}
     return s;
 }
 
@@ -257,10 +273,14 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
 ST_FUNC Sym *global_identifier_push(int v, int t, int c)
 {
     Sym *s, **ps;
+    TokenSym *ts;
     s = sym_push2(&global_stack, v, t, c);
     /* don't record anonymous symbol */
-    if (v < SYM_FIRST_ANOM) {
-        ps = &table_ident[v - TOK_IDENT]->sym_identifier;
+    if ((v & ~SYM_EXTENDED) < SYM_FIRST_ANOM) {
+    	if (v & SYM_EXTENDED) ts = tcc_state->symtab_number_callback(
+					v, tcc_state->symtab_callback_data, 0);
+		else ts = table_ident[v - TOK_IDENT];
+        ps = &ts->sym_identifier;
         /* modify the top most local identifier, so that
            sym_identifier will point to 's' when popped */
         while (*ps != NULL)
@@ -268,6 +288,9 @@ ST_FUNC Sym *global_identifier_push(int v, int t, int c)
         s->prev_tok = NULL;
         *ps = s;
     }
+    else if (v >= SYM_EXTENDED) {
+printf("In %s line %d XXX WORKING HERE XXX update sym_push, global_identifier_push, sym_pop\n", __FILE__, __LINE__);
+	}
     return s;
 }
 
@@ -284,14 +307,19 @@ ST_FUNC void sym_pop(Sym **ptop, Sym *b)
         v = s->v;
         /* remove symbol in token array */
         /* XXX: simplify */
-        if (!(v & SYM_FIELD) && (v & ~SYM_STRUCT) < SYM_FIRST_ANOM) {
-            ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
+        if (!(v & SYM_FIELD) && (v & ~(SYM_STRUCT|SYM_EXTENDED)) < SYM_FIRST_ANOM) {
+            if (v & SYM_EXTENDED) ts = tcc_state->symtab_number_callback(
+					v, tcc_state->symtab_callback_data, 0);
+			else ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
             if (v & SYM_STRUCT)
                 ps = &ts->sym_struct;
             else
                 ps = &ts->sym_identifier;
             *ps = s->prev_tok;
         }
+		else if (v >= SYM_EXTENDED) {
+printf("In %s line %d XXX WORKING HERE XXX update sym_push, global_identifier_push, sym_pop\n", __FILE__, __LINE__);
+		}
         sym_free(s);
         s = ss;
     }
