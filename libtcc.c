@@ -2022,7 +2022,7 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	s->symtab_callback_data = data;
 }
 
-int _sym_looks_weird(Sym * to_check) {
+int _sym_is_all_zeros(Sym * to_check) {
 	if (to_check == NULL) return 0;
 	if (
 		to_check->v == 0
@@ -2055,7 +2055,7 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 	 * null, is not clear to me. However, we have created just such a
 	 * pointer! So we use our own special empty Sym for this purpose.
 	 */
-	if (_sym_looks_weird(old)) return new_list + offset_of_last;
+	if (_sym_is_all_zeros(old)) return new_list + offset_of_last;
 	printf("In %s line %d, unable to locate symbol offset for old address %p:\n", __FILE__, __LINE__, old);
 	printf("  Symbol token: %X\n", old->v);
 /*	printf("  Assembler label %s\n", old->asm_label);*/
@@ -2199,12 +2199,19 @@ printf("In %s line %d, about to copy token %d to an extended symbol\n", __FILE__
 		 * sort of function declaration, are located on the global
 		 * symbol stack. All I need to do when copying the Sym list is
 		 * to make sure that pointers to next are properly updated. */
-		if (_sym_looks_weird(curr_Sym->type.ref)) {
-			char * name = get_tok_str(curr_Sym->v, NULL);
-			printf("type.ref for %s looks weird\n", name);
+		if (curr_Sym->v & SYM_FIELD) {
+			/* the ref for fields is not initialized */
+			sym_list[i].type.ref = NULL;
 		}
-		sym_list[i].type.ref
-			= get_new_symtab_pointer(curr_Sym->type.ref, sym_list, N_Syms);
+		else {
+			if (_sym_is_all_zeros(curr_Sym->type.ref)) {
+				char * name = get_tok_str(curr_Sym->v, NULL);
+				printf("type.ref for %s is all zeros\n", name);
+			}
+/* XXX Is "the type.ref for the *first* element something weird? */
+			sym_list[i].type.ref
+				= get_new_symtab_pointer(curr_Sym->type.ref, sym_list, N_Syms);
+	}
 		
 		/* Copy the c field, the "associated number." What the hell is
 		 * this? For functions, it's the  */
