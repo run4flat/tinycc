@@ -17,7 +17,8 @@ TCC = $(TOP)/tcc $(TCCFLAGS)
 
 TESTS =	\
  01-test-symtab-copy.test \
- 20-two-contexts-define-share.test
+ 20-two-contexts-define-share.test \
+ 30-two-contexts-struct-share.test
 
 
 # some tests do not pass on all platforms, remove them for now
