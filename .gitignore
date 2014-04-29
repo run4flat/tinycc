@@ -59,3 +59,4 @@ tiny_libmaker
 *.dSYM
 *~
 
+*.test
