@@ -3,7 +3,7 @@
  */
 
 /* uncomment to enable diagnostic output */
-//	#define DIAG(...) diag(__VA_ARGS__)
+	#define DIAG(...) diag(__VA_ARGS__)
 
 #include "test_setup.h"
 

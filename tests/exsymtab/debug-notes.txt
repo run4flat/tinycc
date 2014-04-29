@@ -1,0 +1,128 @@
+break tcc_compile_string
+break tcc_relocate_ex
+# This is where the interesting parsing stuff happens
+break block
+break gfunc_call
+lib_path=../..
+
+# Probably want to break on decl0
+
+# Try this to break within next():
+break /home/dcmertens/projects/tinycc/tccpp.c:3017
+
+# Otherwise, after the first breakpoint above gets tripped, add this:
+break next_nomacro_spc
+
+### When I call tcc_add_symbol... ###
+
+# ... I get to relocate_syms() ...
+# What is sh_num? ANS: it is SHN_ABS, which is 0xfff1.
+# How does it compare to SHN_LORESERVE == 0xff00? ANS: it is greater.
+# If it were lower, it would be changed, so in relocate_syms(), the address is not changed.
+
+
+
+line 2329 of libtcc.c
+int flagless_original = curr_Def->v & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+
+
+
+#### April 27 2014
+
+It's been a while since I last looked at this code.
+
+# Catching up
+
+As of right now, there are tests under tests/exsymtab/, and tests 01, and 20 pass. 30 does
+not pass. Neither does the overly complex 09, which is copied and unmodified in 40. 50
+does not pass either, and a printout of the address of the two functions "fib" and
+"fib_of_5" show that they have the *same* address, which is wrong.
+
+To proceed, and to lose as little ground between steps as possible, I am going to proceed
+systematically. I will begin by focusing on test 20.
+
+# Getting oriented with test 20
+
+Test 20 defines a struct in one context, copies that context's symbol table, applies that
+symbol table to another context, and tries to compile code that uses the struct
+definition. The struct "constructor" can be obtained from the first context after
+compilation and it runs without trouble. It is possible to ensure it works by manually
+unpacking the struct (treating it like a two-element array).
+
+The error message when the second compiler runs into trouble is 
+  <string>:3: error: field not found: x
+This means that the compiler does not have any trouble with the statement on the previous
+line:
+  struct point * pt = pt_p;
+That suggests that it is able to search for the symbol called "point" in the
+extended symbol table and find it. To be sure of this, I added the following lines to the
+extended symbol table search found in the vicinity of line 2280 in tccpp.c:
+  if (!memcmp("point", p1, len)) printf("Looking for a point with an extended symbol table callback\n");
+  				ts = tcc_state->symtab_name_callback(
+  					p1, len, tcc_state->symtab_callback_data, 0);
+  if (!memcmp("point", p1, len) && ts) printf("Found a point symbol! Returning %d\n", ts);
+These if statements print during the compilation stage before the second compilation
+croaks. So we can be sure that the system finds the symbol. Furthermore, the printout of
+the symbol number suggests that the return value is sensible.
+
+At present, test 20 shows the following problem:
+
+  ############################################################
+  # Extended symbol table entries are not correctly queried. #
+  ############################################################
+
+How might we test this? I would have to locate where struct data offsets are queried and
+then print out some diagnostics whenever we try to access data from the "point" struct.
+Where does this occur? Thanks to ack, I found that this error is printed out on line 3954
+of tccgen.c
+
+In the vicinity of this error, the type of the struct that we are accessing is stored in
+vtop. vtop is an SValue, a struct defined on line 319 of tcc.h. vtop->type is a CType,
+a struct defined on line 298 of the same header file. Judging by the usage, the type's
+ref slot (vtop->type.ref) is a Sym linked list. The Sym struct is defined on line 329 of
+tcc.h. The v field of that struct is what we're looking for, and is the symbol token of
+the Sym in question.
+
+The while loop in tccgen.c that precedes the current error checks if any of the members
+of the linked list have the same symbol token as the current symbol token, mostly. The
+actual symbol token compared is the current symbol token OR'd with SYM_FIELD. Also, the
+search through the linked list starts with the *second* element of the list, not the
+first. Here are some important questions worth asking:
+
+  Q: What is contained in the first element of the list?
+  Q: When the elements of the list are copied in the symbol table copy function, are
+     they copied with the correct flags? [ans line 97]
+  Q: Is the token symbol for "x" correctly retrieved for this situation?
+
+I can most easily answer the second question first. The symbol copying is contained in
+libtcc.c in the vicinity of line 2220. In particular, all flags are split off of the token
+symbol in the vicinity of line 2210, then added back after the arithmetic. Every single
+symbol is copied and its symbol token updated in this one spot. The ref pointer is
+copied further down, in such a way as to refer to the new, copied symbol token.
+
+I now suspect, strongly, that the problem is that the flags are being mishandled
+somewhere. Line 2503 of libtcc.c copies over the flags, which seems odd since the
+tokenizer does not understand context and cannot differentiate between struct names,
+field names, etc. I do not understand the role of these. At any rate, the value SYM_FILED
+is OR'd with the symbol token before the comparison, so the return value of the
+name-to-token function should probably *not* have that value. Either that, or all such
+flags get stripped out at some point:
+
+  Q: Do extra flags such as SYM_FIELD get stripped out from the symbol token after it is
+     returned?
+
+
+
+#### April 28 2014
+
+New investigations to resolve the questions asked last night. It turns out that the token
+for the "x" struct field is never identified in the extended symbol code. This suggests
+that there may be a mistake in the code that searches through extended symbols.
+
+To reach this observation, I added the following diagnostic to tccgen.c, line 3954:
+
+ { printf("Could not find token %x\n", tok);
+                tcc_error("field not found: %s",  get_tok_str(tok & ~SYM_FIELD, NULL));
+ }
+
+
