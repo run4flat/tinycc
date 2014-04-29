@@ -9,6 +9,7 @@ endif
 
 ifeq ($(TARGETOS),Darwin)
  CFLAGS += -Wl,-flat_namespace,-undefined,warning
+ CFLAGS += -ggdb
  TCCFLAGS += -D_ANSI_SOURCE
  export MACOSX_DEPLOYMENT_TARGET:=10.2
 endif
