@@ -2512,7 +2512,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		tok_sym->hash_next = NULL;
 		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
 		tok_sym->str[tok_copy->len] = '\0';
-printf("Just copied token with string %s\n", tok_sym->str);
 	}
 
 	/* NOTE II: The guarantee of contiguity means that this function is

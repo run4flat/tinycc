@@ -139,3 +139,12 @@ to the copy function:
 
 lets me check for all tokens that get copied. Do we see "x"?
 
+Many, many, many tokens are created, more than I care to know. They are all probably
+preprocessor macros, and I should probably find some way to avoid compiling them each
+time the compiler gets invoked. At any rate, we *do* have an "x" token, along with a "y"
+token.
+
+Why is this odd? It appears that the lookup-by-name code in test_setup.h can find the
+"point" and "pt" token symbols, but is unable to find the [x] token symbol.
+
+
