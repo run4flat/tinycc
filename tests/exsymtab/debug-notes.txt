@@ -190,3 +190,12 @@ using a longer name, in case single-letter tokens behave oddly. The second is to
 more closely at the logic for sharable tokens. I will begin with the first idea. To do
 this, I simply rename the fields of the struct from "x" and "y" to "xval" and "yval". For
 good measure I also changed the names of the arguments to new_point().
+
+Once again, I get this message:
+
+  Looking up token [xval]
+  Could not find token 1000046f
+
+So it appears that the members of structs are not shareable, and so lookup_by_name fails
+to return the TokenSym for this field.
+
