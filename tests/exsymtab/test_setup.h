@@ -39,7 +39,7 @@ TokenSym_p lookup_by_name (char * name, int len, void * data, int is_identifier)
 	char name_to_find[len + 1];
 	strncpy(name_to_find, name, len);
 	name_to_find[len] = '\0';
-printf("Looking up token with name [%s]\n", name_to_find);
+int looking_for_x = (len == 1) && (name[0] == 'x');
 	/* Pull out the symtab */
 	TokenSym_p* my_symtab = ((second_callback_data*)data)->first_symtab;
 	int i;
@@ -51,6 +51,7 @@ printf("Looking up token with name [%s]\n", name_to_find);
 			DIAG("Found [%s]", name_to_find);
 			return my_symtab[i];
 		}
+else if (looking_for_x) printf("TokenSym with name [%s] does not match or is not shareable\n", tcc_tokensym_name(my_symtab[i]));
 	}
 	DIAG("Did not find [%s]", name_to_find);
 	return NULL;

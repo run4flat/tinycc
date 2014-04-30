@@ -171,3 +171,7 @@ I would have expected:
 Thus we are indeed asked to find "x", and I am confident that the "x" tokenSym is indeed
 copied to the extended symbol table. There must be an issue with the lookup procedure.
 
+To check if the lookup procedure is faulty, I added a printout to the lookup function that
+displays all token names that failed, either because the names didn't match or because the
+TokenSym is "not shareable".
+
