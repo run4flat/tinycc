@@ -132,6 +132,8 @@ Continuing with my previous line of inquiry, I decided to look more closely at t
 preprocessor parsing of single-character tokens, such as "x". How are TokenSym structs
 allocated for these? Do they get copied by the symbol table copier?
 
+# TokenSym for x?
+
 To answer that question, I look into the token symbol copying in libtcc. Adding this line
 to the copy function:
 
@@ -147,4 +149,11 @@ token.
 Why is this odd? It appears that the lookup-by-name code in test_setup.h can find the
 "point" and "pt" token symbols, but is unable to find the [x] token symbol.
 
+# TokenSym search
 
+This sugests that the lookup-by-name code is either broken or not called for "x". To
+check this, I added this line to the token lookup-by-name function in test_setup.h:
+
+  printf("Looking up token with name [%s]\n", name_to_find);
+
+I also removed diagnostic output to make the output easier to digest.
