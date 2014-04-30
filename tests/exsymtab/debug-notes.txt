@@ -126,3 +126,16 @@ To reach this observation, I added the following diagnostic to tccgen.c, line 39
  }
 
 
+#### April 30 2014
+
+Continuing with my previous line of inquiry, I decided to look more closely at the
+preprocessor parsing of single-character tokens, such as "x". How are TokenSym structs
+allocated for these? Do they get copied by the symbol table copier?
+
+To answer that question, I look into the token symbol copying in libtcc. Adding this line
+to the copy function:
+
+  printf("Just copied token with string %s\n", tok_sym->str);
+
+lets me check for all tokens that get copied. Do we see "x"?
+
