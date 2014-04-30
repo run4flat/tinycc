@@ -175,3 +175,11 @@ To check if the lookup procedure is faulty, I added a printout to the lookup fun
 displays all token names that failed, either because the names didn't match or because the
 TokenSym is "not shareable".
 
+And there we see it, hidden among scores of similar lines:
+
+  TokenSym with name [x] does not match or is not shareable
+
+which suggests that the TokenSym for "x" is not shareable. This is odd since the TokenSym
+for "point" is shareable, apparently. My next step, then, is to test if I can make this
+field shareable.
+
