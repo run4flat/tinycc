@@ -183,3 +183,10 @@ which suggests that the TokenSym for "x" is not shareable. This is odd since the
 for "point" is shareable, apparently. My next step, then, is to test if I can make this
 field shareable.
 
+# Shareability
+
+There are two tests I can perform to see if I can get this to work. The first is to try
+using a longer name, in case single-letter tokens behave oddly. The second is to look
+more closely at the logic for sharable tokens. I will begin with the first idea. To do
+this, I simply rename the fields of the struct from "x" and "y" to "xval" and "yval". For
+good measure I also changed the names of the arguments to new_point().

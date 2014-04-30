@@ -39,6 +39,7 @@ TokenSym_p lookup_by_name (char * name, int len, void * data, int is_identifier)
 	char name_to_find[len + 1];
 	strncpy(name_to_find, name, len);
 	name_to_find[len] = '\0';
+if (name[0] == 'x') printf("Looking up token [%s]\n", name_to_find);
 	/* Pull out the symtab */
 	TokenSym_p* my_symtab = ((second_callback_data*)data)->first_symtab;
 	int i;
