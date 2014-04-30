@@ -156,4 +156,18 @@ check this, I added this line to the token lookup-by-name function in test_setup
 
   printf("Looking up token with name [%s]\n", name_to_find);
 
-I also removed diagnostic output to make the output easier to digest.
+I also removed diagnostic output to make the output easier to digest. The output is what
+I would have expected:
+
+  Looking up token with name [sq_distance_to_pt]
+  Looking up token with name [pt_p]
+  Looking up token with name [point]
+  Looking up token with name [pt]
+  Looking up token with name [pt]
+  Looking for an x with an extended symbol table callback
+  Looking up token with name [x]
+  Looking up token with name [sq_distance_to_pt???]
+
+Thus we are indeed asked to find "x", and I am confident that the "x" tokenSym is indeed
+copied to the extended symbol table. There must be an issue with the lookup procedure.
+
