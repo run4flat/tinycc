@@ -1,3 +1,8 @@
+TODO
+====
+
+Write tests for extended symbol table traps discussed on May 1
+
 break tcc_compile_string
 break tcc_relocate_ex
 # This is where the interesting parsing stuff happens
@@ -217,5 +222,33 @@ character tokens as well as repeated use of the same extended token in different
 get tested.
 
 Yes, it all works just as it should. :-D
+
+# Potential TokenSym lookup issues
+
+I have a worry about a potential trap in TokenSym lookup by name. This would only reveal
+itself when using three contexts.
+
+In context #1, I write a function called "foo". This is a globally accessible thing, so it
+gets stored in the TokenSym's function slot. This TokenSym is copied to an extended symbol
+table.
+
+In context #2, I include the extended symbol table from context #1 and write a macro
+called "foo". The token "foo" is associated with the TokenSym in the first context's
+extended symbol table, so that TokenSym (and tok reference) is returned. This globally
+accessible thing gets stored in the *original* TokenSym's define slot! Furthermore, when
+the extended symbol table is made from context #2, it does not include a TokenSym for
+this symbol! The symbol itself should be in this context's list of symbols, so it will be
+copied. Potential problems include:
+
+  1) The original TokenSym's direct pointer to the symbol itself will not be updated with
+     the creation of the extended symbol table. This will be a potential memory leak.
+  2) If context #2 is applied to a later context, the lookup_by_name function will have to
+     know to look for tokens in context #1, or it won't find "foo" defined as a macro.
+  3) If context #1 is applied to a later context, the "foo" macro slot will already be
+     taken, even though the macro was *not* defined in context #1. Thus if we want to have
+     two contexts (say #2 and #3) that morph the behavior of the function call with two
+     different macro wrappers, we will likely run into trouble.
+
+I need to write tests for all of these, but would like to move to other things first.
 
 
