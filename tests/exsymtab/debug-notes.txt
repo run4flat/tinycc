@@ -199,3 +199,12 @@ Once again, I get this message:
 So it appears that the members of structs are not shareable, and so lookup_by_name fails
 to return the TokenSym for this field.
 
+
+#### May 1 2014
+
+After looking at the logic for tcc_tokensym_is_shareable, I think I understand more
+clearly that the TokenSym's fields that are checked in this function would point to
+globally visible things. The function might be better named tcc_tokensym_has_globals.
+
+At any rate, I decided to remove the "is_shareable" check from the lookup_by_name
+function in test_setup.h to see if the struct code will properly compile.
