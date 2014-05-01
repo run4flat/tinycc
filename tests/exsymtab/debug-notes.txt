@@ -1,7 +1,10 @@
 TODO
 ====
 
-Write tests for extended symbol table traps discussed on May 1
+- Write a struct declaration sharing test that uses non-int types, like float or char[10]
+- Write tests for extended symbol table traps discussed on May 1
+
+====
 
 break tcc_compile_string
 break tcc_relocate_ex
@@ -288,3 +291,7 @@ try this one:
 The compiler croaks. Dereferencing an integer in a struct works, but apparently not a
 function pointer.
 
+# Non-integer struct members
+
+We now reach an interesting question: are ints just a special case? What if I used double
+or float members in the struct? Would the code still compile?
