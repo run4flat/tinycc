@@ -208,3 +208,7 @@ globally visible things. The function might be better named tcc_tokensym_has_glo
 
 At any rate, I decided to remove the "is_shareable" check from the lookup_by_name
 function in test_setup.h to see if the struct code will properly compile.
+
+HOLY SHIT IT WORKED!!! HURRAY!!! TEST 30 NOW PASSES!!!
+
+
