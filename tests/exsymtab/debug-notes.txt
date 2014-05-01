@@ -251,4 +251,15 @@ copied. Potential problems include:
 
 I need to write tests for all of these, but would like to move to other things first.
 
+# Function declarations
+
+I now turn my attention to shared functions. The test file for this material was test 40.
+I have substantially refactored it to provide cleaner tests and testing framework. I have
+also renamed it to describe better what it tests.
+
+Currently, it appears that the function declaration itself works correctly. However, as
+the test file now clearly indicates, functions from other contexts do not appear to have
+the correct address, something I struck upon when examining this problem back in December.
+In contrast to December, I now have an automated test that can reliably report this
+failure without inducing a segmentation fault.
 
