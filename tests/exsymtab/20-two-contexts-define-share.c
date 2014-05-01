@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 	/* ---- Check code string that depends on the 'one' macro ---- */
 	
 	TCCState *s_one = tcc_new();
-	setup_and_compile_second_state(s_one, second_one_code);
+	setup_and_relocate_second_state(s_one, second_one_code);
 	int (*second_one_ptr)() = tcc_get_symbol(s_one, "second_one");
 	if (second_one_ptr == NULL) return 1;
 	is_i(second_one_ptr(), 1, "second_one call works");
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 	/* ---- Check code string that depends on the 'MAX' macro ---- */
 	
 	TCCState *s_max = tcc_new();
-	setup_and_compile_second_state(s_max, second_max_code);
+	setup_and_relocate_second_state(s_max, second_max_code);
 	int (*second_max_ptr)() = tcc_get_symbol(s_max, "second_max");
 	if (second_max_ptr == NULL) return 1;
 	is_i(second_max_ptr(10, 8), 10, "second_max call works for max in first slot");
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 	/* ---- Check code string that depends on the 'swap_int' macro ---- */
 	
 	TCCState *s_swap = tcc_new();
-	setup_and_compile_second_state(s_swap, second_swap_code);
+	setup_and_relocate_second_state(s_swap, second_swap_code);
 	int (*second_swap_ptr)(int, int) = tcc_get_symbol(s_swap, "second_swap");
 	if (second_swap_ptr == NULL) return 1;
 	is_i(second_swap_ptr(5, 3), 3, "first slot of 'swap_int' macro passes");

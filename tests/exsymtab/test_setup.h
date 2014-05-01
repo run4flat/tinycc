@@ -87,6 +87,12 @@ TokenSym_p lookup_by_number (int tok_id, void * data, int is_identifier) {
 	callback_data.second_context = s;                           \
 	tcc_set_extended_symtab_callbacks(s, NULL, &lookup_by_name, \
 		&lookup_by_number, &callback_data);                     \
-   	if (tcc_compile_string(s, code) == -1) return 1;            \
+   	if (tcc_compile_string(s, code) == -1) return 1
+
+#define relocate_second_state(s)                                \
 	if (tcc_relocate(s, TCC_RELOCATE_AUTO) == -1) return 1;     \
 	pass("Dependent code string compiled and relocated fine")
+
+#define setup_and_relocate_second_state(s, code)                \
+	setup_and_compile_second_state(s, code);                    \
+	relocate_second_state(s)

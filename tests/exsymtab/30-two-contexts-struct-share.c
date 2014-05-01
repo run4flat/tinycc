@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 	
 	/* ---- Compile the second compiler context ---- */
 	TCCState * s_second = tcc_new();
-	setup_and_compile_second_state(s_second, second_code);
+	setup_and_relocate_second_state(s_second, second_code);
 	int (*sq_dist_ptr)(void*) = tcc_get_symbol(s_second, "sq_distance_to_pt");
 	if (sq_dist_ptr == NULL) return 1;
 	is_i(sq_dist_ptr(point_p), 9*9+6*6, "Second context able to unpack struct");
