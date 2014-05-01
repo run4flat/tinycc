@@ -211,4 +211,7 @@ function in test_setup.h to see if the struct code will properly compile.
 
 HOLY SHIT IT WORKED!!! HURRAY!!! TEST 30 NOW PASSES!!!
 
-
+And just to make sure that things aren't stupid, I decided to change one of the variable
+names back to a single character, and to reuse that token repeatedly. This way single
+character tokens as well as repeated use of the same extended token in different contexts
+get tested.

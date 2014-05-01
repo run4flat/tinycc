@@ -13,12 +13,12 @@ char first_code[] =
 "typedef unsigned long __uint64_t, uint64_t;\n"
 "#include <stdlib.h>\n"
 "struct point {\n"
-"    int xval;\n"
+"    int x;\n"
 "    int yval;\n"
 "};\n"
-"void * new_point(int newx, int newy) {\n"
+"void * new_point(int x, int newy) {\n"
 "    struct point * pt = malloc(sizeof(struct point));\n"
-"    pt->xval = newx;\n"
+"    pt->x = x;\n"
 "    pt->yval = newy;\n"
 "    return pt;\n"
 "}\n"
@@ -27,7 +27,7 @@ char first_code[] =
 char second_code[] =
 "int sq_distance_to_pt(void * pt_p) {\n"
 "    struct point * pt = pt_p;\n"
-"    return (pt->xval) * (pt->xval) + (pt->yval) * (pt->yval);\n"
+"    return (pt->x) * (pt->x) + (pt->yval) * (pt->yval);\n"
 "}\n"
 ;
 
