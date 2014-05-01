@@ -107,3 +107,19 @@ void is_d (double got, double expected, const char * description) {
 		diag("got %f but expected %f", got, expected);
 	}
 }
+
+void is_p (void * got, void * expected, const char * description) {
+	if (got == expected) pass(description);
+	else {
+		fail(description);
+		diag("got address %p but expected address %p", got, expected);
+	}
+}
+
+void isnt_p (void * got, void * expected, const char * description) {
+	if (got != expected) pass(description);
+	else {
+		fail(description);
+		diag("got address %p but expected any other address", got);
+	}
+}
