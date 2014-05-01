@@ -43,10 +43,7 @@ TokenSym_p lookup_by_name (char * name, int len, void * data, int is_identifier)
 	TokenSym_p* my_symtab = ((second_callback_data*)data)->first_symtab;
 	int i;
 	for (i = 0; i < tcc_tokensym_list_length(my_symtab); i++) {
-		if (
-			/*tcc_tokensym_is_shareable(my_symtab[i])
-			&&*/ strncmp(name, tcc_tokensym_name(my_symtab[i]), len) == 0
-		) {
+		if (strncmp(name, tcc_tokensym_name(my_symtab[i]), len) == 0) {
 			DIAG("Found [%s]", name_to_find);
 			return my_symtab[i];
 		}

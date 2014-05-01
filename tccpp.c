@@ -2279,10 +2279,8 @@ maybe_newline:
              * our current symbol table. Check if there is an extended
              * symbol table entry. */
             if (tcc_state->symtab_name_callback) {
-if (!memcmp("x", p1, len)) printf("Looking for an x with an extended symbol table callback\n");
 				ts = tcc_state->symtab_name_callback(
 					p1, len, tcc_state->symtab_callback_data, 0);
-if (!memcmp("x", p1, len) && ts) printf("Found an x symbol! Using token %x\n", ts->tok);
 				if (ts) goto token_found;
 			}
             ts = tok_alloc_new(pts, p1, len);

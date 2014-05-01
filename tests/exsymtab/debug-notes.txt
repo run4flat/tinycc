@@ -215,3 +215,7 @@ And just to make sure that things aren't stupid, I decided to change one of the 
 names back to a single character, and to reuse that token repeatedly. This way single
 character tokens as well as repeated use of the same extended token in different contexts
 get tested.
+
+Yes, it all works just as it should. :-D
+
+
