@@ -263,3 +263,28 @@ the correct address, something I struck upon when examining this problem back in
 In contrast to December, I now have an automated test that can reliably report this
 failure without inducing a segmentation fault.
 
+# Vtables
+
+A test that falls somewhere between struct declaration sharing and function sharing is
+function declaration sharing. I can achieve this test most simply by preparing a context
+that declares and can assemble a vtable. I can then call the assembly function in the
+test code itself, and hand off the tested struct to a second context, which can simply
+work with the results. Thus is born test 35.
+
+Unfortunately, test 35 behaves very strangely. Any direct access to the function address
+of the struct causes the *compiler* to segfault. To see this, instead of this (erroneous)
+definition for 
+
+  void * distance_func_ptr(struct point * pt) {
+    return pt->x;
+  }
+
+try this one:
+
+  void * distance_func_ptr(struct point * pt) {
+    return pt->squared_distance;
+  }
+
+The compiler croaks. Dereferencing an integer in a struct works, but apparently not a
+function pointer.
+

@@ -30,9 +30,13 @@ char first_code[] =
 ;
 
 char second_code[] =
-"int sq_distance_to_pt(void * pt_p) {\n"
-"    struct point * pt = pt_p;\n"
-"    return pt->squared_distance(pt);\n"
+"void * distance_func_ptr(struct point * pt) {\n"
+//"    return pt->squared_distance;\n"
+" return pt->x;\n"
+"}\n"
+"int sq_distance_to_pt(struct point * pt) {\n"
+//"    return pt->squared_distance(pt);\n"
+"    return pt->x;\n"
 "}\n"
 ;
 
@@ -70,6 +74,13 @@ int main(int argc, char **argv) {
 	if (func_p == squared_distance_func) {
 		TCCState * s_second = tcc_new();
 		setup_and_relocate_second_state(s_second, second_code);
+		
+		/* Test pointer extraction method */
+		void* (*second_extraction_func)(void*) = tcc_get_symbol(s_second, "distance_func_ptr");
+		if (second_extraction_func == NULL) return 1;
+		is_p(second_extraction_func(point_p), squared_distance_func,
+			"address in vtable extracted in second context is correct");
+		
 		int (*sq_dist_ptr)(void*) = tcc_get_symbol(s_second, "sq_distance_to_pt");
 		if (sq_dist_ptr == NULL) return 1;
 		is_i(sq_dist_ptr(point_p), 9*9+6*6, "Second context able to call function pointer from struct");
