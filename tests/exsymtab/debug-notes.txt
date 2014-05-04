@@ -3,6 +3,7 @@ TODO
 
 - Write a struct declaration sharing test that uses non-int types, like float or char[10]
 - Write tests for extended symbol table traps discussed on May 1
+- variable interpolation: function unary() in tccgen.c
 
 ====
 
