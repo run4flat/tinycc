@@ -308,4 +308,6 @@ function (written directly into the test source code). The declaration for this 
 is in the first while a use of that function is in the second. This is essentially a test
 of whether simple .h precompilation can work.
 
-
+IT WORKS! HURRAY! This means that if I have a C library that has already been compiled,
+and I then parse a header for that file, the parsed header context can be effectively
+shared! Awesome!
