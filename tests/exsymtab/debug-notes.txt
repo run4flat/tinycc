@@ -296,3 +296,16 @@ function pointer.
 
 We now reach an interesting question: are ints just a special case? What if I used double
 or float members in the struct? Would the code still compile?
+
+
+#### May 4, 2014
+
+I realized that a less complicated test for functions would be to compile a function
+declaration, then share it. This avoids the actual function compilation step and any
+associated headache with that. For this, I moved the current test 40 to number 45, and
+created test 40-two-contexts-func-decl-share.c. In this test, we have a pre-compiled
+function (written directly into the test source code). The declaration for this function
+is in the first while a use of that function is in the second. This is essentially a test
+of whether simple .h precompilation can work.
+
+
