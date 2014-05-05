@@ -308,6 +308,13 @@ function (written directly into the test source code). The declaration for this 
 is in the first while a use of that function is in the second. This is essentially a test
 of whether simple .h precompilation can work.
 
-IT WORKS! HURRAY! This means that if I have a C library that has already been compiled,
-and I then parse a header for that file, the parsed header context can be effectively
-shared! Awesome!
+IT WORKS! HURRAY!
+
+This means that if I have a C library that has already been compiled, and I then parse a
+header for that file, the parsed header context can be effectively shared! Awesome! It
+also suggests that if I (1) declare a set of functions in one compilation context, (2)
+compile them in a second, and (3) invoke them in a third, then it should also work. Hmm...
+
+Test 42 tests the above idea. Test 45, in contrast, simply compiles a function and then
+shares the context that includes the function compilation. In test 42, I have three three
+contexts, not just two.
