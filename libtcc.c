@@ -2244,7 +2244,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * how to load the data into a register. Since that is not
 		 * something that can be extended at runtime, I should be able
 		 * to copy the value as-is. */
-		sym_list[i].type.t = curr_Sym->type.t;
+		sym_list[i].type.t = curr_Sym->type.t | VT_WEAK;
 		/* I believe that nearly every Sym I would encounter in a type's
 		 * ref field would be on the global symbol stack. However, I
 		 * I am not sure how callback function pointer in the following

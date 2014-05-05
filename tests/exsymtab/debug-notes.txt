@@ -334,3 +334,13 @@ call that initialization function just after the code block has run.
 
 This approach, however, seems rather hackish to me. I would rather simply get the
 definitions to work out-of-the-box.
+
+I strongly suspect that this has to do with the nature of the symbol. That is, I suspect
+that the originally compiled symbol has a flag indicating that it is a strongly linked
+value, which is appropriate for the newly compiled code block. However, when it is used in
+any later block, the symbol must be marked as weakly linked. This is my hunch...
+
+To test this hunch, I will try weakening all symbols that get *copied* to the extended
+symbol table, by ORing VT_WEAK to the symbol's type.t field (roughly line 2250 in
+libtcc.c). With this change, I then need to see if all of the previously passing tests
+still pass, and if test 45 suddenly passes, too.
