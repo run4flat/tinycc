@@ -344,3 +344,6 @@ To test this hunch, I will try weakening all symbols that get *copied* to the ex
 symbol table, by ORing VT_WEAK to the symbol's type.t field (roughly line 2250 in
 libtcc.c). With this change, I then need to see if all of the previously passing tests
 still pass, and if test 45 suddenly passes, too.
+
+Unfortunately, this change broke test 30 and 35, and did not make test 45 pass. There must
+be something else going on.
