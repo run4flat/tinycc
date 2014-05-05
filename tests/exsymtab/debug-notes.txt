@@ -367,3 +367,6 @@ that I need to only set the c field very selectively. Reading through tccgen.c, 
 as though the c field can contain things such as pointer offsets (for struct members) and
 string lengths, among other things. So, I should only set it to zero for very specific
 symbols, and otherwise I should copy it.
+
+For a first test, I will see if checking the symbol's type.t field is sufficient. It seems
+plausible that this will have the right information.

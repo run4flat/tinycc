@@ -2272,12 +2272,15 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 	}
 		
 		/* Copy the c field, the "associated number." What the hell is
-		 * this? For functions, it's one of FUNC_OLD, FUNC_ELLIPSIS, or
-		 * zero, meaning it's a normal function.
+		 * this? Apparently it can mean a great many things depending on context.
+		 * For functions, it's one of FUNC_OLD, FUNC_ELLIPSIS, or zero (meaning
+		 * it's a normal function). 
 		 * Line 5982 of tccgen.c seems to suggest that this needs to be
 		 * **negative** and we need VT_CONST in order to get external linkage. 
 		 */
-		sym_list[i].c = 0; //curr_Sym->c;
+		/* Working here, this almost certainly needs to be more nuanced... */
+		if ((sym_list[i].type.t & VT_BTYPE) == VT_FUNC) sym_list[i].c = 0;
+		else sym_list[i].c = curr_Sym->c;
 		
 		/* Copy the next symbol field. Labels and gotos are tracked in a
 		 * separate stack, so for these Symbols we focus on next, not
