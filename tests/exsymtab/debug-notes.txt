@@ -347,3 +347,14 @@ still pass, and if test 45 suddenly passes, too.
 
 Unfortunately, this change broke test 30 and 35, and did not make test 45 pass. There must
 be something else going on.
+
+What if I go the other route, and ensure that the offset (i.e. the symbol's c field) is
+zero? This is, ostensibly, the offset of the symbol in the elf symbol table. If the offset
+is zero, it should indicate that the symbol has not yet been allocated. Line 460 of
+libtcc.c seems to suggest this could work. To find out if this'll work, I will change the
+assignment of the .c field in the symbol table copy code so that it is zero. Looking over
+how the .c field is used, this seems like it must be far to blunt a tool. However, I will
+try it and see if it makes things work...
+
+NOTE: IF THIS WORKS, I MAY ALSO NEED TO CLEAR THE c FIELD BETWEEN EVERY NEW CONTEXT
+COMPILATION THAT USES EACH EXTENDED SYMBOL TABLE!
