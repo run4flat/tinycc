@@ -370,3 +370,13 @@ symbols, and otherwise I should copy it.
 
 For a first test, I will see if checking the symbol's type.t field is sufficient. It seems
 plausible that this will have the right information.
+
+HURRAY! IT WORKS NOW!
+
+Well, mostly. I just realized that test 35 was hobbled so that it always failed, but at
+least it always completed without segfaulting. Now, if I unhobble test 35, it segfaults
+for reasons I do not yet understand. This means that vtable declarations do not yet work
+correctly. However, all of the other functionality, including function declaration
+sharing, now works! Awesome!
+
+More work lies ahead, but these are major milestones! :-D

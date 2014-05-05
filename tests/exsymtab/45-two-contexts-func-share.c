@@ -7,6 +7,10 @@
 
 #include "test_setup.h"
 
+char decl_code[] =
+"int fib(int);"
+;
+
 char first_code[] =
 "int fib(int n)\n"
 "{\n"
