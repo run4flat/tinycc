@@ -361,3 +361,9 @@ It sorta works! Not entirely, but somewhat. The weak linkage breaks things, but 
 combination makes test 45 pass. Now we have the simple question: is weak linkage
 necessary? To answer this question, I simply remove the ORed part of the symbol copy that
 I inserted earlier.
+
+Hurray! Now the 40-series tests pass. Unfortunately, the 30-series tests fail, which means
+that I need to only set the c field very selectively. Reading through tccgen.c, it looks
+as though the c field can contain things such as pointer offsets (for struct members) and
+string lengths, among other things. So, I should only set it to zero for very specific
+symbols, and otherwise I should copy it.
