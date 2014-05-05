@@ -4,6 +4,7 @@ TODO
 - Write a struct declaration sharing test that uses non-int types, like float or char[10]
 - Write tests for extended symbol table traps discussed on May 1
 - variable interpolation: function unary() in tccgen.c
+- may need to clear the .c field of each sym's type after each context's use
 
 ====
 
@@ -356,5 +357,7 @@ assignment of the .c field in the symbol table copy code so that it is zero. Loo
 how the .c field is used, this seems like it must be far to blunt a tool. However, I will
 try it and see if it makes things work...
 
-NOTE: IF THIS WORKS, I MAY ALSO NEED TO CLEAR THE c FIELD BETWEEN EVERY NEW CONTEXT
-COMPILATION THAT USES EACH EXTENDED SYMBOL TABLE!
+It sorta works! Not entirely, but somewhat. The weak linkage breaks things, but the
+combination makes test 45 pass. Now we have the simple question: is weak linkage
+necessary? To answer this question, I simply remove the ORed part of the symbol copy that
+I inserted earlier.
