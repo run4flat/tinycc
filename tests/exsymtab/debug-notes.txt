@@ -318,3 +318,19 @@ compile them in a second, and (3) invoke them in a third, then it should also wo
 Test 42 tests the above idea. Test 45, in contrast, simply compiles a function and then
 shares the context that includes the function compilation. In test 42, I have three three
 contexts, not just two.
+
+IT WORKS AGAIN! HURRAY!
+
+So this means that I am actually very close to having everything working. We see that if a
+block of code is filled with declarations, such as struct declarations and the like, then
+I can share it. The problem arises when I have definitions. I suspect that this is just as
+much a problem when sharing global variables, since in some sense a compiled function is a
+global thing.
+
+In particular, if I really want to have a set of functions or globals available, I can
+add (context-specific) global variables and function *pointers*, write an initialization
+function for the compiled context that sets those the the appropriate values, and finally
+call that initialization function just after the code block has run.
+
+This approach, however, seems rather hackish to me. I would rather simply get the
+definitions to work out-of-the-box.
