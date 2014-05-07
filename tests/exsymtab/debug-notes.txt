@@ -5,6 +5,7 @@ TODO
 - Write tests for extended symbol table traps discussed on May 1
 - variable interpolation: function unary() in tccgen.c
 - may need to clear the .c field of each sym's type after each context's use
+- check for pad entries using pad_findmy_pv or pad_findmy_pvn, then get the sv using PAD_SV
 
 ====
 

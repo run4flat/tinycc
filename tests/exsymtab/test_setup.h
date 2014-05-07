@@ -59,16 +59,13 @@ TokenSym_p lookup_by_number (int tok_id, void * data, int is_identifier) {
 	/* Is this token in our extended symtab? */
 	TokenSym_p* my_symtab = my_data->first_symtab;
 	DIAG("First tokensym is for %X", tcc_tokensym_tok(my_symtab[0]));
-	if (!tcc_token_is_in_extended_symtab(tok_id, my_symtab)) return NULL;
+	TokenSym_p ts = tcc_tokensym_by_tok(tok_id, my_symtab);
+	if (!ts) return NULL;
 	/* If so, find it */
 	DIAG("It appears that %X is in our extended symtab", tok_id);
-	int first_tok = tcc_tokensym_no_extra_bits(tcc_tokensym_tok(my_symtab[0]));
-	tok_id = tcc_tokensym_no_extra_bits(tok_id);
-	TokenSym_p to_return = my_symtab[tok_id - first_tok];
-
-	DIAG("About to return tokensym pointer %p", to_return);
+	DIAG("About to return tokensym pointer %p", ts);
 	/* All done; return the symbol */
-	return to_return;
+	return ts;
 }
 
 /* ---- code for setting up the second compiler state ---- */

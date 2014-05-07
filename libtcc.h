@@ -112,7 +112,7 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 );
 
 LIBTCCAPI int tcc_tokensym_list_length (TokenSym_p* list);
-LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym_p* list);
+LIBTCCAPI TokenSym_p tcc_tokensym_by_tok(int tok, TokenSym_p* list);
 LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym_p* my_extended_symtab);
 LIBTCCAPI char * tcc_tokensym_name (TokenSym_p tokensym);
 LIBTCCAPI int tcc_tokensym_tok (TokenSym_p tokensym);

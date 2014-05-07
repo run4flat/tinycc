@@ -2599,12 +2599,13 @@ LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok) {
 	return (~(SYM_STRUCT | SYM_FIELD) & tok);
 }
 
-LIBTCCAPI int tcc_token_is_in_extended_symtab(int tok, TokenSym ** list) {
+LIBTCCAPI TokenSym* tcc_tokensym_by_tok(int tok, TokenSym ** list) {
 	int to_test = tcc_tokensym_no_extra_bits(tok);
-	if (to_test < tcc_tokensym_no_extra_bits(list[0]->tok)) return 0;
+	int first_tok = tcc_tokensym_no_extra_bits(list[0]->tok);
+	if (to_test < first_tok) return 0;
 	TokenSym ** tail = *(TokenSym***)(list - 1) - 1;
 	if (to_test > tcc_tokensym_no_extra_bits((*tail)->tok)) return 0;
-	return 1;
+	return list[tok - first_tok];
 }
 
 
