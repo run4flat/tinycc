@@ -2058,6 +2058,7 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 	 * pointer! So we use our own special empty Sym for this purpose.
 	 */
 	if (_sym_is_all_zeros(old)) return new_list + offset_of_last;
+	if (old->v == 0) return NULL; /* <-- working here; this right? */
 	printf("In %s line %d, unable to locate symbol offset for old address %p:\n", __FILE__, __LINE__, old);
 	printf("  Symbol token: %X\n", old->v);
 	printf("  Assembler label at address %p\n", old->asm_label);
