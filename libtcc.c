@@ -1057,6 +1057,7 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->runtime_main = "main";
     
     /* Extended symbol table API */
+    s->symtab_copy_callback = NULL;
     s->symtab_name_callback = NULL;
     s->symtab_number_callback = NULL;
     s->symtab_callback_data = NULL;
