@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 #ifndef DIAG
-  #define DIAG
+  #define DIAG(message, extra)
 #endif
 
 /******** Setup first compiler state, with a symbol table ********/
