@@ -381,3 +381,17 @@ correctly. However, all of the other functionality, including function declarati
 sharing, now works! Awesome!
 
 More work lies ahead, but these are major milestones! :-D
+
+#### May 16, 2014
+
+I have spent quite a bit of time working on the Perl bindings to this library. I kept
+encountering trouble, but they gave me enough insight to dig back into the libtcc side of
+things. I finally figured out that anonymous symbols are not copied to the symbol table,
+and that they had to be copied on their own. I figured out the intricacies of what
+information is used in which context, and only copying the right stuff at the right time.
+Now, I am pretty sure that function signatures, even complex ones, are copied correctly.
+
+As such, now the un-hobbled test 35 passes! HURRAY!!!!
+
+My bindings for libperl still do not work, but I think I have made significant strides on
+getting the tcc symbol table copying up and running.

@@ -31,12 +31,12 @@ char first_code[] =
 
 char second_code[] =
 "void * distance_func_ptr(struct point * pt) {\n"
-//"    return pt->squared_distance;\n"
-" return pt->x;\n"
+"    return pt->squared_distance;\n"
+//" return pt->x;\n"
 "}\n"
 "int sq_distance_to_pt(struct point * pt) {\n"
-//"    return pt->squared_distance(pt);\n"
-"    return pt->x;\n"
+"    return pt->squared_distance(pt);\n"
+//"    return pt->x;\n"
 "}\n"
 ;
 
