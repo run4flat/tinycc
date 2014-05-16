@@ -1057,7 +1057,6 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->runtime_main = "main";
     
     /* Extended symbol table API */
-    s->symtab_copy_callback = NULL;
     s->symtab_name_callback = NULL;
     s->symtab_number_callback = NULL;
     s->symtab_callback_data = NULL;
@@ -2059,19 +2058,7 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 	 * pointer! So we use our own special empty Sym for this purpose.
 	 */
 	if (_sym_is_all_zeros(old)) return new_list + offset_of_last;
-	if (old->v == 0) return NULL; /* <-- working here; this right? */
-	printf("In %s line %d, unable to locate symbol offset for old address %p:\n", __FILE__, __LINE__, old);
-	printf("  Symbol token: %X\n", old->v);
-	printf("  Assembler label at address %p\n", old->asm_label);
-	printf("  Associated register %lX\n", old->r);
-	printf("  Associated number %lX\n", old->c);
-	printf("  Type.t %X\n", old->type.t);
-	printf("  Type.ref %p\n", old->type.ref);
-	printf("  next symbol pointer %p\n", old->next);
-	printf("  previous symbol in stack at address %p\n", old->prev);
-	printf("  previous symbol for this token at address %p\n", old->prev_tok);
-/*	tcc_error("Unable to locate symbol offset for old address %p", old);
-*/	return NULL;
+	return NULL;
 }
 
 Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
@@ -2102,8 +2089,39 @@ Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 		if (tsym->sym_identifier == NULL) tcc_warning("Internal error: extended identifier symbol is null???");
 		return tsym->sym_identifier;
 	}
-	/* Otherwise use the non-extended symbol lookup */
-	return _get_new_sym_or_def_pointer(old, new_list, offset_of_last, global_stack);
+	
+	/* Check the global symbol stack. */
+	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, global_stack);
+	if (NULL != to_return) return to_return;
+	
+	/* If we're here, we couldn't find the symbol on the global stack. This
+	 * means it's an anonymous symbol, i.e. in a function declaration. Allocate
+	 * a new Sym and attach it to *our* anonymous stack. */
+	Sym * ll = new_list + offset_of_last - 1;
+	while(ll->prev != NULL) ll = ll->prev;
+	to_return = tcc_mallocz(sizeof(Sym));
+	ll->prev = to_return;
+	
+	/* Fill in the values, as appropriate. See notes under the symbol stack
+	 * copying for explanations. I suspect (highly) that this is only used in
+	 * function argument lists, in which case the values of most fields don't
+	 * matter. I know that the .t and .next fields are important, however, so
+	 * I'll be sure to copy those. */
+	/* XXX working here - check that assumption at some point with valgrind */
+	to_return->r = old->r;
+	to_return->type.t = old->type.t;
+	int btype = old->type.t & VT_BTYPE;
+	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+		to_return->type.ref
+			= get_new_symtab_pointer(s, old->type.ref, new_list, offset_of_last);
+if (old->type.ref == NULL) printf("old->type.ref is null!\n");
+if (to_return->type.ref == NULL) printf("to_return->type.ref is null!\n");
+	}
+	if (btype == VT_FUNC) to_return->c = 0;
+	else to_return->c = old->c;
+	to_return->next
+		= get_new_symtab_pointer(s, old->next, new_list, offset_of_last);
+	return to_return;
 }
 
 Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
@@ -2134,7 +2152,21 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 	}
 	
 	/* Otherwise use the non-extended symbol lookup */
-	return _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
+	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
+	if (to_return != NULL) return to_return;
+	
+	/* If we're here, we ran into trouble: print out a diagnostic */
+	printf("In %s line %d, unable to locate #define symbol offset for old address %p:\n", __FILE__, __LINE__, old);
+	printf("  Symbol token: %X\n", old->v);
+	printf("  Assembler label at address %p\n", old->asm_label);
+	printf("  Associated register %lX\n", old->r);
+	printf("  Associated number %lX\n", old->c);
+	printf("  Type.t %X\n", old->type.t);
+	printf("  Type.ref %p\n", old->type.ref);
+	printf("  next symbol pointer %p\n", old->next);
+	printf("  previous symbol in stack at address %p\n", old->prev);
+	printf("  previous symbol for this token at address %p\n", old->prev_tok);
+	return NULL;
 }
 
 /* Make a complete copy of the token-symbol table, the symbol stack, and
@@ -2183,24 +2215,29 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		/* Step to the next symbol in the list */
 		curr_Sym = curr_Sym->prev;
 	}
-    /* Allocate the Sym list; store the address of the last element,
-     * which is kept empty. */
+    /* In addition to the sym list just counted, we need two more. We need a
+     * sym that is all zeros (which we put as the last item), and we need a
+     * sym that serves as the head of our anonymous symbol stack. The anonymous
+     * symbol stack will be located at offset N_Syms - 1, so we have to
+     * increment N_Syms by one.
+     * working here - is this reasoning correct? */
+    N_Syms++;
     Sym * sym_list = to_return[0] = tcc_malloc(sizeof(Sym) * (N_Syms + 1));
     to_return[1] = sym_list + N_Syms;
     
 	/* Zero out last sym */
-    sym_list[N_Syms].v = 0;
-    sym_list[N_Syms].asm_label = NULL;
-    sym_list[N_Syms].r = 0;
-    sym_list[N_Syms].c = 0;
-    sym_list[N_Syms].type.t = 0;
-    sym_list[N_Syms].type.ref = NULL;
-    sym_list[N_Syms].next = NULL;
-    sym_list[N_Syms].prev = NULL;
-    sym_list[N_Syms].prev_tok = NULL;
+    sym_list[N_Syms-1].v = sym_list[N_Syms].v = 0;
+    sym_list[N_Syms-1].asm_label = sym_list[N_Syms].asm_label = NULL;
+    sym_list[N_Syms-1].r = sym_list[N_Syms].r = 0;
+    sym_list[N_Syms-1].c = sym_list[N_Syms].c = 0;
+    sym_list[N_Syms-1].type.t = sym_list[N_Syms].type.t = 0;
+    sym_list[N_Syms-1].type.ref = sym_list[N_Syms].type.ref = NULL;
+    sym_list[N_Syms-1].next = sym_list[N_Syms].next = NULL;
+    sym_list[N_Syms-1].prev = sym_list[N_Syms].prev = NULL;
+    sym_list[N_Syms-1].prev_tok = sym_list[N_Syms].prev_tok = NULL;
     
     /* Copy the Sym list */
-    for (curr_Sym = global_stack, i = 0; i < N_Syms; curr_Sym = curr_Sym->prev) {
+    for (curr_Sym = global_stack, i = 0; i < N_Syms-1; curr_Sym = curr_Sym->prev) {
     	/* only copy non-extended symbols */
     	if (curr_Sym->v >= SYM_EXTENDED) continue;
     	
@@ -2236,9 +2273,13 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			sym_list[i].asm_label = NULL;
 		}
 		
-		/* associated number (size, in bytes?) or function type. I
-		 * think this usually has to do with register values. I also
-		 * think it can just be copied straight. */
+		/* associated register. Except for functions, I believe this specifies
+		 * the register size that can hold the value. For function types,
+		 * however, this gets cast as an AttributeDef and queried for function
+		 * attributes. So far, I have only seen the .r field queried for
+		 * the FUNC_CALL field, so I do not think that the full long data slot
+		 * is used. It matters little; copying the whole long is easy. At any
+		 * rate, I am fairly confident that this can just be copied straight. */
 		sym_list[i].r = curr_Sym->r;
 		
 		/* Set the type. Judging by the constants in tcc.h and code that
@@ -2247,36 +2288,17 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * something that can be extended at runtime, I should be able
 		 * to copy the value as-is. */
 		sym_list[i].type.t = curr_Sym->type.t;
-		/* I believe that nearly every Sym I would encounter in a type's
-		 * ref field would be on the global symbol stack. However, I
-		 * I am not sure how callback function pointer in the following
-		 * declaration would work. Would this be an anonymous type?
-		 * 
-		 *   int my_func(void (*callback)(int, int), int a, int b);
-		 * 
-		 * Judging by the call to sym_push in post_type (tccgen.c), I
-		 * highly suspect that all symbols, even anonymous ones in this
-		 * sort of function declaration, are located on the global
-		 * symbol stack. All I need to do when copying the Sym list is
-		 * to make sure that pointers to next are properly updated. */
-		if (curr_Sym->v & SYM_FIELD) {
-			/* the ref for fields is not initialized */
-			sym_list[i].type.ref = NULL;
-		}
-		else {
-			if (_sym_is_all_zeros(curr_Sym->type.ref)) {
-				char * name = get_tok_str(curr_Sym->v, NULL);
-				printf("type.ref for %s is all zeros\n", name);
-			}
-/* XXX Is "the type.ref for the *first* element something weird? */
+		/* The type.ref field contains something useful only if the basic type
+		 * is a pointer, struct, or function. See code from tccgen's
+		 * compare_types for details. */
+		int btype = curr_Sym->type.t & VT_BTYPE;
+		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
 			sym_list[i].type.ref
 				= get_new_symtab_pointer(s, curr_Sym->type.ref, sym_list, N_Syms);
-	}
+		}
 		
-		/* Copy the c field, the "associated number." What the hell is
-		 * this? Apparently it can mean a great many things depending on context.
-		 * For functions, it's one of FUNC_OLD, FUNC_ELLIPSIS, or zero (meaning
-		 * it's a normal function). 
+		/* Copy the c field, the "associated number." For functions, this is
+		 * one of FUNC_NEW, FUNC_OLD, or FUNC_ELLIPSIS. 
 		 * Line 5982 of tccgen.c seems to suggest that this needs to be
 		 * **negative** and we need VT_CONST in order to get external linkage. 
 		 */
@@ -2539,9 +2561,19 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 LIBTCCAPI void tcc_delete_extended_symbol_table (
 	TokenSym** my_extended_symtab
 ) {
-	/* clear out the symbol list */
 	Sym * sym_to_delete = (Sym*)my_extended_symtab[-5];
 	Sym * last = (Sym*)my_extended_symtab[-4];
+	
+	/* clear out the anonymous symbol stack */
+	Sym * curr_sym = (last - 1)->prev;
+	Sym * prev_sym;
+	while(curr_sym != NULL) {
+		prev_sym = curr_sym->prev;
+		tcc_free(curr_sym);
+		curr_sym = prev_sym;
+	}
+	
+	/* clear out the symbol list */
 	while(sym_to_delete < last) {
 		tcc_free(sym_to_delete->asm_label);
 		sym_to_delete++;
