@@ -829,10 +829,8 @@ LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const
     int ret;
 
     /* Open the buffer and copy the contents */
-    tcc_open_bf(s, filename, len + 1);
+    tcc_open_bf(s, filename, len);
     memcpy(file->buffer, str, len);
-    /* appending a trailing null */
-    file->buffer[len] = 0;
     /* Set the line number */
     file->line_num = line_num;
     /* Compile and cleanup */
