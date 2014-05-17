@@ -2244,6 +2244,9 @@ static int compare_types(CType *type1, CType *type2, int unqualified)
         type2 = pointed_type(type2);
         return is_compatible_types(type1, type2);
     } else if (bt1 == VT_STRUCT) {
+        /* XXX will this work well with extended symbol tables?
+         * Probably yes, but only if consumers of extended symbol tables refer
+         * to structs by name rather than building anonymous structs. */
         return (type1->ref == type2->ref);
     } else if (bt1 == VT_FUNC) {
         return is_compatible_func(type1, type2);
