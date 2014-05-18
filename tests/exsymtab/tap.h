@@ -39,7 +39,7 @@ void done_testing() {
 		return;
 	}
 	N_tests_planned = N_tests_seen;
-	printf("%d..%d\n", N_tests_planned, N_tests_planned);
+	printf("1..%d\n", N_tests_planned);
 	fflush(stdout);
 }
 
