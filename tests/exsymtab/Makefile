@@ -36,9 +36,12 @@ TESTS =	\
 #  TESTS := $(filter-out test_name test_name,$(TESTS))
 #endif
 
+%.prove: %.c $(top_builddir)/$(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
+	prove -v --exec '' ./$@ :: lib_path=$(top_srcdir); rm $@
+
 %.test: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	prove --exec '' ./$@ :: lib_path=$(top_srcdir)
-	rm $@
+	./$@ lib_path=$(top_srcdir); rm $@
 
 all test: $(TESTS)
