@@ -46,7 +46,9 @@ int main(int argc, char **argv) {
 	/* ---- Check code string that depends on the function and macro ---- */
 	
 	TCCState *s2 = tcc_new();
-	setup_and_relocate_second_state(s2, second_code);
+	setup_and_compile_second_state(s2, second_code);
+	tcc_add_symbol(s2, "sum_up", sum_up_ptr);
+	relocate_second_state(s2);
 	
 	int (*simple_sum_ptr)() = tcc_get_symbol(s2, "simple_sum");
 	if (simple_sum_ptr == NULL) return 1;

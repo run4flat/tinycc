@@ -2401,7 +2401,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 					case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
 						{
 							CString *cstr = (CString *)(str + len);
-							/* XXX Doesn't this right shift assume a 32 bit compiler? */
+							/* Note this right shift assumes 32 bit integers */
 							len += (sizeof(CString) + cstr->size + 3) >> 2;
 						}
 						break;
@@ -2425,31 +2425,30 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 						break;
 				}
 			}
-			/* XXX See comment above about 32-bit compilers */
+			/* note the comment above about 32-bit integers */
 			def_list[i].d = tcc_malloc(sizeof(int) * (len + 1));
 			memcpy(def_list[i].d, curr_Def->d, sizeof(int) * (len + 1));
 			
 			/* ... then update TokenSym references to point to our
 			 * extended symbol table.*/
-			for (len = 0; str[len] != 0;) {
-				len++;
-				switch(str[len-1]) {
+			for (len = 0; str[len] != 0;len++) {
+				switch(str[len]) {
 					case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
 					case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
 						/* Skip the next stream value */
 						len++;
 						break;
 					case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
-						{
-							CString *cstr = (CString *)(str + len);
-							/* XXX Doesn't this right shift assume a 32 bit compiler? */
-							len += (sizeof(CString) + cstr->size + 3) >> 2;
-					        /* Make sure the data points to the
-					         * allocated string.
-					         */
-					        cstr->data = (char *)cstr + sizeof(CString);
-						}
+					{
+						CString *cstr = (CString *)(str + len + 1);
+						/* Note this right shift assumes 32 bit integers */
+						len += (sizeof(CString) + cstr->size + 3) >> 2;
+						/* Naively, I should set up cstr to be usable for later
+						 * preprocessor expansions. See tok_str_add2 in tccpp.c
+						 * for details. However, the memcpy performed above
+						 * already did that! So I'm done. */
 						break;
+					}
 					case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
 				#if LDOUBLE_SIZE == 8
 					case TOK_CLDOUBLE:
