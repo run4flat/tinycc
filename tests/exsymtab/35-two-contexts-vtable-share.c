@@ -5,13 +5,12 @@
 /* uncomment to enable diagnostic output */
 //	#define DIAG(...) diag(__VA_ARGS__)
 
+#define INCLUDE_MALLOC
 #include "test_setup.h"
 
 char first_code[] =
-"typedef unsigned short __uint16_t, uint16_t;\n"
-"typedef unsigned int __uint32_t, uint32_t;\n"
-"typedef unsigned long __uint64_t, uint64_t;\n"
-"#include <stdlib.h>\n"
+"void * malloc(int);\n"
+"void free(void *);\n"
 "struct point {\n"
 "    int (*squared_distance)(struct point * self);\n"
 "    int x;\n"

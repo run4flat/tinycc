@@ -8,6 +8,14 @@
   #define DIAG(message, extra)
 #endif
 
+#ifdef INCLUDE_MALLOC
+  #define APPLY_MALLOC(state)                  \
+      tcc_add_symbol(state, "malloc", malloc); \
+	  tcc_add_symbol(state, "free", free);
+#else
+  #define APPLY_MALLOC(state)
+#endif
+
 /******** Setup first compiler state, with a symbol table ********/
 
 void copy_symtab(TokenSym_p* copied_symtab, void * data) {
@@ -24,6 +32,7 @@ void copy_symtab(TokenSym_p* copied_symtab, void * data) {
 	tcc_set_output_type(s1, TCC_OUTPUT_MEMORY);                               \
 	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &symtab); \
     if (tcc_compile_string(s1, code) == -1) return 1;                         \
+	APPLY_MALLOC(s1);                                                         \
 	if (tcc_relocate(s1, TCC_RELOCATE_AUTO) == -1) return 1;                  \
 	pass("First code string compiled and relocated fine")
 
