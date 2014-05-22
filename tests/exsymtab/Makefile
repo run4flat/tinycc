@@ -25,6 +25,9 @@ TESTS =	\
  40-two-contexts-func-decl-share.test \
  42-three-contexts-func-share.test \
  45-two-contexts-func-share.test \
+ 47-many-consuming-contexts-func-share.test \
+ 48-many-consuming-contexts-delete.test \
+ 49-many-consuming-contexts-early-delete.test \
  50-two-contexts-mixup.test
 
 

@@ -23,7 +23,7 @@ void copy_symtab(TokenSym_p* copied_symtab, void * data) {
 		tcc_set_lib_path(s1, "../..");                                        \
 	tcc_set_output_type(s1, TCC_OUTPUT_MEMORY);                               \
 	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &symtab); \
-    if (tcc_compile_string(s1, first_code) == -1) return 1;                   \
+    if (tcc_compile_string(s1, code) == -1) return 1;                         \
 	if (tcc_relocate(s1, TCC_RELOCATE_AUTO) == -1) return 1;                  \
 	pass("First code string compiled and relocated fine")
 
