@@ -2280,16 +2280,20 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * rate, I am fairly confident that this can just be copied straight. */
 		sym_list[i].r = curr_Sym->r;
 		
+		int btype = curr_Sym->type.t & VT_BTYPE;
+		
 		/* Set the type. Judging by the constants in tcc.h and code that
 		 * uses this field, I'm pretty sure that the .t field tells tcc
 		 * how to load the data into a register. Since that is not
 		 * something that can be extended at runtime, I should be able
 		 * to copy the value as-is. */
 		sym_list[i].type.t = curr_Sym->type.t;
+		/* All functions need to be declared as external definitions */
+		if (btype == VT_FUNC) sym_list[i].type.t |= VT_EXTERN;
+		
 		/* The type.ref field contains something useful only if the basic type
 		 * is a pointer, struct, or function. See code from tccgen's
 		 * compare_types for details. */
-		int btype = curr_Sym->type.t & VT_BTYPE;
 		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
 			sym_list[i].type.ref
 				= get_new_symtab_pointer(s, curr_Sym->type.ref, sym_list, N_Syms);
