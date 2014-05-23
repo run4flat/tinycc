@@ -22,7 +22,7 @@ for my $file (@tests) {
 	my $file_to_print = $file;
 	$file_to_print =~ s/^.*\\(\d+.*\.c$)/$1/;
 	print "---- Running $file_to_print ----\n";
-	system "gcc $file -I libtcc -I ..\\tests\\exsymtab -L lib libtcc.dll -o tcc-test.exe";
+	system "gcc $file -I libtcc -I ..\\tests\\exsymtab -I .. -L lib libtcc.dll -o tcc-test.exe";
 	system "tcc-test.exe lib_path=lib\\";
 	unlink "tcc-test.exe";
 }
