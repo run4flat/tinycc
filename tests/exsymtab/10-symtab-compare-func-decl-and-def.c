@@ -1,10 +1,7 @@
 /*
- * Dump the symtab layout for a function declaration and a function
- * definition. This needs to be run at least once with a modified 
- * copy_extended_symtab in libtcc.c so that we have minimal modification
- * between the original and the copy. These results should be stored
- * and compared with the output when copy_extended_symtab is re-enabled
- * and fully functional.
+ * Compares the symtab layout for a function declaration and (in a separately
+ * compiled context) a function definition. There should be only one difference
+ * between them.
  */
 
 #include "libtcc.h"
@@ -92,8 +89,12 @@ int main(int argc, char **argv) {
 	
 	Sym * def_ret = foo_def->type.ref;
 	Sym * dec_ret = foo_decl->type.ref;
-	is_i(dec_ret->r, 0x11000, "declaration return r field is 0x11000");
-	is_i(def_ret->r, 0x1000, "definition return r field is 0x1000");
+	/* This is the only difference. The value 0x10000 indicates "This is just a
+	 * prototype," which means a later definition is allowed. I do not want a
+	 * later redefinition for functions that have been defined in an earlier
+	 * context, so these are allowed (and encouraged) to differ. */
+	is_i(dec_ret->r, 0x11000, "declaration ret->r is 0x11000");
+	is_i(def_ret->r, 0x1000,  "definition  ret->r is 0x01000");
 	is_i(dec_ret->c, def_ret->c, "ret->r agree");
 	is_i(dec_ret->type.t, def_ret->type.t, "ret->type.t agree");
 	
