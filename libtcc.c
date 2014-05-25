@@ -2239,13 +2239,18 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     	/* only copy non-extended symbols */
     	if (curr_Sym->v >= SYM_EXTENDED) continue;
     	
-		/* See tcc.h around line 425 for descriptions of some of the
-		 * fields. See also tccgen.c line 5987 to see what needs to happen for
-		 * function declarations to work properly (and, in turn, line 446
-		 * for how to push a forward reference). */
+		/* See tcc.h around line 425 for descriptions of some of the fields.
+		 * See also tccgen.c line 5987 to see what needs to happen for function
+		 * declarations to work properly (and, in turn, line 446 for how to
+		 * push a forward reference). */
 		 
-		/* Convert the symbol's token index based on what we will
-		 * allocate when we build the TokenSym list. */
+		/* Convert the symbol's token index based on what we will allocate when
+		 * we build the TokenSym list. These extra flags must be removed for
+		 * proper conversion, but must be added back on. This is because the
+		 * v fields of these symbols compared directly to a token index that
+		 * has had these flags ORed onto them. This is the case, for example,
+		 * with struct member identification. See the handling of TOK_ARROW as
+		 * a post-op in unary(), which is in tccgen.c. */
 		int extra_flags = (curr_Sym->v & (SYM_FIELD | SYM_STRUCT | SYM_FIRST_ANOM));
 		int bare_v = curr_Sym->v - extra_flags;
 		if (curr_Sym->v == SYM_FIELD) {
@@ -2300,7 +2305,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		}
 		
 		/* Copy the c field, the "associated number." For functions, this is
-		 * one of FUNC_NEW, FUNC_OLD, or FUNC_ELLIPSIS. 
+		 * one of FUNC_NEW, FUNC_OLD, or FUNC_ELLIPSIS. For structs, this is
+		 * the size (in bytes), and for struct members it is the byte offset
+		 * of the member, according to the end of struct_decl().
 		 * Line 5982 of tccgen.c seems to suggest that this needs to be
 		 * **negative** and we need VT_CONST in order to get external linkage. 
 		 */
