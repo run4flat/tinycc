@@ -2621,6 +2621,17 @@ LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym) {
 	return tokensym->tok;
 }
 
+LIBTCCAPI long tcc_tokensym_get_id_c(TokenSym * tokensym) {
+	Sym * sym_id = tokensym->sym_identifier;
+	if (sym_id == NULL) return 0;
+	return sym_id->c;
+}
+
+LIBTCCAPI void tcc_tokensym_set_id_c(TokenSym * tokensym, long new_c) {
+	Sym * sym_id = tokensym->sym_identifier;
+	if (sym_id != NULL) sym_id->c = new_c;
+}
+
 LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym) {
 	return tokensym->sym_define != NULL;
 }

@@ -116,6 +116,8 @@ LIBTCCAPI TokenSym_p tcc_tokensym_by_tok(int tok, TokenSym_p* list);
 LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym_p* my_extended_symtab);
 LIBTCCAPI char * tcc_tokensym_name (TokenSym_p tokensym);
 LIBTCCAPI int tcc_tokensym_tok (TokenSym_p tokensym);
+LIBTCCAPI long tcc_tokensym_get_id_c(TokenSym_p tokensym);
+LIBTCCAPI void tcc_tokensym_set_id_c(TokenSym_p tokensym, long new_c);
 LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok);
 LIBTCCAPI int tcc_tokensym_has_define (TokenSym_p tokensym);
 LIBTCCAPI int tcc_tokensym_has_struct (TokenSym_p tokensym);
