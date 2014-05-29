@@ -2086,8 +2086,9 @@ Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 					tsym->str, old->v);
 			return tsym->sym_struct;
 		}
+		/* maybe this is ok??? */
 		if (tsym->sym_identifier == NULL)
-			tcc_error_noabort("exsymtab copy found extended token but no identifier symbol for \"%s\" (%x)",
+			tcc_warning("exsymtab copy found extended token but no identifier symbol for \"%s\" (%x)",
 				tsym->str, old->v);
 		return tsym->sym_identifier;
 	}
@@ -2147,8 +2148,9 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 			tcc_error_noabort("exsymtab copy unable to locate extended symbol for preprocessor token %x", old->v);
 			return NULL;
 		}
+		/* Preprocessor args may have a null sym_define */
 		if (tsym->sym_define == NULL) {
-			tcc_error_noabort("exsymtab copy found extended token but no preprocessor symbol for \"%s\" (%x)"
+			tcc_warning("exsymtab copy found extended token but no preprocessor symbol for \"%s\" (%x)"
 				, tsym->str, old->v);
 		}
 		return tsym->sym_define;

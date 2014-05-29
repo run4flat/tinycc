@@ -263,8 +263,9 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
         s->prev_tok = *ps;
         *ps = s;
     }
-    else if (v >= SYM_EXTENDED) {
-printf("In %s line %d XXX WORKING HERE XXX update sym_push, global_identifier_push, sym_pop\n", __FILE__, __LINE__);
+	if (v >= SYM_EXTENDED) {
+		tcc_warning("pushing symbol with name from extended symbol table '%s'",
+			get_tok_str(v, 0));
 	}
     return s;
 }
@@ -288,8 +289,9 @@ ST_FUNC Sym *global_identifier_push(int v, int t, int c)
         s->prev_tok = NULL;
         *ps = s;
     }
-    else if (v >= SYM_EXTENDED) {
-printf("In %s line %d XXX WORKING HERE XXX update sym_push, global_identifier_push, sym_pop\n", __FILE__, __LINE__);
+	if (v >= SYM_EXTENDED) {
+		tcc_warning("pushing global identifier with name from extended symbol table '%s'",
+			get_tok_str(v, 0));
 	}
     return s;
 }
@@ -317,8 +319,9 @@ ST_FUNC void sym_pop(Sym **ptop, Sym *b)
                 ps = &ts->sym_identifier;
             *ps = s->prev_tok;
         }
-		else if (v >= SYM_EXTENDED) {
-printf("In %s line %d XXX WORKING HERE XXX update sym_push, global_identifier_push, sym_pop\n", __FILE__, __LINE__);
+		if (v >= SYM_EXTENDED) {
+			tcc_warning("popping symbol with name from extended symbol table '%s'",
+				get_tok_str(v, 0));
 		}
         sym_free(s);
         s = ss;
