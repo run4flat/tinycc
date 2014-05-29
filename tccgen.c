@@ -3954,9 +3954,8 @@ ST_FUNC void unary(void)
                     break;
             }
             if (!s)
-{ printf("Could not find token %x\n", tok);
                 tcc_error("field not found: %s",  get_tok_str(tok & ~SYM_FIELD, NULL));
-}            /* add field offset to pointer */
+            /* add field offset to pointer */
             vtop->type = char_pointer_type; /* change type to 'char *' */
             vpushi(s->c);
             gen_op('+');
