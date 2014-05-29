@@ -2072,19 +2072,23 @@ Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 		TokenSym* tsym;
 		/* Call the extended symbol lookup. */
 		if (s->symtab_number_callback == NULL) {
-			tcc_warning("Internal error: Found extended symbol but no symtab_number_callback???");
+			tcc_error_noabort("exsymtab copy found extended symbol but no symtab_number_callback");
 			return NULL;
 		}
 		tsym = s->symtab_number_callback(old->v, s->symtab_callback_data, 0);
 		if (tsym == NULL) {
-			tcc_warning("Internal error: unable to locate extended symbol");
+			tcc_error_noabort("exsymtab copy unable to locate extended symbol for token %x", old->v);
 			return NULL;
 		}
 		if (old->v & SYM_STRUCT) {
-			if (tsym->sym_struct == NULL) tcc_warning("Internal error: extended struct symbol is null???");
+			if (tsym->sym_struct == NULL)
+				tcc_error_noabort("exsymtab copy found extended token but no struct symbol for \"%s\" (%x)",
+					tsym->str, old->v);
 			return tsym->sym_struct;
 		}
-		if (tsym->sym_identifier == NULL) tcc_warning("Internal error: extended identifier symbol is null???");
+		if (tsym->sym_identifier == NULL)
+			tcc_error_noabort("exsymtab copy found extended token but no identifier symbol for \"%s\" (%x)",
+				tsym->str, old->v);
 		return tsym->sym_identifier;
 	}
 	
@@ -2135,16 +2139,17 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 		TokenSym* tsym;
 		/* Call the extended symbol lookup. */
 		if (s->symtab_number_callback == NULL) {
-			tcc_warning("Internal error: Found extended symbol but no symtab_number_callback???");
+			tcc_error_noabort("exsymtab copy found extended symbol but no symtab_number_callback");
 			return NULL;
 		}
 		tsym = s->symtab_number_callback(old->v, s->symtab_callback_data, 0);
 		if (tsym == NULL) {
-			tcc_warning("Internal error: unable to locate extended symbol");
+			tcc_error_noabort("exsymtab copy unable to locate extended symbol for preprocessor token %x", old->v);
 			return NULL;
 		}
 		if (tsym->sym_define == NULL) {
-			tcc_warning("Internal error: extended preprocessor symbol is null???");
+			tcc_error_noabort("exsymtab copy found extended token but no preprocessor symbol for \"%s\" (%x)"
+				, tsym->str, old->v);
 		}
 		return tsym->sym_define;
 	}
