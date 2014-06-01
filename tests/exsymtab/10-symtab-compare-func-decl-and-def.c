@@ -19,15 +19,7 @@ void copy_symtab(TokenSym_p* copied_symtab, void * data) {
 
 int main(int argc, char **argv) {
     TCCState *s_decl = tcc_new();
-    if (!s_decl) {
-        fprintf(stderr, "Could not create tcc state\n");
-        exit(1);
-    }
-    /* if tcclib.h and libtcc1.a are not installed, where can we find them */
-    if (argc == 2 && !memcmp(argv[1], "lib_path=",9))
-        tcc_set_lib_path(s_decl, argv[1]+9);
-    /* MUST BE CALLED before any compilation */
-    tcc_set_output_type(s_decl, TCC_OUTPUT_MEMORY);
+    SIMPLE_SETUP(s_decl);
 	/* Set the copy callback */
 	TokenSym_p* decl_symtab;
 	tcc_set_extended_symtab_callbacks(s_decl, &copy_symtab, NULL, NULL, &decl_symtab);

@@ -35,12 +35,7 @@ int main(int argc, char **argv) {
 	/* ---- Compile the code string with the definition ---- */
 	
 	TCCState *s_def = tcc_new();
-	if (!s_def) return 1;
-	if (argc == 2 && !memcmp(argv[1], "lib_path=",9))
-		tcc_set_lib_path(s_def, argv[1]+9);
-	else
-		tcc_set_lib_path(s_def, "../..");
-	tcc_set_output_type(s_def, TCC_OUTPUT_MEMORY);
+	SIMPLE_SETUP(s_def);
     if (tcc_compile_string(s_def, def_code) == -1) return 1;
 	if (tcc_relocate(s_def, TCC_RELOCATE_AUTO) == -1) return 1;
 	pass("Code string with definition of fib function compiled and relocated fine");

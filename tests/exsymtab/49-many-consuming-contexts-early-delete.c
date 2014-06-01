@@ -36,16 +36,11 @@ int main(int argc, char **argv) {
 	/* ---- Compile the first code string and setup the callback data ---- */
 	
 	TCCState *s1 = tcc_new();
+	SIMPEL_SETUP(s1);
 	TokenSym_p* my_symtab;
 	
 	/* Code taken from test_setup.h and modified to work with my own relocation
 	 * point. */
-	if (!s1) return 1;
-	if (argc == 2 && !memcmp(argv[1], "lib_path=",9))
-		tcc_set_lib_path(s1, argv[1]+9);
-	else
-		tcc_set_lib_path(s1, "../..");
-	tcc_set_output_type(s1, TCC_OUTPUT_MEMORY);
 	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &my_symtab);
     if (tcc_compile_string(s1, def_code) == -1) return 1;
     int def_code_size = tcc_relocate(s1, 0);

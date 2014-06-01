@@ -23,13 +23,16 @@ void copy_symtab(TokenSym_p* copied_symtab, void * data) {
 	*my_symtab_p = copied_symtab;
 }
 
+#define SIMPLE_SETUP(state)                           \
+	if (!state) return 1;                             \
+	if (argc == 2 && !memcmp(argv[1], "lib_path=",9)) \
+		tcc_set_lib_path(state, argv[1]+9);           \
+	else                                              \
+		tcc_set_lib_path(state, "../..");             \
+	tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
+
 #define setup_and_compile_s1(symtab, code)                                    \
-	if (!s1) return 1;                                                        \
-	if (argc == 2 && !memcmp(argv[1], "lib_path=",9))                         \
-		tcc_set_lib_path(s1, argv[1]+9);                                      \
-	else                                                                      \
-		tcc_set_lib_path(s1, "../..");                                        \
-	tcc_set_output_type(s1, TCC_OUTPUT_MEMORY);                               \
+    SIMPLE_SETUP(s1);                                                         \
 	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &symtab); \
     if (tcc_compile_string(s1, code) == -1) return 1;                         \
 	APPLY_MALLOC(s1);                                                         \
