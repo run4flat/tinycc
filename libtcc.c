@@ -2640,13 +2640,13 @@ LIBTCCAPI void tcc_tokensym_set_id_c(TokenSym * tokensym, long new_c) {
 }
 
 LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym) {
-	return tokensym->sym_define != NULL;
+	return tokensym != NULL && tokensym->sym_define != NULL;
 }
 LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym) {
-	return tokensym->sym_struct != NULL;
+	return tokensym != NULL && tokensym->sym_struct != NULL;
 }
 LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym) {
-	return tokensym->sym_identifier != NULL;
+	return tokensym != NULL && tokensym->sym_identifier != NULL;
 }
 LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym * tokensym) {
 	return	tokensym->sym_define != NULL
