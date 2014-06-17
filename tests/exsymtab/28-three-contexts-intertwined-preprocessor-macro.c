@@ -72,7 +72,7 @@ TokenSym_p my_lookup_by_number (int tok_id, void * data, int is_identifier) {
 
 int main(int argc, char **argv) {
 	
-	TokenSym_p my_symtabs[2] = { 0, 0 };
+	TokenSym_p* my_symtabs[2] = { 0, 0 };
 	
 	/* ---- Compile the first code string and setup the callback data ---- */
 	
