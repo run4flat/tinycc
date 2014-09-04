@@ -40,6 +40,11 @@ void done_testing() {
 	}
 	N_tests_planned = N_tests_seen;
 	printf("1..%d\n", N_tests_planned);
+	if (N_passes < N_tests_seen) {
+		int N_failed = N_tests_seen - N_passes;
+		printf("# Looks like you failed %d test%s of %d\n", N_failed, 
+			N_failed > 1 ? "s" : "", N_tests_seen);
+	}
 	fflush(stdout);
 }
 
