@@ -395,3 +395,33 @@ As such, now the un-hobbled test 35 passes! HURRAY!!!!
 
 My bindings for libperl still do not work, but I think I have made significant strides on
 getting the tcc symbol table copying up and running.
+
+#### Fall, 2014
+
+Been a little while. Let's see if I can figure out where I left off.
+
+I remember that some segfaults in C::Blocks inspired a set of tests, specifically those in
+test 28. My other recent commits before putting the project aside include test 51 and 70.
+(Test 29 is identical to 28; I'm not quite sure what I had intended to do with that.)
+
+Test 28 segfaults. It creates a context in which it #defines macros. It creates a second
+context that consumes the first by creating new macros that depend upon those defined in
+the first. Finally, it creates a third context that uses the macros defined in the second
+context. (This is analogous to a C::Blocks-based library that creates some macros which
+themselves use the Perl C API, implemented using macros.) The segfault occurs during the
+compilation of the third context.
+
+Test 51 passes. It defines a function in one context and uses it in later contexts
+without declaring it. This may just be tcc defaulting to integer inputs and outputs for
+unknown functions, or it may indicate that the function declaration is being properly
+shared.
+
+Test 70 fails three of its 67 tests. The three failing tests all occur with the c field
+of the function Sym, which is expected to be zero, but is set to 3 after being used in a
+dependent context. I seem to recall that the value of c means that the definition is
+given externally, which means that the compiler doesn't look up the definition's function
+pointer address. I'd prefer if the compiler looked it up; otherwise it's one more thing
+that the compilation manager has to wrestle with.
+
+So I paused work on this project with two open questions: (1) Why does deep macro use
+lead to segfaults? (2) Why does a consuming context modify the c field of a function Sym?
