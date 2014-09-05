@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 	/* ---- Compile the first code string and setup the callback data ---- */
 	
 	TCCState *s1 = tcc_new();
-	SIMPEL_SETUP(s1);
+	SIMPLE_SETUP(s1);
 	TokenSym_p* my_symtab;
 	
 	/* Code taken from test_setup.h and modified to work with my own relocation

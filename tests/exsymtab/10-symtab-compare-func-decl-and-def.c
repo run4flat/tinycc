@@ -6,16 +6,11 @@
 
 #include "libtcc.h"
 #include "tcc.h"
-#include "tap.h"
+#include "test_setup.h"
 #include <stdlib.h>
 
 char definition_code[] = "double foo(int bar, double *baz) { return 0; }\n";
 char declaration_code[] = "double foo(int bar, double *baz);\n";
-
-void copy_symtab(TokenSym_p* copied_symtab, void * data) {
-	TokenSym_p** my_symtab_p = (TokenSym_p**)data;
-	*my_symtab_p = copied_symtab;
-}
 
 int main(int argc, char **argv) {
     TCCState *s_decl = tcc_new();
