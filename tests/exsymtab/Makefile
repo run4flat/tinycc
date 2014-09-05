@@ -47,4 +47,8 @@ TESTS =	\
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
 	./$@ lib_path=$(top_srcdir); rm $@
 
+%.dbg: %.c $(top_builddir)/$(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
+	gdb --args $@ lib_path=$(top_srcdir); rm $@
+
 all test: $(TESTS)

@@ -425,3 +425,16 @@ that the compilation manager has to wrestle with.
 
 So I paused work on this project with two open questions: (1) Why does deep macro use
 lead to segfaults? (2) Why does a consuming context modify the c field of a function Sym?
+
+#### September 4, 2014
+
+To help answer these questions, I created a new make file extension, .gdb. Now when I try
+to make a test and set the extension to .gdb, it'll compile and run the executable under
+gdb.
+
+Doing so revealed the following problem with test 28:
+
+  Program received signal EXC_BAD_ACCESS, Could not access memory.
+  Reason: KERN_INVALID_ADDRESS at address: 0x0000000000000000
+  pstrcpy (buf=0x7fff5fbfe62f " ", buf_size=1025, s=0x0) at libtcc.c:144
+  144	            c = *s++;
