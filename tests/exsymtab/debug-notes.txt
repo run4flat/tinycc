@@ -438,3 +438,24 @@ Doing so revealed the following problem with test 28:
   Reason: KERN_INVALID_ADDRESS at address: 0x0000000000000000
   pstrcpy (buf=0x7fff5fbfe62f " ", buf_size=1025, s=0x0) at libtcc.c:144
   144	            c = *s++;
+
+#### September 5, 2014
+
+Hmmm, that's a string copy starting from a null address. Here's the stack trace:
+
+#0  pstrcpy (buf=0x7fff5fbfe62f " ", buf_size=1025, s=0x0) at libtcc.c:144
+#1  0x0000000100008af7 in TOK_GET [inlined] () at /Users/dcmertens/projects/Perl/tinycc/tccpp.c:1015
+#2  0x0000000100008af7 in macro_is_equal [inlined] () at /Users/dcmertens/projects/Perl/tinycc/tccpp.c:1016
+#3  0x0000000100008af7 in define_push (v=1606411823, macro_type=1606412896, str=0x7fff5fbfea60, first_arg=0x7fff5fbfea60) at tccpp.c:1029
+#4  0x000000010000ac6a in parse_define () at tccpp.c:1294
+#5  0x0000000100009b90 in is_space [inlined] () at /Users/dcmertens/projects/Perl/tinycc/tcc.h:1412
+#6  0x0000000100009b90 in preprocess (is_bof=1606415152) at tccpp.c:2580
+#7  0x000000010000b338 in next_nomacro1 () at tccpp.c:2216
+#8  0x0000000100008ed5 in next_nomacro [inlined] () at /Users/dcmertens/projects/Perl/tinycc/tccpp.c:2579
+#9  0x0000000100008ed5 in next () at tccpp.c:3016
+#10 0x00000001000035ca in tcc_compile (s1=0x100802c00) at libtcc.c:794
+#11 0x0000000100003be3 in tcc_compile_string (s=0x100802c00, str=0x100039458 "#define add_foo_and_var_to(val) (foo + add_var_to(val))\n") at libtcc.c:849
+#12 0x0000000100001197 in main (argc=2, argv=0x7fff5fbff992) at 28-three-contexts-intertwined-preprocessor-macro.c:98
+
+I'm 99% certain that the copy from the null address is due to now knowing where to find
+add_var_to().
