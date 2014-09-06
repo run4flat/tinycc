@@ -459,3 +459,21 @@ Hmmm, that's a string copy starting from a null address. Here's the stack trace:
 
 I'm 99% certain that the copy from the null address is due to now knowing where to find
 add_var_to().
+
+#### September 6, 2014
+
+The segmentation fault was due to an array dereference, in which the referent was the
+null pointer. Looking back up the process, I figured the null pointer probably came from
+get_tok_str. New warnings, just added, confirm this hunch.
+
+The offset, 0x7ffffb96, looks like a large constant minus a special number. In fact,
+0x80000000 - 0x7ffffb96 is 1130 (base-ten), which I believe is the value of tok_start
+that is passed to copy_extended_symtab!! That means there's an errant subtraction in the
+symtab copy routine.
+
+It looks like there are two errant lines in the copy routine. I have adjusted for them,
+leading to a compile time error:
+
+  Re-defining an extended macro definition is not allowed; #undef first
+
+I wrote that one. :-)

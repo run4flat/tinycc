@@ -2371,6 +2371,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		if (curr_Def->v == 0) {
 			def_list[i].v = 0;
 		}
+		else if (curr_Def->v & SYM_EXTENDED) {
+			def_list[i].v = curr_Def->v;
+		}
 		else {
 			def_list[i].v = curr_Def->v - tok_start
 				+ _tcc_extended_symbol_counter; /* XXX double check? */
@@ -2486,6 +2489,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 					default:
 						/* This is the case for a token stream! */
 						if (str[len] < tok_start) {
+						}
+						else if (str[len] & SYM_EXTENDED) {
+							def_list[i].d[len] = str[len];
 						}
 						else {
 							def_list[i].d[len] = str[len] - tok_start
