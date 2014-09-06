@@ -346,10 +346,16 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
             sprintf(p, "L.%u", v - SYM_FIRST_ANOM);
         } else if (v >= SYM_EXTENDED) {
 			/* Get the symbol struct from the extended lookup callback */
-			if (tcc_state->symtab_number_callback == NULL) return NULL;
+			if (tcc_state->symtab_number_callback == NULL) {
+				tcc_warning("Found extended symbol but no extended symbol callback function");
+				return NULL;
+			}
 			TokenSym* s = tcc_state->symtab_number_callback(
 				v, tcc_state->symtab_callback_data, 0);
-			if (s == NULL) return NULL;
+			if (s == NULL) {
+				tcc_warning("Extended symbol %x could not be found", v);
+				return NULL;
+			}
 			return s->str;
         } else {
             /* should never happen */
