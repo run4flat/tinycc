@@ -477,3 +477,13 @@ leading to a compile time error:
   Re-defining an extended macro definition is not allowed; #undef first
 
 I wrote that one. :-)
+
+The problem now seems to be with define_push. I am not entirely sure what is leading to
+the redefinition... it should just use the already present preprocessor token.
+
+Looking closer, I realize that I should only issue this error when the new macro
+definition is different from the original... and in the case of test 28, it is THE SAME.
+Thus, if it is the same, and it is an extended preprocessor, I can just return from that
+push! Perfect!
+
+Now Test 28 runs all the way through the third! Hurray!

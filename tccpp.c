@@ -1032,14 +1032,17 @@ ST_INLN void define_push(int v, int macro_type, int *str, Sym *first_arg)
     Sym *s;
 
     s = define_find(v);
-    if (s && !macro_is_equal(s->d, str))
-        tcc_warning("%s redefined", get_tok_str(v, NULL));
-    if (v & SYM_EXTENDED) {
-		/* How do we prevent this #definefrom reaching outside its scope
-		 * and modifying the extended symbol tables? See TOK_DEFINE and
-		 * TOK_UNDEF in preprocess(). */
-		tcc_error("Re-defining an extended macro definition is not allowed; #undef first");
-	}
+    if (s && !macro_is_equal(s->d, str)) {
+		if (v & SYM_EXTENDED) {
+			/* How do we prevent this #define from reaching outside its scope
+			 * and modifying the extended symbol tables? See TOK_DEFINE and
+			 * TOK_UNDEF in preprocess(). */
+			tcc_error("Re-defining an extended macro definition is not allowed; #undef first");
+		}
+		else tcc_warning("%s redefined", get_tok_str(v, NULL));
+    }
+    /* No need to push it if it is extended. */
+    if (v & SYM_EXTENDED) return;
 
     s = sym_push2(&define_stack, v, macro_type, 0);
     s->d = str;
