@@ -2131,11 +2131,11 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
 	
-	/* Handle the extended case next. We know that copies of the extended symbols live
-	 * outside of the "global" symbol stack, but "old" points to a copy that lives on
-	 * the global symbol stack and will be destroyed after copy_extended_symtab returns.
-	 * Since we know that the original extended symbol will stick around, we simply
-	 * use that. */
+	/* The extended case should never be a problem. An extended token is not allowed to
+	 * be reused as a global variable. It can be used as a macro argument, but in that
+	 * case it will have a symbol on the define stack that is not reachable via a
+	 * TokenSym reference. */
+#if 0
 	if (old->v >= SYM_EXTENDED) {
 		TokenSym* tsym;
 		/* Call the extended symbol lookup. */
@@ -2156,6 +2156,7 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 		}
 		return tsym->sym_define;
 	}
+#endif
 	
 	/* Otherwise use the non-extended symbol lookup */
 	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
