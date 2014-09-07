@@ -511,3 +511,28 @@ However, it seems quite plausible that this should not give a warning if the sym
 a macro argument. parse_define(), in tccpp.c, indicates that macro arguments are marked
 with SYM_FIELD. That bit is set with the "val" token index in the warning above. It may
 make sense to suppress that warning if the symbol is a SYM_FIELD.
+
+Having fixed that, I still have the error of too many args. I turn my attention to
+parse_define, defined in tccpp.c. During argument processing, sym_push2 gets the new
+symbol pointer. If sym_push2 returns a null pointer for extended preprocessor symbols,
+then the argument list will expect zero arguments. Is this the case?
+
+The function sym_push2 is defined in tccgen.c. It always pushes the symbol onto the
+given symbol stack (which, in this particular case, is the define symbol stack)...
+
+#### September 7, 2014
+
+Aha! Preprocessor macro definitions need to do this because each of the macro arguments
+needs to be able to link to the next macro argument. Thus, each argument needs its own
+Symbol entry, apart from any TokenSym. The problem, however, is that my
+get_new_deftab_pointer in libtcc.c assumes that it can lookup any symbol by finding its
+TokenSym container, and checking the TokenSym's sym_define field. This clearly won't work
+correctly for macro names used by multiple extended symbol tables, which is the case being
+triggered by test 28.
+
+To solve this properly, I think I need to be able to lookup a define stack sym by its
+original address. This I can do by having a two-stage copy process: the first stage copies
+most of the information, including the token stream, as well as the original Sym's address
+into the (presently unused) .prev field of the new Sym struct. The second stage sets the
+.next field, calling a reworked get_new_deftab_pointer, which identifies the new Sym by
+matching against the addresses in the .prev field.

@@ -2517,12 +2517,11 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		}
 		def_list[i].type.ref = NULL;
 		
-		/* Copy the macro token stream. All macro arguments are copied
-		 * to the define stack, according to the sym_push2 in
+		/* Copy the macro arguments. All macro arguments are placed
+		 * on the define stack, according to the sym_push2 in
 		 * parse_define from tccpp.c. We only need to update this Sym's
-		 * next; the following Sym's next will be updated when it comes
-		 * across the loop. */
-		/* XXX is this interpretation correct? */
+		 * next; *it's* next will be updated when it comes up in this
+		 * loop. */
 		def_list[i].next
 			= get_new_deftab_pointer(s, curr_Def->next, def_list, N_Defs);
 		
