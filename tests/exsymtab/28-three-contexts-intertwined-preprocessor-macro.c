@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
 	SIMPLE_SETUP(s_third);
 	tcc_set_extended_symtab_callbacks(s_third, NULL,
 		&my_lookup_by_name, &my_lookup_by_number, my_symtabs);
-    if (tcc_compile_string(s_third, second_code) == -1) return 1;
+    if (tcc_compile_string(s_third, third_code) == -1) return 1;
 	if (tcc_relocate(s_third, TCC_RELOCATE_AUTO) == -1) return 1;
 	pass("Third code string compiled and relocated fine");
 	
