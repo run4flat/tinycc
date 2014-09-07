@@ -18,8 +18,10 @@ TCC = $(TOP)/tcc $(TCCFLAGS)
 
 TESTS =	\
  01-test-symtab-copy.test \
+ 10-symtab-compare-func-decl-and-def.test \
  20-two-contexts-define-share.test \
  25-two-contexts-intertwined-preprocessor-macro.test \
+ 28-three-contexts-intertwined-preprocessor-macro.test \
  30-two-contexts-struct-share.test \
  35-two-contexts-vtable-share.test \
  40-two-contexts-func-decl-share.test \
@@ -28,7 +30,9 @@ TESTS =	\
  47-many-consuming-contexts-func-share.test \
  48-many-consuming-contexts-delete.test \
  49-many-consuming-contexts-early-delete.test \
- 50-two-contexts-mixup.test
+ 50-two-contexts-mixup.test \
+ 51-many-consuming-contexts-with-constants-early-delete.test \
+ 70-symtab-use-check.test
 
 
 # some tests do not pass on all platforms, remove them for now
