@@ -2148,8 +2148,9 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 			tcc_error_noabort("exsymtab copy unable to locate extended symbol for preprocessor token %x", old->v);
 			return NULL;
 		}
-		/* Preprocessor args may have a null sym_define */
-		if (tsym->sym_define == NULL) {
+		/* Preprocessor args may have a null sym_define, but otherwise we should issue a
+		 * warning. */
+		if (tsym->sym_define == NULL && !(old->v & SYM_FIELD)) {
 			tcc_warning("exsymtab copy found extended token but no preprocessor symbol for \"%s\" (%x)"
 				, tsym->str, old->v);
 		}

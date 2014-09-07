@@ -487,3 +487,27 @@ Thus, if it is the same, and it is an extended preprocessor, I can just return f
 push! Perfect!
 
 Now Test 28 runs all the way through the third! Hurray!
+
+...
+
+No, I was wrong. There was a typo in the test suite, fixed now. And as a result, the third
+test of the suite does *not* complete. Instead, I get the compile time warnings and error
+
+  ok 1 - First code string compiled and relocated fine
+  <string>:2: warning: exsymtab copy found extended token but no preprocessor symbol for "val" (50000001)
+  ok 2 - Second code string compiled and relocated fine
+  <string>:4: error: macro 'add_foo_and_var_to' used with too many args
+
+That warning has been around for quite a long time, but it didn't really lead to trouble
+in a sensible way until now, finally. The macro function is defined with one argument, and
+it gets called with one argument. Clearly, something is going on with the "val" token,
+and it's leading to this error, somehow.
+
+The warning is issued by get_new_deftab_pointer, in libtcc.c, indicating that we are
+trying to copy an extended table for preprocessor defines, yet the TokenSym struct for the
+given token has no Sym object in the sym_define slot.
+
+However, it seems quite plausible that this should not give a warning if the symbol is
+a macro argument. parse_define(), in tccpp.c, indicates that macro arguments are marked
+with SYM_FIELD. That bit is set with the "val" token index in the warning above. It may
+make sense to suppress that warning if the symbol is a SYM_FIELD.
