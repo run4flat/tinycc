@@ -244,8 +244,15 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
 
     if (local_stack)
         ps = &local_stack;
-    else
+    else {
+		/* Global symbol stack. This is OK for the local symbol stack, but don't allow
+		 * this for symbols that are in the extended symbol stack. */
+		if (v >= SYM_EXTENDED) {
+			tcc_error("Cannot use name '%s' as a global variable, it is already in the "
+				"extended symbol table.", get_tok_str(v, 0));
+		}
         ps = &global_stack;
+    }
     s = sym_push2(ps, v, type->t, c);
     s->type.ref = type->ref;
     s->r = r;
@@ -263,10 +270,6 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
         s->prev_tok = *ps;
         *ps = s;
     }
-	if (v >= SYM_EXTENDED) {
-		tcc_warning("pushing symbol with name from extended symbol table '%s'",
-			get_tok_str(v, 0));
-	}
     return s;
 }
 
@@ -319,10 +322,6 @@ ST_FUNC void sym_pop(Sym **ptop, Sym *b)
                 ps = &ts->sym_identifier;
             *ps = s->prev_tok;
         }
-		if (v >= SYM_EXTENDED) {
-			tcc_warning("popping symbol with name from extended symbol table '%s'",
-				get_tok_str(v, 0));
-		}
         sym_free(s);
         s = ss;
     }
