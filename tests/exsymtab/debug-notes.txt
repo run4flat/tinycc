@@ -536,3 +536,61 @@ most of the information, including the token stream, as well as the original Sym
 into the (presently unused) .prev field of the new Sym struct. The second stage sets the
 .next field, calling a reworked get_new_deftab_pointer, which identifies the new Sym by
 matching against the addresses in the .prev field.
+
+#### September 8, 2014
+
+It turns out that the solution was even simpler than this: I simply needed to disable a
+TokenSym check that had been in place. That was my attempt to solve a problem that can
+never happen, and causing a bug in the process. Having removed that, test 28 now, finally,
+passes! HURRAY!
+
+For better or worse, however, a warning that I promoted to an error is now causing a
+number of tests in the suite to fail. These include:
+
+test 20: Cannot use name 'l' as a global variable, it is already in the extended symbol table.
+test 30: Cannot use name 'pt' as a global variable, it is already in the extended symbol table.
+test 35: Cannot use name 'pt' as a global variable, it is already in the extended symbol table.
+
+And then, of course, test 70 still exhibits three failed tests, as already documented.
+
+What is going on for these newly failing tests? For test 20, the token 'l' is not a global
+variable at all but simply the name of a function argument. The same is true for 'pt' in
+tests 30 and 35. Furthermore, in tests 30 and 35, 'pt' is the name of a local variable.
+Even if I sort out the function argument issue, this ultimately means that the use of a
+*local* variable name in an extended symbol table precludes the use of global variable by
+the same name.
+
+As such, I am beginning to believe that extended symbol tables need to be able to restore
+their TokenSyms to pristine states after being used by a dependent compilation unit. This
+leads, further, to the ability for a dependent extended symbol table to re-initialize the
+modified TokenSyms, so that compilation units further down the chain get the full, proper
+behavior. (Ultimately, this may lead to a sort of diamond inheritance problem, but I
+dearly hope it is not an issue in actual practice.)
+
+And we have a currently unused slot in the copied TokenSyms: the .hash_next field.
+
+---
+
+It would be nice if I could simply construct a linear MRO. Then I could order the extended
+symbol tables and look up extended symbols. In that case, adding a function using the same
+token as a previously defined (say) preprocessor macro argument would simply copy the old
+extended TokenSym into the new extended symbol table. Because it would be asked before
+the parent extended symbol table, it would be able to supply the modified answer. A simple
+copy-on-write handling for extended TokenSyms would make it fairly easy implement. The
+problem is that I don't know how to write a C3 linearization.
+
+The alternative is to have each dependent extended symbol table keep track of its
+modifications. When you load an extended symbol table, and then another one, the dependent
+symbol table would insert temporary modifications into the original before compilation
+begins. After compilation, it would then clean up any changes. This is complicated.
+
+So, I think that C3 might be the best option, really.
+
+---
+
+Let's take a stop back. Why is this even a discussion? A global function can only be
+declared once, of course, but argument names (apparently) go on the global stack, maybe,
+and preprocessor macros can be #defined and #undef'd repeatedly. If a user pulls in
+multiple extended symbol tables that redefine a preprocessor macro, then I need some way
+of picking which one. This is a classic dependency calculation, and C3 is a classic
+solution to this problem.
