@@ -2010,12 +2010,12 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
 	extended_symtab_copy_callback new_copy_callback,
 	extended_symtab_lookup_by_name_callback new_name_callback,
-	extended_symtab_lookup_by_number_callback new_number_callback,
+	extended_symtab_sym_used_callback new_sym_used_callback,
 	void * data
 ) {
 	s->symtab_copy_callback = new_copy_callback;
 	s->symtab_name_callback = new_name_callback;
-	s->symtab_number_callback = new_number_callback;
+	s->symtab_sym_used_callback = new_sym_used_callback;
 	s->symtab_callback_data = data;
 }
 
@@ -2176,9 +2176,10 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 	return NULL;
 }
 
-/* Make a complete copy of the token-symbol table, the symbol stack, and
- * the define stack XXX ??? XXX, though the user only thinks they have
- * the token symbol table. */
+int tokenstream_len (int * stream);
+
+/* Make a complete copy of the token-symbol table, the symbol stack, and the
+ * define stack, though the user only thinks they have the token symbol table. */
 int _tcc_extended_symbol_counter = SYM_EXTENDED;
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 
@@ -2245,35 +2246,15 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     
     /* Copy the Sym list */
     for (curr_Sym = global_stack, i = 0; i < N_Syms-1; curr_Sym = curr_Sym->prev) {
-    	/* only copy non-extended symbols */
-    	if (curr_Sym->v >= SYM_EXTENDED) continue;
-    	
 		/* See tcc.h around line 425 for descriptions of some of the fields.
 		 * See also tccgen.c line 5987 to see what needs to happen for function
 		 * declarations to work properly (and, in turn, line 446 for how to
 		 * push a forward reference). */
-		 
-		/* Convert the symbol's token index based on what we will allocate when
-		 * we build the TokenSym list. These extra flags must be removed for
-		 * proper conversion, but must be added back on. This is because the
-		 * v fields of these symbols compared directly to a token index that
-		 * has had these flags ORed onto them. This is the case, for example,
-		 * with struct member identification. See the handling of TOK_ARROW as
-		 * a post-op in unary(), which is in tccgen.c. */
-		int extra_flags = (curr_Sym->v & (SYM_FIELD | SYM_STRUCT | SYM_FIRST_ANOM));
-		int bare_v = curr_Sym->v - extra_flags;
-		if (curr_Sym->v == SYM_FIELD) {
-			/* Functions of type int (int) have a token type that is
-			 * always present in every compiler context and can be
-			 * copied without modification. */
-			sym_list[i].v = SYM_FIELD;
-		}
-		else {
-			sym_list[i].v = bare_v - tok_start
-				+ _tcc_extended_symbol_counter
-				+ extra_flags; /* XXX double check */
-		}
 		
+		/* Copy the v value (token id). This will not be copied later, so keep
+		 * things simple for now and simply strip out the extended flag. */
+		sym_list[i].v = curr_Sym->v & ~SYM_EXTENDED;
+		 
 		/* Copy the assembler label */
 		if (curr_Sym->asm_label != NULL) {
 			int asm_label_len = strlen(curr_Sym->asm_label) + 1;
@@ -2294,8 +2275,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * rate, I am fairly confident that this can just be copied straight. */
 		sym_list[i].r = curr_Sym->r;
 		
-		int btype = curr_Sym->type.t & VT_BTYPE;
-		
 		/* Set the type. Judging by the constants in tcc.h and code that
 		 * uses this field, I'm pretty sure that the .t field tells tcc
 		 * how to load the data into a register. Since that is not
@@ -2303,6 +2282,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * to copy the value as-is. */
 		sym_list[i].type.t = curr_Sym->type.t;
 		/* All functions need to be declared as external definitions */
+		int btype = curr_Sym->type.t & VT_BTYPE;
 		if (btype == VT_FUNC) sym_list[i].type.t |= VT_EXTERN;
 		
 		/* The type.ref field contains something useful only if the basic type
@@ -2326,7 +2306,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		
 		/* Copy the next symbol field. Labels and gotos are tracked in a
 		 * separate stack, so for these Symbols we focus on next, not
-		 * jnext. */
+		 * jnext. The next field (I seem to recall) is used in storing
+		 * argument lists, so it needs to be copied for function
+		 * types. I believe it can be copied anonymously. */
 		sym_list[i].next
 			= get_new_symtab_pointer(s, curr_Sym->next, sym_list, N_Syms);
 		
@@ -2367,19 +2349,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     for (curr_Def = define_stack, i = 0; i < N_Defs; i++, curr_Def = curr_Def->prev) {
 		/* See above for descriptions of some of the fields. */
 		 
-		/* Convert the symbol's token index. Undefined items are not
-		 * actually cleared from the stack; instead their v field is
-		 * simply set to zero. */
-		if (curr_Def->v == 0) {
-			def_list[i].v = 0;
-		}
-		else if (curr_Def->v & SYM_EXTENDED) {
-			def_list[i].v = curr_Def->v;
-		}
-		else {
-			def_list[i].v = curr_Def->v - tok_start
-				+ _tcc_extended_symbol_counter; /* XXX double check? */
-		}
+		/* Convert the symbol's token index. */
+		def_list[i].v = curr_Def->v & ~SYM_EXTENDED;
 		
 		/* assembler label should be null for preprocessor stuff */
 		if (curr_Def->asm_label != NULL) {
@@ -2391,118 +2362,15 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * preprocessor macros. Just copy it. */
 		def_list[i].r = curr_Def->r;
 		
-		/* Copy the define token stream, which is a series of bytes.
-		 * The series of bytes are collections of integer => data pairs,
-		 * where the integer indicates the type (and thus size) of the
-		 * data that follows. For example, if we types TOK_PPNUM,
-		 * TOK_STR, or TOK_LSTR, then the next few bytes are a CString
-		 * struct (mostly filled with NULLs) followed by the associated
-		 * character string. It gets complicated, but once we have
-		 * computed the proper length of the stream, we can (with one
-		 * exception) copy it verbatim. The formats of the stream are
-		 * codified in tok_str_add2, which is defined in tccpp.c
-		 * 
-		 * The important exception noted above is that if the token is
-		 * not one of the known types, then it is a plain token, which
-		 * should exist on the define stack. In that case, we need to
-		 * update the token number to point to one of our (to be copied
-		 * further below) extended TokenSyms.
-		 */
+		/* Copy the tokenstream if it exists */
 		if (curr_Def->d != NULL) {
-			
-			/* First compute the length and copy it... */
-			int len = 0;
 			int * str = curr_Def->d;
-			while(str[len] != 0) {
-				/* One for the type */
-				len++;
-				switch(str[len-1]) {
-					case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
-					case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
-						len++;
-						break;
-					case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
-						{
-							CString *cstr = (CString *)(str + len);
-							/* Note this right shift assumes 32 bit integers */
-							len += (sizeof(CString) + cstr->size + 3) >> 2;
-						}
-						break;
-					case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
-				#if LDOUBLE_SIZE == 8
-					case TOK_CLDOUBLE:
-				#endif
-						len += 2;
-						break;
-				#if LDOUBLE_SIZE == 12
-					case TOK_CLDOUBLE:
-						len += 3;
-				#elif LDOUBLE_SIZE == 16
-					case TOK_CLDOUBLE:
-						len += 4;
-				#elif LDOUBLE_SIZE != 8
-				#error add long double size support
-				#endif
-						break;
-					default:
-						break;
-				}
-			}
-			/* note the comment above about 32-bit integers */
-			def_list[i].d = tcc_malloc(sizeof(int) * (len + 1));
-			memcpy(def_list[i].d, curr_Def->d, sizeof(int) * (len + 1));
-			
-			/* ... then update TokenSym references to point to our
-			 * extended symbol table.*/
-			for (len = 0; str[len] != 0;len++) {
-				switch(str[len]) {
-					case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
-					case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
-						/* Skip the next stream value */
-						len++;
-						break;
-					case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
-					{
-						CString *cstr = (CString *)(str + len + 1);
-						/* Note this right shift assumes 32 bit integers */
-						len += (sizeof(CString) + cstr->size + 3) >> 2;
-						/* Naively, I should set up cstr to be usable for later
-						 * preprocessor expansions. See tok_str_add2 in tccpp.c
-						 * for details. However, the memcpy performed above
-						 * already did that! So I'm done. */
-						break;
-					}
-					case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
-				#if LDOUBLE_SIZE == 8
-					case TOK_CLDOUBLE:
-				#endif
-						len += 2;
-						break;
-				#if LDOUBLE_SIZE == 12
-					case TOK_CLDOUBLE:
-						len += 3;
-				#elif LDOUBLE_SIZE == 16
-					case TOK_CLDOUBLE:
-						len += 4;
-				#elif LDOUBLE_SIZE != 8
-				#error add long double size support
-				#endif
-						break;
-					default:
-						/* This is the case for a token stream! */
-						if (str[len] < tok_start) {
-						}
-						else if (str[len] & SYM_EXTENDED) {
-							def_list[i].d[len] = str[len];
-						}
-						else {
-							def_list[i].d[len] = str[len] - tok_start
-								+ _tcc_extended_symbol_counter;
-						}
-						
-						break;
-				}
-			}
+			int len = tokenstream_len(str);
+			def_list[i].d = tcc_malloc(sizeof(int) * len);
+			/* The token ids used in the original compiling context are in the
+			 * same order as the final extended symbol table, so I can just copy
+			 * the token stream verbatim! */
+			memcpy(def_list[i].d, curr_Def->d, sizeof(int) * len);
 		}
 		else {
 			def_list[i].d = NULL;
@@ -2563,15 +2431,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		tok_sym->str[tok_copy->len] = '\0';
 	}
 
-	/* NOTE II: The guarantee of contiguity means that this function is
-	 * not threadsafe as is. To make it threadsafe some day, the easiest
-	 * approach is probably to make the function somehow aware of
-	 * whether a function is currently copying a symbol table, and then
-	 * lend a hand to help finish that copy before starting on its own
-	 * copy. This way, the thread that was in the middle of its copy
-	 * gets a contiguous range without forcing the second thread to idle
-	 * while waiting. */
-	
 	/* Send the pointer to the first TokenSym* to the callback */
 	extended_symtab_copy_callback to_call = s->symtab_copy_callback;
 	to_call((TokenSym**)to_return, s->symtab_callback_data);

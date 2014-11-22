@@ -181,8 +181,9 @@ ST_FUNC Sym *sym_push2(Sym **ps, int v, int t, long c)
    of the symbol stack */
 ST_FUNC Sym *sym_find2(Sym *s, int v)
 {
+    v &= ~SYM_EXTENDED;
     while (s) {
-        if (s->v == v)
+        if ((s->v & ~SYM_EXTENDED) == v)
             return s;
         s = s->prev;
     }
@@ -192,15 +193,7 @@ ST_FUNC Sym *sym_find2(Sym *s, int v)
 /* structure lookup */
 ST_INLN Sym *struct_find(int v)
 {
-    if (v & SYM_EXTENDED) {
-		/* Extended symbol table lookup */
-		if (tcc_state->symtab_number_callback == NULL) return NULL;
-		TokenSym *ts = tcc_state->symtab_number_callback(
-			v, tcc_state->symtab_callback_data, 0);
-		if (ts == NULL) return NULL;
-		return ts->sym_struct;
-	}
-	
+    v &= ~SYM_EXTENDED;
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -210,29 +203,34 @@ ST_INLN Sym *struct_find(int v)
 /* find an identifier */
 ST_INLN Sym *sym_find(int v)
 {
-    if (v & SYM_EXTENDED) {
-		/* Extended symbol table lookup. First check our local collection. */
-		/* Sym *s; */
-		/* s = find_local_copy_of_sym_for(v); */
-		/* if (s) return s; */
-		if (tcc_state->symtab_number_callback == NULL) return NULL;
-		TokenSym *ts = tcc_state->symtab_number_callback(
-			v, tcc_state->symtab_callback_data, 1);
-		if (ts == NULL) return NULL;
-		
-		/* Push this symbol to our local collection of extended symbols */
-		/* Sym* s_global = ts->sym_identifier; */
-		/* Use sym_push2 for our own custom stack? */
-        /* s = sym_push(v, s_global->type, s_global->r | VT_CONST | VT_SYM, 0); */
-        /* s->asm_label = s_global->asm_label; */
-        /* s->type.t |= VT_EXTERN; */
-		/* return s; */
-		return ts->sym_identifier;
-	}
-	
+    int is_extended = v & SYM_EXTENDED;
+    v &= ~SYM_EXTENDED;
     v -= TOK_IDENT;
+    
+    /* Does not exist in our table! The best we can do is return null. XXX Maybe
+     * should warn if this happens with an extended symbol, since that would be
+     * a sign of an inconsistent internal state. */
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
+    
+    /* If this is an extended symbol table reference, then we need to make sure
+     * that the extended symbol reference callback gets fired, but only once.
+     * We'll modify the TokenSym's tok field and remove the flag if the callback
+     * has been fired, so check if the TokenSym's tok field has the flag.
+     */
+    if (is_extended && (table_ident[v]->tok & SYM_EXTENDED)) {
+        TokenSym *ts = table_ident[v];
+        
+        /* Clear the extended symbol flag in the TokenSym. */
+        ts->tok &= ~SYM_EXTENDED;
+        
+        /* XXX If we don't have the callback function... throw error? */
+        if (tcc_state->symtab_sym_used_callback != NULL)
+            /* Call the function, passing the symbol name. */
+            tcc_state->symtab_sym_used_callback(ts->str, ts->len,
+                tcc_state->symtab_callback_data);
+    }
+
     return table_ident[v]->sym_identifier;
 }
 
@@ -242,6 +240,7 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
     Sym *s, **ps;
     TokenSym *ts;
 
+    v &= ~SYM_EXTENDED;
     if (local_stack)
         ps = &local_stack;
     else {
@@ -258,11 +257,8 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
     s->r = r;
     /* don't record fields or anonymous symbols */
     /* XXX: simplify */
-    if (!(v & SYM_FIELD) && (v & ~(SYM_STRUCT|SYM_EXTENDED)) < SYM_FIRST_ANOM) {
-        /* record symbol in token array */
-        if (v & SYM_EXTENDED) ts = tcc_state->symtab_number_callback(
-				v, tcc_state->symtab_callback_data, 0);
-        else ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
+    if (!(v & SYM_FIELD) && (v & ~SYM_STRUCT) < SYM_FIRST_ANOM) {
+        ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
         if (v & SYM_STRUCT)
             ps = &ts->sym_struct;
         else

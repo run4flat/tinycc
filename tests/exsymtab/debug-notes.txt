@@ -594,3 +594,90 @@ and preprocessor macros can be #defined and #undef'd repeatedly. If a user pulls
 multiple extended symbol tables that redefine a preprocessor macro, then I need some way
 of picking which one. This is a classic dependency calculation, and C3 is a classic
 solution to this problem.
+
+
+November 6, 2014
+================
+
+After a long hiatus, I was thinking again about this project. I stopped on a
+snag with the symbol table. I cannot simply loan a parent symbol table to a
+consuming compilation unit because that compilation unit could modify the
+original symbol table. The guts underlying tcc assumes that there is only one
+symbol table, and it therefore directly modifies the data structures.
+
+The idea that occurred to me today is that perhaps I could copy the symbols at
+the beginning of the compilation unit. The system would emulate the @EXPORT
+model of sharing stuff... It takes only a moment's thought to remember that the
+whole advantage of symbol table sharing in the first place is to avoid copying
+enormous tables (i.e. Perl's C API) to every single compilation unit... damn.
+
+But, I had another idea this evening: whenever an extended TokenSym is looked up
+by name, the TokenSym struct and all of its elements should be copied to a local
+TokenSym. This would happen somewhere in the vicinity of the call to
+symtab_name_callback in tccpp.c. This way, you only pay for the tokensyms that
+you use. This would have the unfortunate side effect that regularly used tokens
+that happen to exist in the Perl C API would get copied a lot, but I'm pretty
+sure it'll solve the problem and let me progress, and sub-optimal progress is
+better than none at all.
+
+In that case, I would no longer need to use the extended token flag in the tok
+identifier in the way that I currently do (i.e. to sequentially list all symbols
+ever seen by tcc throughout the entire process). The primary advantage of that
+old system was that I had separate callbacks for retrieving identifiers, which
+was a signal that pointers to those identifiers needed to be added to the
+compilation unit. How do I keep that functionality?
+
+One idea is to use the flag to mean "This is a copied extended token." Usually,
+this flag will be stripped off, but in tccgen.c:sym_find, it would be a
+notification that the symbol needs to be added to the compilaton unit. A
+callback would be fired. Then, the TokenSym's tok field would be modified to
+remove the extended symbol flag. Future calls to sym_find would check for the
+extended symbol flag in the TokenSym's tok, and would not fire the callback if
+the extended symbol flag were not present.
+
+November 17, 2014
+=================
+
+Progress slow but steady. At this point, I have cleaned out the code that checks
+for extended symbols in symbol lookups. The only remaining bit is to ensure that
+new tokensym lookups into extended symbol tables end up creating and copying
+new tokensyms. The heart of what needs to happen is simple enough. During the
+token lookup in tccpp.c's next_nomacro1, we check if a given bareword exists in
+an extended symbol table. If it does, then a new token in the current compiling
+context is created which is a clone of the one in the extended symbol table.
+This involves a copy of the define Sym, the struct Sym, and the identifier Sym,
+along with all of their dependents.
+
+Dependents? Yes, preprocessor definitions include token streams, i.e. streams of
+integers that give the series of tokens for the preprocessor macro expansion.
+Each one of these tokens needs to be copied to the new compiler context, and the
+token stream needs to be updated from the old to the new token numbers. The
+types of struct members and the arguments of functions can be structs, function
+pointers, or some sort of typedef; these members and arguments also need to be
+copied to the new compiler context and their token numbers updated.
+
+In order to avoid unnecessary copying, it is important to check if a tokensym
+has already been created for the dependent token. To do this, I need to check
+the currently compiling context if it has a token by the same name, which is the
+purpose of tok_alloc. In fact, if such a token does not yet exist, this function
+will also allocate it for me, which will let me continue with a recursive copy
+procedure. That's almost perfect, except that if it *does* exist, I don't want
+to recursively copy, and there's no way for me to know if the returned TokenSym
+needs to be copied or not. So I guess I'll have to perform the hash lookup
+manually.
+
+November 22, 2014
+=================
+
+After a lot of work, I believe I have my first shot at a re-implementation. The
+final solution involves a lot of local and extended symbol table lookups, and I
+am beginning to wonder if there could be a way to avoid repeated hashing of the
+same character string during the extended symbol lookup. For now, I will not
+worry about it, but I will make a mental bookmark that this is a potential
+optimization during the copy procedure.
+
+I actually completed this work yesterday. I have not even tried to compile it
+(let alone test it), so today I will commit this work, perform a wash-rinse-
+repeat until I've cleared out all of the C language typos, and then retool the
+lookup code in the test suite to see if the logic (and my understanding of what
+the compiler needs) is right.
