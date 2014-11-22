@@ -248,6 +248,33 @@ ST_FUNC TokenSym *tok_alloc(const char *str, int len)
     return tok_alloc_new(pts, str, len);
 }
 
+/* Almost identical to above: Returns a pointer to the hash_next which either
+ * points to the token (if found) or points to null. If the dereferenced value
+ * is null, then this pointer itself can be passed to tok_alloc_new; if the
+ * dereferenced value is not null, it is already present and ready for use. */
+ST_FUNC TokenSym** symtab_tok_find(const char *str, int len)
+{
+    TokenSym *ts, **pts;
+    int i;
+    unsigned int h;
+    
+    h = TOK_HASH_INIT;
+    for(i=0;i<len;i++)
+        h = TOK_HASH_FUNC(h, ((unsigned char *)str)[i]);
+    h &= (TOK_HASH_SIZE - 1);
+
+    pts = &hash_ident[h];
+    for(;;) {
+        ts = *pts;
+        if (!ts)
+            break;
+        if (ts->len == len && !memcmp(ts->str, str, len))
+            return pts;
+        pts = &(ts->hash_next);
+    }
+    return pts;
+}
+
 /* XXX: buffer overflow */
 /* XXX: float tokens */
 ST_FUNC char *get_tok_str(int v, CValue *cv)
@@ -258,6 +285,9 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
     char *p;
     int i, len;
 
+    /* Mask out extended token flag */
+    v &= ~SYM_EXTENDED;
+    
     /* NOTE: to go faster, we give a fixed buffer for small strings */
     cstr_reset(&cstr_buf);
     cstr_buf.data = buf;
@@ -341,16 +371,9 @@ ST_FUNC char *get_tok_str(int v, CValue *cv)
             *p = '\0';
         } else if (v < tok_ident) {
             return table_ident[v - TOK_IDENT]->str;
-        } else if (v >= SYM_FIRST_ANOM && v < SYM_EXTENDED) {
+        } else if (v >= SYM_FIRST_ANOM) {
             /* special name for anonymous symbol */
             sprintf(p, "L.%u", v - SYM_FIRST_ANOM);
-        } else if (v >= SYM_EXTENDED) {
-			/* Get the symbol struct from the extended lookup callback */
-			if (tcc_state->symtab_number_callback == NULL) return NULL;
-			TokenSym* s = tcc_state->symtab_number_callback(
-				v, tcc_state->symtab_callback_data, 0);
-			if (s == NULL) return NULL;
-			return s->str;
         } else {
             /* should never happen */
             return NULL;
@@ -1025,15 +1048,10 @@ ST_INLN void define_push(int v, int macro_type, int *str, Sym *first_arg)
 {
     Sym *s;
 
+    v &= ~SYM_EXTENDED;
     s = define_find(v);
     if (s && !macro_is_equal(s->d, str))
         tcc_warning("%s redefined", get_tok_str(v, NULL));
-    if (v & SYM_EXTENDED) {
-		/* How do we prevent this #definefrom reaching outside its scope
-		 * and modifying the extended symbol tables? See TOK_DEFINE and
-		 * TOK_UNDEF in preprocess(). */
-		tcc_error("Re-defining an extended macro definition is not allowed; #undef first");
-	}
 
     s = sym_push2(&define_stack, v, macro_type, 0);
     s->d = str;
@@ -1046,35 +1064,7 @@ ST_FUNC void define_undef(Sym *s)
 {
     int v;
     v = s->v;
-    if (v & SYM_EXTENDED) {
-		/* To make sure this #undef doesn't reach outside its scope and
-		 * modify extended symbol tables, this creates a new macro
-		 * specifically for this compiler context and undefines it. The
-		 * local macro definition will take precedence over the global
-		 * macro in any future redefinitions. */
-		
-		/* Get the extended symbol token. */
-		if (tcc_state->symtab_number_callback == NULL) {
-			tcc_warning("Internal error: Trying to undefine a preprocessor macro that maps to an extended symbol number, yet no symtab callback function is defined");
-			return;
-		}
-		TokenSym *ts = tcc_state->symtab_number_callback(
-			v, tcc_state->symtab_callback_data, 0);
-		if (ts == NULL) {
-			tcc_warning("Internal error: Trying to undefine a preprocessor macro that maps to an extended symbol number, yet the token could not be found");
-			return;
-		}
-		
-		/* Allocate a new symbol token, which we will then undefine. */
-		TokenSym *ts2 = tok_alloc(ts->str, strlen(ts->str));
-		v = ts2->tok;
-		s = ts2->sym_define = sym_push2(&define_stack, v, MACRO_OBJ, 0);
-		
-		/* fall through to the symbol undefinition */
-		/* V */
-		/* V */
-		/* V */
-	}
+    v &= ~SYM_EXTENDED;
     if (v >= TOK_IDENT && v < tok_ident)
         table_ident[v - TOK_IDENT]->sym_define = NULL;
     s->v = 0;
@@ -1082,15 +1072,7 @@ ST_FUNC void define_undef(Sym *s)
 
 ST_INLN Sym *define_find(int v)
 {
-    if (v & SYM_EXTENDED) {
-		/* Extended symbol table lookup */
-		if (tcc_state->symtab_number_callback == NULL) return NULL;
-		TokenSym *ts = tcc_state->symtab_number_callback(
-			v, tcc_state->symtab_callback_data, 0);
-		if (ts == NULL) return NULL;
-		return ts->sym_define;
-	}
-	
+    v &= ~SYM_EXTENDED;
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -1109,7 +1091,7 @@ ST_FUNC void free_defines(Sym *b)
         /* do not free args or predefined defines */
         if (top->d)
             tok_str_free(top->d);
-        v = top->v;
+        v = top->v & ~SYM_EXTENDED;
         if (v >= TOK_IDENT && v < tok_ident)
             table_ident[v - TOK_IDENT]->sym_define = NULL;
         sym_free(top);
@@ -1121,6 +1103,7 @@ ST_FUNC void free_defines(Sym *b)
 /* label lookup */
 ST_FUNC Sym *label_find(int v)
 {
+    v &= ~SYM_EXTENDED;
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -1129,6 +1112,7 @@ ST_FUNC Sym *label_find(int v)
 
 ST_FUNC Sym *label_push(Sym **ptop, int v, int flags)
 {
+    v &= ~SYM_EXTENDED;
     Sym *s, **ps;
     s = sym_push2(ptop, v, 0, 0);
     s->r = flags;
@@ -2104,6 +2088,282 @@ static void parse_number(const char *p)
         tcc_error("invalid number\n");
 }
 
+void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to);
+/* MUST NEVER RETURN NULL (or if it does, call sites must be updated to handle that) */
+TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, TokenSym** orig_symtab) {
+	/* Look up the original tokensym in the extended symbol and see if an
+	 * identically named symbol is already present in the current compiling
+	 * context's symbol table. */
+	TokenSym **local_pts, *local_ts;
+	local_pts = symtab_tok_find(orig_symtab_ts->str, orig_symtab_ts->len);
+	local_ts = *local_pts;
+	
+	/* If not, find it in the extended symbol table. Notice that I perform
+	 * another search by name, rather than simply using curr_from, since the
+	 * extended symbol table manager might consider this to be overridden.
+	 * Fallback to original (and warn) if we get nothing. */
+	if (local_ts == NULL) {
+		TokenSym** highest_precedent_symtab;
+		TokenSym* highest_precedent_ts;
+		highest_precedent_ts = tcc_state->symtab_name_callback(
+			orig_symtab_ts->str, orig_symtab_ts->len,
+			tcc_state->symtab_callback_data, &highest_precedent_symtab);
+		
+		/* Shouldn't happen, but use orig_symtab_ts if we get nothing */
+		if (highest_precedent_ts == NULL) {
+			/* Issue a warning, though */
+			char symbol_name[1024];
+			strncpy(symbol_name, orig_symtab_ts->str,
+				orig_symtab_ts->len < 1024 ? orig_symtab_ts->len : 1024);
+			tcc_warning("Internal inconsistency: could not find extended symbol table entry for %s; defaulting to previous value",
+				symbol_name);
+			
+			highest_precedent_ts = orig_symtab_ts;
+			highest_precedent_symtab = orig_symtab;
+		}
+		/* Allocate new TokenSym and copy it over. */
+		local_ts = tok_alloc_new(local_pts, highest_precedent_ts->str,
+			highest_precedent_ts->len);
+		copy_extended_tokensym(highest_precedent_symtab, highest_precedent_ts,
+			local_ts);
+	}
+	return local_ts;
+}
+
+/* The define token stream is a series of bytes. They are collections of
+ * integer => data pairs, where the integer indicates the type (and thus size)
+ * of the data that follows. For example, if we encounter types TOK_PPNUM,
+ * TOK_STR, or TOK_LSTR, then the next few bytes are a CString struct (mostly
+ * filled with NULLs) followed by the associated character string. It gets
+ * complicated, but has only a handful of special cases to handle. The formats
+ * of the stream are codified in tok_str_add2, which is defined in tccpp.c. */
+int tokenstream_len (int * stream) {
+	int len = 0;
+	while(stream[len] != 0) {
+		/* One for the type */
+		len++;
+		switch(stream[len-1]) {
+			case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
+			case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
+				len++;
+				break;
+			case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
+				{
+					CString *cstr = (CString *)(stream + len);
+					/* Note this right shift assumes 32 bit integers */
+					len += (sizeof(CString) + cstr->size + 3) >> 2;
+				}
+				break;
+			case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
+		#if LDOUBLE_SIZE == 8
+			case TOK_CLDOUBLE:
+		#endif
+				len += 2;
+				break;
+		#if LDOUBLE_SIZE == 12
+			case TOK_CLDOUBLE:
+				len += 3;
+		#elif LDOUBLE_SIZE == 16
+			case TOK_CLDOUBLE:
+				len += 4;
+		#elif LDOUBLE_SIZE != 8
+		#error add long double size support
+		#endif
+				break;
+			
+			default:
+				/* Default is a single token (integer), which doesn't require
+				 * any additional bytes. So do nothing. */
+				break;
+		}
+	}
+	/* add one for the zero byte */
+	return len + 1;
+}
+
+Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok);
+void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to) {
+	/* Mark this token as extended. This will cause a symbol-used callback to be
+	 * fired the first time this token is used in reference to a symbol (at
+	 * which point the extended flag will be cleared). */
+	to->tok |= SYM_EXTENDED;
+	/* We need to copy over the following fields:
+	 *  - sym_define
+	 *  - sym_struct
+	 *  - sym_identifier
+	 * These fields are OK as they are:
+	 *  - str has already been allocated and copied
+	 *  - len has already been set to the string's length
+	 *  - sym_label should already be null
+	 *  - hash_next is probably null, and ought not be modified
+	 */
+	 
+	/***** sym_struct and sym_identifier copy *****/
+	to->sym_struct = copy_extended_sym(symtab, from->sym_struct, to->tok);
+	to->sym_identifier = copy_extended_sym(symtab, from->sym_identifier, to->tok);
+	
+	/***** sym_define copy *****/
+	/* There may be no sym_define, or it may have been undef'd. Note that
+	 * something which is just defined (and subsequently used in #ifdef
+	 * statements) have a non-null d field, which points to an int string that
+	 * only contains a single zero-valued int. */
+	if (from->sym_define == NULL || from->sym_define->d == NULL) {
+		to->sim_define = NULL;
+	}
+	/* Otherwise, we need to copy it and update all of the token values. I
+	 * refrain from using the tok_str_* functions because I already have the
+	 * entire token stream and can easily get its length. After copying the
+	 * token stream bit-for-bit, I go back and re-assign the token values
+	 * referring to barewords so that they refer to tokens in the current
+	 * compilation context rather than the original extended symbol table. */
+	else {
+		/* Get the length and copy the original */
+		int * from_stream = from->sym_define->d;
+		int len = tokenstream_len(from_stream);
+		int * to_stream = tcc_malloc(sizeof(int) * len);
+		memcpy(to_stream, from_stream, sizeof(int) * len);
+		
+		/* Get the starting token's id, used for correct extended table lookups */
+		int tok_start = symtab[0].tok;
+		
+		/* Update TokenSym references to point to TokenSyms in the current
+		 * compiler context. Most of this code involves stepping over the other
+		 * possible elements of the token stream. See tokenstream_len for
+		 * details. */
+		for (len = 0; from_stream[len] != 0;len++) {
+			switch(from_stream[len]) {
+				case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
+				case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
+					/* Skip the next stream value */
+					len++;
+					break;
+				case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
+				{
+					CString *cstr = (CString *)(from_stream + len + 1);
+					/* Note this right shift assumes 32 bit integers */
+					len += (sizeof(CString) + cstr->size + 3) >> 2;
+					/* Naively, I should set up cstr to be usable for later
+					 * preprocessor expansions. See tok_str_add2 in tccpp.c
+					 * for details. However, the memcpy performed above
+					 * already did that! So I'm done. */
+					break;
+				}
+				case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
+			#if LDOUBLE_SIZE == 8
+				case TOK_CLDOUBLE:
+			#endif
+					len += 2;
+					break;
+			#if LDOUBLE_SIZE == 12
+				case TOK_CLDOUBLE:
+					len += 3;
+			#elif LDOUBLE_SIZE == 16
+				case TOK_CLDOUBLE:
+					len += 4;
+			#elif LDOUBLE_SIZE != 8
+			#error add long double size support
+			#endif
+					break;
+				default:
+					if (from_stream[len] < tok_start) {
+						tcc_error("Internal error in extended symtab copy: token in define stream was less than tok_start");
+					}
+					
+					/* This is the case for an arbitrary token. Get a local
+					 * token and replace the token stream's value with the
+					 * local token's tok id. */
+					to_stream[len] = get_local_ts_for_extended_ts(
+						symtab[from_stream[len] - tok_start], symtab)->tok;
+					
+					break;
+			}
+		}
+		/* We have copied the token stream, but we still need to copy the
+		 * argument list (for macro functions). */
+		Sym *first_arg, *curr_from_arg, *newest_arg, **p_curr_arg;
+		first_arg = NULL;
+		p_curr_arg = &first_arg;
+		for (curr_from_arg = from->next; curr_from_arg != NULL; curr_from_arg = curr_from_arg->next) {
+			/* Get local TokenSym associated with curr_from_arg */
+			int from_tok = (curr_from_arg->v & ~SYM_FIELD) - tok_start;
+			TokenSym * local_ts = get_local_ts_for_extended_ts(symtab[from_tok],
+				symtab);
+			/* Add the argument to the local define stack and move the chains */
+			newest_arg = sym_push2(&define_stack, local_ts->tok | SYM_FIELD,
+				local_ts->sym_define->type.t, 0);
+			*p_curr_arg = newest_arg;
+			p_curr_arg = newest_arg->next;
+		}
+		
+		/* Now that we have all the moving parts, add the preprocessor to the
+		 * current compilation context. */
+		define_push(to->tok, from->t, to_stream, first_arg); /* sym_define is now set */
+	}
+}
+
+Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
+	if (from == NULL) return NULL;
+	
+	/* Get the starting token's id, used for correct extended table lookups */
+	int tok_start = symtab[0].tok;
+	
+	/* Copy the flags from the "from" sym */
+	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+	
+	/* Make sure the CType refers to Syms in the current compiler context */
+	CType to_type;
+	int btype = from->type.t & VT_BTYPE;
+	to_type.t = from->type.t;
+	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+		/* Get the from->type.ref's token and look for it here */
+		if (from->type.ref | SYM_FIRST_ANOM) {
+			/* Anonymous symbol; just copy it. */
+			to_type.ref = copy_extended_sym(symtab, from->type.ref,
+				anon_sym++);
+		}
+		else {
+			/* Not anonymous: get the tokensym */
+			TokenSym* orig_ts = symtab[from->type.ref->v - tok_start];
+			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
+			if (btype == VT_STRUCT) to_type.ref = local_ts->sym_struct;
+			else to_type.ref = local_ts->sym_identifier;
+		}
+	}
+	
+	/* Create the new symbol on the current symbol stack */
+	Sym * s = sym_push(to_tok, &to_type, from->r, from->c);
+	
+	/* Copy over a few more bits. See copy_extended_symtab for details. */
+	
+	/* Copy the assembler label, if present */
+	if (from->asm_label != NULL) {
+		int asm_label_len = strlen(from->asm_label) + 1;
+		s.asm_label = tcc_malloc(asm_label_len);
+		memcpy(s.asm_label, from->asm_label, asm_label_len);
+	}
+	
+	/* All done unless we have a next field to copy as well. */
+	if (from->next == NULL) return s;
+	
+	/* Copy the next field */
+	Sym * next = from->next;
+	/* Get the from->type.ref's token and look for it here */
+	if (next->v | SYM_FIRST_ANOM) {
+		/* Anonymous symbol; just copy it. */
+		to.next = copy_extended_sym(symtab, next->type.ref,
+			anon_sym++);
+	}
+	else {
+		/* Not anonymous: get the tokensym */
+		TokenSym* orig_ts = symtab[next->v - tok_start];
+		TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
+		if (next->v | SYM_STRUCT) to.next = local_ts->sym_struct;
+		else to.next = local_ts->sym_identifier;
+	}
+	
+	return s;
+}
+
 
 #define PARSE2(c1, tok1, c2, tok2)              \
     case c1:                                    \
@@ -2275,15 +2535,17 @@ maybe_newline:
                     goto token_found;
                 pts = &(ts->hash_next);
             }
-            /* If we are here, it's because we didn't find the token in
-             * our current symbol table. Check if there is an extended
-             * symbol table entry. */
-            if (tcc_state->symtab_name_callback) {
-				ts = tcc_state->symtab_name_callback(
-					p1, len, tcc_state->symtab_callback_data, 0);
-				if (ts) goto token_found;
-			}
             ts = tok_alloc_new(pts, p1, len);
+            /* If we are here, it's because we didn't find the token in our
+             * current symbol table. It may, however, exist in the extended
+             * symbol table. If we find it there, copy its contents into the
+             * just-created TokenSym. */
+            if (tcc_state->symtab_name_callback) {
+				TokenSym** containing_symtab;
+				TokenSym * extended_ts = tcc_state->symtab_name_callback(
+					p1, len, tcc_state->symtab_callback_data, &containing_symtab);
+				if (extended_ts) copy_extended_tokensym(containing_symtab, extended_ts, ts);
+			}
         token_found: ;
         } else {
             /* slower case */

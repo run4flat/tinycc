@@ -699,7 +699,7 @@ struct TCCState {
     /* ---- Extended symbol table handling ---- */
     extended_symtab_copy_callback symtab_copy_callback;
     extended_symtab_lookup_by_name_callback symtab_name_callback;
-    extended_symtab_lookup_by_number_callback symtab_number_callback;
+    extended_symtab_sym_used_callback symtab_sym_used_callback;
     void * symtab_callback_data;
 };
 
