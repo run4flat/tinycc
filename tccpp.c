@@ -2224,7 +2224,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		memcpy(to_stream, from_stream, sizeof(int) * len);
 		
 		/* Get the starting token's id, used for correct extended table lookups */
-		int tok_start = symtab[0]->tok;
+		int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 		
 		/* Update TokenSym references to point to TokenSyms in the current
 		 * compiler context. Most of this code involves stepping over the other
@@ -2266,7 +2266,8 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 					break;
 				default:
 					if (from_stream[len] < tok_start) {
-						tcc_error("Internal error in extended symtab copy: token in define stream was less than tok_start");
+						tcc_error("Internal error in extended symtab copy: token in define stream (%X) was less than tok_start (%X)",
+							from_stream[len], tok_start);
 					}
 					
 					/* This is the case for an arbitrary token. Get a local
@@ -2307,7 +2308,7 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	if (from == NULL) return NULL;
 	
 	/* Get the starting token's id, used for correct extended table lookups */
-	int tok_start = symtab[0]->tok;
+	int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 	
 	/* Copy the flags from the "from" sym */
 	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);

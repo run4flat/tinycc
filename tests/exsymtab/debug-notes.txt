@@ -692,3 +692,17 @@ Now I need to see how it behaves with the extended symbol table test suite,
 which means it's time to revise that test suite to use the new API. Even before
 doing that, tests 01 and 10 passed. However, in order to get test 20 to pass, I
 had to revise the contents of test_setup.h.
+
+And now, test 20 fails after the eighth test stating:
+  <string>:1: error: Internal error in extended symtab copy: token in define stream was less than tok_start
+or, with a minor revision to the way that error gets reported:
+  <string>:1: error: Internal error in extended symtab copy: token in define stream (28) was less than tok_start
+
+This suggests thar there is a problem with the stream copy procedure. How could
+this arise? To shed some light, I added another piece to the diagnostic, giving
+  <string>:1: error: Internal error in extended symtab copy: token in define stream (28) was less than tok_start (40000000)
+
+that means tok_start IS the first extended tokensym value, which it should not
+be! This led me to an erroneous setting of the tok field for TokenSyms in
+copy_extended_symtab, now fixed. That gives me a new error:
+  <string>:1: error: Internal error in extended symtab copy: token in define stream (28) was less than tok_start (46F)

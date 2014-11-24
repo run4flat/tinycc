@@ -2385,9 +2385,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		TokenSym * tok_sym = to_return[i] = tcc_malloc(tokensym_size);
 		
 		/* Follow the code from tok_alloc_new in tccpp.c */
-		tok_sym->tok = _tcc_extended_symbol_counter++;
-		/* Add all the appropriate flags, of course */
-		tok_sym->tok |= tok_copy->tok & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+		tok_sym->tok = tok_copy->tok;
 		tok_sym->sym_define
 			= get_new_deftab_pointer(s, tok_copy->sym_define, def_list, N_Defs);
 		tok_sym->sym_label = NULL; /* Not copying labels */
