@@ -723,3 +723,18 @@ issue with the extended symbol data not being initialized?
 
 No, unfortunately. Even with the correct initialization, the system still
 segfaults. Further digging is required, more than I can spare at the moment.
+
+November 24, 2014
+=================
+
+Making test 20 with the .dbg extension (what a wonderful tool), I see that I get
+a segfault at tccpp.c:2296. Printing out the contents of local_ts, I get
+  {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0,
+    sym_identifier = 0x0, tok = 1073742963, len = 5, str = "f"}
+
+It becomes quite clear that the local_ts is fine, but the access to
+local_ts->sym_define->type.t is clearly erroneous. After all, this should be
+*setting* the local tokensym's sym_define's type.t, not accessing it. This
+should be curr_from_arg->type.t.
+
+AND THAT FIXES TEST 20!!!! HURRAY!

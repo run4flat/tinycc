@@ -2294,7 +2294,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 				symtab);
 			/* Add the argument to the local define stack and move the chains */
 			newest_arg = sym_push2(&define_stack, local_ts->tok | SYM_FIELD,
-				local_ts->sym_define->type.t, 0);
+				curr_from_arg->type.t, 0);
 			*p_curr_arg = newest_arg;
 			p_curr_arg = &newest_arg->next;
 		}
