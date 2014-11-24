@@ -2364,6 +2364,7 @@ printf("** masked, that comes to %X\n", next->v | SYM_FIRST_ANOM);
 		/* Not anonymous: get the tokensym */
 		TokenSym* orig_ts = symtab[next->v - tok_start];
 printf("** next points to token id %X, named %s\n", next->v, orig_ts->str);
+fflush(stdout);
 		TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
 		if (next->v | SYM_STRUCT) s->next = local_ts->sym_struct;
 		else s->next = local_ts->sym_identifier;

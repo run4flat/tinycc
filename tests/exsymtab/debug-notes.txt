@@ -784,3 +784,7 @@ obvious. This code:
 led to this output:
   ** masked, that comes to 18000472
 And it becomes quite obvious I want a bitwise AND, not bitwise OR!
+
+With that fix, I get to a coredump, without any prints. Trying to add a flush
+leads to no print, and I quickly realize that the array lookup for orig_ts fails
+to mask out flags.
