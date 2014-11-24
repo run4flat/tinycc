@@ -2354,17 +2354,14 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	Sym * next = from->next;
 	/* Get the from->type.ref's token and look for it here */
 	if (next->v & SYM_FIRST_ANOM) {
-printf("** next points to anonymous symbol with token id %X\n", next->v);
-printf("** masked, that comes to %X\n", next->v | SYM_FIRST_ANOM);
 		/* Anonymous symbol; just copy it. */
 		s->next = copy_extended_sym(symtab, next->type.ref,
 			anon_sym++);
 	}
 	else {
 		/* Not anonymous: get the tokensym */
-		TokenSym* orig_ts = symtab[next->v - tok_start];
-printf("** next points to token id %X, named %s\n", next->v, orig_ts->str);
-fflush(stdout);
+		int orig_tok = next->v & ~(SYM_STRUCT | SYM_FIELD);
+		TokenSym* orig_ts = symtab[orig_tok - tok_start];
 		TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
 		if (next->v | SYM_STRUCT) s->next = local_ts->sym_struct;
 		else s->next = local_ts->sym_identifier;
