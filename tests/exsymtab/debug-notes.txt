@@ -742,4 +742,6 @@ AND THAT FIXES TEST 20!!!! HURRAY!
 And with fixes to SETUP_SECOND_CALLBACK_DATA, test 25 passes, too. :-)
 
 Test 28 has its own by-name and by-number lookups that must be revised. Having
-revised those, I get core dumps.
+revised those, I get core dumps at line 2272 of tccpp.c. A quick debugging
+session reveals that at least one problem lies with the value from the from
+stream at len: it still has the extended symbol flag. 

@@ -2269,8 +2269,9 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 						/* This is the case for an arbitrary token. Get a local
 						 * token and replace the token stream's value with the
 						 * local token's tok id. */
+						int from_tok = from_stream[len] & ~SYM_EXTENDED;
 						to_stream[len] = get_local_ts_for_extended_ts(
-							symtab[from_stream[len] - tok_start], symtab)->tok;
+							symtab[from_tok - tok_start], symtab)->tok;
 					}
 					/* Any token value less than tok_start refers to a value in
 					 * the symbol table that is pre-defined, such as the C
