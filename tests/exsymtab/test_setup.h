@@ -43,16 +43,20 @@ void copy_symtab(TokenSym_p* copied_symtab, void * data) {
 
 typedef struct {
 	TCCState * second_context;
+	TCCState * first_context;
 	TokenSym_p* first_symtab;
 } second_callback_data;
 
-TokenSym_p lookup_by_name (char * name, int len, void * data, int is_identifier) {
+TokenSym_p lookup_by_name (char * name, int len, void * data,
+	TokenSym_p**containing_symtab
+) {
 	/* Extract the name from the full string passed in */
 	char name_to_find[len + 1];
 	strncpy(name_to_find, name, len);
 	name_to_find[len] = '\0';
 	/* Pull out the symtab */
 	TokenSym_p* my_symtab = ((second_callback_data*)data)->first_symtab;
+	*containing_symtab = my_symtab;
 	int i;
 	for (i = 0; i < tcc_tokensym_list_length(my_symtab); i++) {
 		if (strncmp(name, tcc_tokensym_name(my_symtab[i]), len) == 0) {
@@ -64,20 +68,25 @@ TokenSym_p lookup_by_name (char * name, int len, void * data, int is_identifier)
 	return NULL;
 }
 
-TokenSym_p lookup_by_number (int tok_id, void * data, int is_identifier) {
-	/* Unpack the data */
-	DIAG("Looking up tokensym for %X", tok_id);
+void sym_used (char * name, int len, void * data) {
+	/* Extract the name from the full string passed in */
+	char name_to_find[len + 1];
+	strncpy(name_to_find, name, len);
+	name_to_find[len] = '\0';
+	DIAG("Adding external identifier %s to second context\n", name_to_find);
+	
+	/* Unpack the two compilation contexts */
 	second_callback_data * my_data = (second_callback_data *)data;
-	/* Is this token in our extended symtab? */
-	TokenSym_p* my_symtab = my_data->first_symtab;
-	DIAG("First tokensym is for %X", tcc_tokensym_tok(my_symtab[0]));
-	TokenSym_p ts = tcc_tokensym_by_tok(tok_id, my_symtab);
-	if (!ts) return NULL;
-	/* If so, find it */
-	DIAG("It appears that %X is in our extended symtab", tok_id);
-	DIAG("About to return tokensym pointer %p", ts);
-	/* All done; return the symbol */
-	return ts;
+	TCCState * curr_context = my_data->second_context;
+	TCCState * orig_context = my_data->first_context;
+	
+	/* Get the symbol and add it */
+	void * orig_symbol = tcc_get_symbol(orig_context, name_to_find);
+	if (!orig_symbol) {
+		DIAG("COULD NOT FIND %s!!\n", name_to_find);
+		return;
+	}
+	tcc_add_symbol(curr_context, name_to_find, orig_symbol);
 }
 
 /* ---- code for setting up the second compiler state ---- */
@@ -95,7 +104,7 @@ TokenSym_p lookup_by_number (int tok_id, void * data, int is_identifier) {
 	tcc_set_output_type(s, TCC_OUTPUT_MEMORY);                  \
 	callback_data.second_context = s;                           \
 	tcc_set_extended_symtab_callbacks(s, NULL, &lookup_by_name, \
-		&lookup_by_number, &callback_data);                     \
+		&sym_used, &callback_data);                     \
    	if (tcc_compile_string(s, code) == -1) return 1
 
 #define relocate_second_state(s)                                \

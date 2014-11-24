@@ -681,3 +681,14 @@ I actually completed this work yesterday. I have not even tried to compile it
 repeat until I've cleared out all of the C language typos, and then retool the
 lookup code in the test suite to see if the logic (and my understanding of what
 the compiler needs) is right.
+
+November 23, 2014
+=================
+
+Having cleaned up the typos, tcc compiles again. Furthermore, as best I can
+tell, it passes its usual (non-extended-symtab) test suite. Cool.
+
+Now I need to see how it behaves with the extended symbol table test suite,
+which means it's time to revise that test suite to use the new API. Even before
+doing that, tests 01 and 10 passed. However, in order to get test 20 to pass, I
+had to revise the contents of test_setup.h.
