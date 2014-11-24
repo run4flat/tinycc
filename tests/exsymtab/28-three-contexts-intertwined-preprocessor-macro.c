@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
 	/* ---- Compile the first code string and setup the callback data ---- */
 	
 	TCCState *s_first = tcc_new();
+	my_data.oldest_context = s_first;
 	SIMPLE_SETUP(s_first);
 	tcc_set_extended_symtab_callbacks(s_first, &my_copy_symtab, NULL, NULL, &my_data);
     if (tcc_compile_string(s_first, first_code) == -1) return 1;
@@ -91,6 +92,7 @@ int main(int argc, char **argv) {
 	pass("First code string compiled and relocated fine");
 	
 	TCCState *s_second = tcc_new();
+	my_data.middle_context = s_second;
 	SIMPLE_SETUP(s_second);
 	tcc_set_extended_symtab_callbacks(s_second, &my_copy_symtab,
 		&my_lookup_by_name, &my_sym_used, &my_data);
@@ -99,6 +101,7 @@ int main(int argc, char **argv) {
 	pass("Second code string compiled and relocated fine");
 	
 	TCCState *s_third = tcc_new();
+	my_data.current_context = s_third;
 	SIMPLE_SETUP(s_third);
 	tcc_set_extended_symtab_callbacks(s_third, NULL,
 		&my_lookup_by_name, &my_sym_used, &my_data);

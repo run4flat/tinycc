@@ -744,4 +744,11 @@ And with fixes to SETUP_SECOND_CALLBACK_DATA, test 25 passes, too. :-)
 Test 28 has its own by-name and by-number lookups that must be revised. Having
 revised those, I get core dumps at line 2272 of tccpp.c. A quick debugging
 session reveals that at least one problem lies with the value from the from
-stream at len: it still has the extended symbol flag. 
+stream at len: it still has the extended symbol flag.
+
+I still hit trouble, but the problem now appears to be in test_setup.h. A stack
+trace at the new segfault indicates that there is call to sym_used, which itself
+calls tcc_get_symbol with a compiler state (already compiled) of NULL! This
+means that the wrapping code in the test suite is failing somehow. Of course! I
+never set up the state pointers in the callback struct! And just like that, test
+28 passes!
