@@ -720,3 +720,6 @@ tok_start should be modified.
 
 Having fixed that, I now get a segfault after test 8 passes. Perhaps this is an
 issue with the extended symbol data not being initialized?
+
+No, unfortunately. Even with the correct initialization, the system still
+segfaults. Further digging is required, more than I can spare at the moment.
