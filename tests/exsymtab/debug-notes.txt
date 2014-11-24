@@ -754,3 +754,14 @@ never set up the state pointers in the callback struct! And just like that, test
 28 passes!
 
 Applying identical fixups to test 29 fixes that test suite as well.
+
+Test 30 hits a new bug:
+  <string>:2: error: field not found: x
+
+This means that the struct definition for the point struct was incorrectly
+copied to the second compiler context. Following in the footsteps of
+investigations from late April (found around line 120 of this document), I
+placed this print statement at the end of copy_extended_tokensym:
+  printf("Just copied token with string %s\n", from->str);
+
+I see a message that clearly indicates that the token string 'x' was copied.

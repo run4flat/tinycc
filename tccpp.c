@@ -2304,6 +2304,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		 * current compilation context. */
 		define_push(to->tok, from->sym_define->type.t, to_stream, first_arg); /* sym_define is now set */
 	}
+  printf("Just copied token with string %s\n", from->str);
 }
 
 Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
