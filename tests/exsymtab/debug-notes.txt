@@ -752,3 +752,5 @@ calls tcc_get_symbol with a compiler state (already compiled) of NULL! This
 means that the wrapping code in the test suite is failing somehow. Of course! I
 never set up the state pointers in the callback struct! And just like that, test
 28 passes!
+
+Applying identical fixups to test 29 fixes that test suite as well.
