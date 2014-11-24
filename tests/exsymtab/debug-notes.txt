@@ -717,3 +717,6 @@ tokens. In fact, the ASCII value 40 is the character '('!!! So it looks like it
 is simply trying to copy this ASCII value. This means that token values less
 than tok_start should be copied as-is, and only values larger than or equal to
 tok_start should be modified.
+
+Having fixed that, I now get a segfault after test 8 passes. Perhaps this is an
+issue with the extended symbol data not being initialized?

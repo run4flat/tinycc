@@ -91,9 +91,10 @@ void sym_used (char * name, int len, void * data) {
 
 /* ---- code for setting up the second compiler state ---- */
 
-#define SETUP_SECOND_CALLBACK_DATA      \
-	second_callback_data callback_data; \
-	callback_data.first_symtab = my_symtab
+#define SETUP_SECOND_CALLBACK_DATA(state)   \
+	second_callback_data callback_data;     \
+	callback_data.first_symtab = my_symtab; \
+	callback_data.first_context = state
 
 #define setup_and_compile_second_state(s, code)                 \
 	if (!s) return 1;                                           \
