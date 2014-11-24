@@ -2208,7 +2208,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 	 * statements) have a non-null d field, which points to an int string that
 	 * only contains a single zero-valued int. */
 	if (from->sym_define == NULL || from->sym_define->d == NULL) {
-		to->sim_define = NULL;
+		to->sym_define = NULL;
 	}
 	/* Otherwise, we need to copy it and update all of the token values. I
 	 * refrain from using the tok_str_* functions because I already have the
@@ -2224,7 +2224,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		memcpy(to_stream, from_stream, sizeof(int) * len);
 		
 		/* Get the starting token's id, used for correct extended table lookups */
-		int tok_start = symtab[0].tok;
+		int tok_start = symtab[0]->tok;
 		
 		/* Update TokenSym references to point to TokenSyms in the current
 		 * compiler context. Most of this code involves stepping over the other
@@ -2283,7 +2283,9 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		Sym *first_arg, *curr_from_arg, *newest_arg, **p_curr_arg;
 		first_arg = NULL;
 		p_curr_arg = &first_arg;
-		for (curr_from_arg = from->next; curr_from_arg != NULL; curr_from_arg = curr_from_arg->next) {
+		for (curr_from_arg = from->sym_define->next; curr_from_arg != NULL;
+			curr_from_arg = curr_from_arg->next
+		) {
 			/* Get local TokenSym associated with curr_from_arg */
 			int from_tok = (curr_from_arg->v & ~SYM_FIELD) - tok_start;
 			TokenSym * local_ts = get_local_ts_for_extended_ts(symtab[from_tok],
@@ -2292,12 +2294,12 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 			newest_arg = sym_push2(&define_stack, local_ts->tok | SYM_FIELD,
 				local_ts->sym_define->type.t, 0);
 			*p_curr_arg = newest_arg;
-			p_curr_arg = newest_arg->next;
+			p_curr_arg = &newest_arg->next;
 		}
 		
 		/* Now that we have all the moving parts, add the preprocessor to the
 		 * current compilation context. */
-		define_push(to->tok, from->t, to_stream, first_arg); /* sym_define is now set */
+		define_push(to->tok, from->sym_define->type.t, to_stream, first_arg); /* sym_define is now set */
 	}
 }
 
@@ -2305,7 +2307,7 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	if (from == NULL) return NULL;
 	
 	/* Get the starting token's id, used for correct extended table lookups */
-	int tok_start = symtab[0].tok;
+	int tok_start = symtab[0]->tok;
 	
 	/* Copy the flags from the "from" sym */
 	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
@@ -2316,7 +2318,7 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	to_type.t = from->type.t;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
 		/* Get the from->type.ref's token and look for it here */
-		if (from->type.ref | SYM_FIRST_ANOM) {
+		if (from->type.t | SYM_FIRST_ANOM) {
 			/* Anonymous symbol; just copy it. */
 			to_type.ref = copy_extended_sym(symtab, from->type.ref,
 				anon_sym++);
@@ -2338,8 +2340,8 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	/* Copy the assembler label, if present */
 	if (from->asm_label != NULL) {
 		int asm_label_len = strlen(from->asm_label) + 1;
-		s.asm_label = tcc_malloc(asm_label_len);
-		memcpy(s.asm_label, from->asm_label, asm_label_len);
+		s->asm_label = tcc_malloc(asm_label_len);
+		memcpy(s->asm_label, from->asm_label, asm_label_len);
 	}
 	
 	/* All done unless we have a next field to copy as well. */
@@ -2350,15 +2352,15 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	/* Get the from->type.ref's token and look for it here */
 	if (next->v | SYM_FIRST_ANOM) {
 		/* Anonymous symbol; just copy it. */
-		to.next = copy_extended_sym(symtab, next->type.ref,
+		s->next = copy_extended_sym(symtab, next->type.ref,
 			anon_sym++);
 	}
 	else {
 		/* Not anonymous: get the tokensym */
 		TokenSym* orig_ts = symtab[next->v - tok_start];
 		TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
-		if (next->v | SYM_STRUCT) to.next = local_ts->sym_struct;
-		else to.next = local_ts->sym_identifier;
+		if (next->v | SYM_STRUCT) s->next = local_ts->sym_struct;
+		else s->next = local_ts->sym_identifier;
 	}
 	
 	return s;

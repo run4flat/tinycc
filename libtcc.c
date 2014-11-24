@@ -1056,7 +1056,7 @@ LIBTCCAPI TCCState *tcc_new(void)
     
     /* Extended symbol table API */
     s->symtab_name_callback = NULL;
-    s->symtab_number_callback = NULL;
+    s->symtab_sym_used_callback = NULL;
     s->symtab_callback_data = NULL;
     return s;
 }
@@ -2062,36 +2062,6 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
-	
-	/* Handle the extended case next. We know that copies of the extended symbols live
-	 * outside of the "global" symbol stack, but "old" points to a copy that lives on
-	 * the global symbol stack and will be destroyed after copy_extended_symtab returns.
-	 * Since we know that the original extended symbol will stick around, we simply
-	 * use that. */
-	if (old->v >= SYM_EXTENDED) {
-		TokenSym* tsym;
-		/* Call the extended symbol lookup. */
-		if (s->symtab_number_callback == NULL) {
-			tcc_error_noabort("exsymtab copy found extended symbol but no symtab_number_callback");
-			return NULL;
-		}
-		tsym = s->symtab_number_callback(old->v, s->symtab_callback_data, 0);
-		if (tsym == NULL) {
-			tcc_error_noabort("exsymtab copy unable to locate extended symbol for token %x", old->v);
-			return NULL;
-		}
-		if (old->v & SYM_STRUCT) {
-			if (tsym->sym_struct == NULL)
-				tcc_error_noabort("exsymtab copy found extended token but no struct symbol for \"%s\" (%x)",
-					tsym->str, old->v);
-			return tsym->sym_struct;
-		}
-		/* maybe this is ok??? */
-		if (tsym->sym_identifier == NULL)
-			tcc_warning("exsymtab copy found extended token but no identifier symbol for \"%s\" (%x)",
-				tsym->str, old->v);
-		return tsym->sym_identifier;
-	}
 	
 	/* Check the global symbol stack. */
 	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, global_stack);

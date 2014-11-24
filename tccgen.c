@@ -273,14 +273,10 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
 ST_FUNC Sym *global_identifier_push(int v, int t, int c)
 {
     Sym *s, **ps;
-    TokenSym *ts;
     s = sym_push2(&global_stack, v, t, c);
     /* don't record anonymous symbol */
     if ((v & ~SYM_EXTENDED) < SYM_FIRST_ANOM) {
-    	if (v & SYM_EXTENDED) ts = tcc_state->symtab_number_callback(
-					v, tcc_state->symtab_callback_data, 0);
-		else ts = table_ident[v - TOK_IDENT];
-        ps = &ts->sym_identifier;
+        ps = &table_ident[v - TOK_IDENT]->sym_identifier;
         /* modify the top most local identifier, so that
            sym_identifier will point to 's' when popped */
         while (*ps != NULL)
@@ -309,9 +305,7 @@ ST_FUNC void sym_pop(Sym **ptop, Sym *b)
         /* remove symbol in token array */
         /* XXX: simplify */
         if (!(v & SYM_FIELD) && (v & ~(SYM_STRUCT|SYM_EXTENDED)) < SYM_FIRST_ANOM) {
-            if (v & SYM_EXTENDED) ts = tcc_state->symtab_number_callback(
-					v, tcc_state->symtab_callback_data, 0);
-			else ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
+            ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
             if (v & SYM_STRUCT)
                 ps = &ts->sym_struct;
             else
