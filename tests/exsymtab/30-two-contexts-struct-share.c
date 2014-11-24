@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 	TCCState *s1 = tcc_new();
 	TokenSym_p* my_symtab;
 	setup_and_compile_s1(my_symtab, first_code);
-	SETUP_SECOND_CALLBACK_DATA;
+	SETUP_SECOND_CALLBACK_DATA(s1);
 	
 	/* ---- Allocate a point and manually unpack it ---- */
 	void* (*allocate_ptr)(int, int) = tcc_get_symbol(s1, "new_point");

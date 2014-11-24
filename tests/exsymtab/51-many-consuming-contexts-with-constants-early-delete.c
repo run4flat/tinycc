@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 	
 	/* ---- Compile the second string ---- */
 	
-	SETUP_SECOND_CALLBACK_DATA;
+	SETUP_SECOND_CALLBACK_DATA(s1);
 	TCCState *s_first = tcc_new();
 	setup_and_compile_second_state(s_first, first_code);
 	tcc_add_symbol(s_first, "fib_of_5", fib5);
