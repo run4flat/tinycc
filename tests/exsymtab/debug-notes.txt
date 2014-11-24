@@ -706,3 +706,14 @@ that means tok_start IS the first extended tokensym value, which it should not
 be! This led me to an erroneous setting of the tok field for TokenSyms in
 copy_extended_symtab, now fixed. That gives me a new error:
   <string>:1: error: Internal error in extended symtab copy: token in define stream (28) was less than tok_start (46F)
+
+Now that tok_start looks right, what can I say about the token in the stream? It
+seems much too small. It's the 40th token symbol. This problem arises with the
+preprocessor definition:
+  #define MAX(first, second) (first < second ? second : first)
+
+My hunch is that such tokens *are* allowed, that they are just the low-value
+tokens. In fact, the ASCII value 40 is the character '('!!! So it looks like it
+is simply trying to copy this ASCII value. This means that token values less
+than tok_start should be copied as-is, and only values larger than or equal to
+tok_start should be modified.

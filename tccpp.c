@@ -2265,16 +2265,17 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 			#endif
 					break;
 				default:
-					if (from_stream[len] < tok_start) {
-						tcc_error("Internal error in extended symtab copy: token in define stream (%X) was less than tok_start (%X)",
-							from_stream[len], tok_start);
+					if (from_stream[len] >= tok_start) {
+						/* This is the case for an arbitrary token. Get a local
+						 * token and replace the token stream's value with the
+						 * local token's tok id. */
+						to_stream[len] = get_local_ts_for_extended_ts(
+							symtab[from_stream[len] - tok_start], symtab)->tok;
 					}
+					/* Any token value less than tok_start refers to a value in
+					 * the symbol table that is pre-defined, such as the C
+					 * language key words (struct, case) and the ASCII letters. */
 					
-					/* This is the case for an arbitrary token. Get a local
-					 * token and replace the token stream's value with the
-					 * local token's tok id. */
-					to_stream[len] = get_local_ts_for_extended_ts(
-						symtab[from_stream[len] - tok_start], symtab)->tok;
 					
 					break;
 			}
