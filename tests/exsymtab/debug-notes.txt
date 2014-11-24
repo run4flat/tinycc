@@ -765,3 +765,22 @@ placed this print statement at the end of copy_extended_tokensym:
   printf("Just copied token with string %s\n", from->str);
 
 I see a message that clearly indicates that the token string 'x' was copied.
+The next logical step would be whether the field is correctly added to the
+struct Sym's list of fields, which is performed by the copy_extended_sym
+function just below. I added a couple of print statements to the anonymous
+and non-anonymous "next" copy blocks in that block, i.e. 
+  printf("** next points to anonymous symbol with token id %X\n", next->v);
+and
+  printf("** next points to token id %X, named %s\n", next->v, orig_ts->str);
+in the "if (next->v | SYM_FIRST_ANOM)" and "else" blocks, respectively. The very
+surprising result is that I get the first printf, but next->v does not look
+right! That is, I get
+  ** next points to anonymous symbol with token id 10000472
+The problem here is that SYM_FIRST_ANOM is defined in tcc.h as 0x08000000, which
+explicitly does NOT show up in this list of bits! How then does it get through
+the if block and into this chunk of code? Argh! Another print statement made it
+obvious. This code:
+  printf("** masked, that comes to %X\n", next->v | SYM_FIRST_ANOM);
+led to this output:
+  ** masked, that comes to 18000472
+And it becomes quite obvious I want a bitwise AND, not bitwise OR!

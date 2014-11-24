@@ -2304,7 +2304,6 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		 * current compilation context. */
 		define_push(to->tok, from->sym_define->type.t, to_stream, first_arg); /* sym_define is now set */
 	}
-  printf("Just copied token with string %s\n", from->str);
 }
 
 Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
@@ -2354,7 +2353,9 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	/* Copy the next field */
 	Sym * next = from->next;
 	/* Get the from->type.ref's token and look for it here */
-	if (next->v | SYM_FIRST_ANOM) {
+	if (next->v & SYM_FIRST_ANOM) {
+printf("** next points to anonymous symbol with token id %X\n", next->v);
+printf("** masked, that comes to %X\n", next->v | SYM_FIRST_ANOM);
 		/* Anonymous symbol; just copy it. */
 		s->next = copy_extended_sym(symtab, next->type.ref,
 			anon_sym++);
@@ -2362,6 +2363,7 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	else {
 		/* Not anonymous: get the tokensym */
 		TokenSym* orig_ts = symtab[next->v - tok_start];
+printf("** next points to token id %X, named %s\n", next->v, orig_ts->str);
 		TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
 		if (next->v | SYM_STRUCT) s->next = local_ts->sym_struct;
 		else s->next = local_ts->sym_identifier;
