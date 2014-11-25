@@ -2403,6 +2403,13 @@ printf("from_next->r is %ld and from_next->c is %ld\n", from_next->r, from_next-
 		psnext = &((*psnext)->next);
 	}
 	
+/* Check the next fields of our about-to-be-returned s */
+Sym * next = s->next;
+int i;
+for(i = 0; next; i++) {
+printf("%dth element in next list has token %X\n", i, next->v);
+next = next->next;
+}
 	return s;
 }
 

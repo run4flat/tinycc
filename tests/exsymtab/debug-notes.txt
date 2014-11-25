@@ -822,4 +822,16 @@ of other nice pieces):
   from_next->r is 0 and from_next->c is 4
 
 These are the correct values for these two arguments, and the new token id has
-the field bit correctly set (SYM_FIELD = 0x10000000).
+the field bit correctly set (SYM_FIELD = 0x10000000). I must look elsewhere. One
+option is to examine the final sym returned by the function. To check this, I
+added a little loop just before returning that checks the contents of the next
+list, and was surprised to get this output:
+
+  ...
+  108744th element in next list has token 10000471
+  108745th element in next list has token 10000471
+  108746th element in next list has token 10000471
+  ...
+
+It looks like the x field refers back to itself. I'm not sure how the compiler
+manages to use this list without going into an infinite loop.
