@@ -842,6 +842,9 @@ AND NOW TEST 30 PASSES! HURRAY!
 
 Time to clean up those printfs.
 
+Alright, now on to test 35. Without any additional modifications, test 35
+segfaults after test 4.
+
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 

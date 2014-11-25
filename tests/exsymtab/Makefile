@@ -75,3 +75,7 @@ PROVES =	\
 all test: $(TESTS)
 
 prove: $(PROVES)
+
+curr-test: 35-two-contexts-vtable-share.test
+curr-prove: 35-two-contexts-vtable-share.prove
+curr-dbg: 35-two-contexts-vtable-share.dbg
