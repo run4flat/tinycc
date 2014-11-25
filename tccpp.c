@@ -2319,6 +2319,10 @@ void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
 			to_type->ref = copy_extended_sym(symtab, from->type.ref,
 				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
 		}
+		else if (from->type.ref->v == SYM_FIELD) {
+			/* Anonymous symbol; just copy it. */
+			to_type->ref = copy_extended_sym(symtab, from->type.ref, SYM_FIELD);
+		}
 		else {
 			/* Not anonymous: get the tokensym */
 			int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
@@ -2368,6 +2372,15 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 			/* Anonymous symbol; not attached to a TokenSym, so just copy it. */
 			*psnext = copy_extended_sym(symtab, from_next,
 				anon_sym++ | (from_next->v & (SYM_STRUCT | SYM_FIELD)));
+			/* copy_extended_sym is a recursive function call which copied the
+			 * remaining elements of the next chain. Thus, we're done. */
+			return s;
+		}
+		else if (from_next->v == SYM_FIELD) {
+			/* This is an anonymous symbol associated with pointers, arrays, and
+			 * function declarations (tccgen.c in post_type). As above, just
+			 * copy it. */
+			*psnext = copy_extended_sym(symtab, from_next, SYM_FIELD);
 			/* copy_extended_sym is a recursive function call which copied the
 			 * remaining elements of the next chain. Thus, we're done. */
 			return s;

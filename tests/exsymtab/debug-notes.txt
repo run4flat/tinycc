@@ -863,7 +863,26 @@ Aha! The if condition for anonymous type.ref was
 which obviously should be
   from->type.ref->v & SYM_FIRST_ANOM
 
-and that fixes the stack overflow.
+and that fixes the stack overflow. Unfortunately, I get a different segfault,
+this time at this data access later in the same function:
+  symtab[from->type.ref->v - tok_start];
+
+This segfault is due to the fact that from->type.ref->v has the value of
+0x10000000. This is exactly equal to the SYM_FIELD flag, leaving me with little
+to go on except that somewhere a Sym is created with *just* the SYM_FIELD token
+as flag. This I can easily work with, by simply adding a check for 
+  from->type.ref->v == SYM_FIELD
+
+in which case I use code nearly identical to the anonymous symbol copy. But, I
+want to be sure that this is the right behavior before doing that. The debugger
+reveals that this problem crops up during the copy of the first Sym in the next
+linked list. Does this sort of thing happen regularly with function pointers?
+
+The answer is provided in mk_pointer, as well as the behavior of post_type in
+the vicinity of line 3315 and 3363. In all of these, a bare SYM_FIELD indicates
+a kind of anonymous symbol, which can be copied with the exact same token id.
+
+That squashed *that* segfault, leaving me with yet another.
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
