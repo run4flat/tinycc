@@ -2306,39 +2306,48 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 	}
 }
 
-Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
-	if (from == NULL) return NULL;
-	
-	/* Get the starting token's id, used for correct extended table lookups */
-	int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
-	
-	/* Copy the flags from the "from" sym */
-	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
-	
-	/* Make sure the CType refers to Syms in the current compiler context */
-	CType to_type;
+/* Copy the CType information from an extended sym into a local CType. The hard
+ * part here is finding the local tokensym associated with the type.ref field,
+ * which is only an issue if the type is a pointer, struct, or function. */
+void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
 	int btype = from->type.t & VT_BTYPE;
-	to_type.t = from->type.t;
+	to_type->t = from->type.t;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
 		/* Get the from->type.ref's token and look for it here */
 		if (from->type.ref->v | SYM_FIRST_ANOM) {
 			/* Anonymous symbol; just copy it. */
-			to_type.ref = copy_extended_sym(symtab, from->type.ref,
+			to_type->ref = copy_extended_sym(symtab, from->type.ref,
 				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
 		}
 		else {
 			/* Not anonymous: get the tokensym */
+			int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 			TokenSym* orig_ts = symtab[from->type.ref->v - tok_start];
 			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
-			if (btype == VT_STRUCT) to_type.ref = local_ts->sym_struct;
-			else to_type.ref = local_ts->sym_identifier;
+			if (btype == VT_STRUCT) to_type->ref = local_ts->sym_struct;
+			else to_type->ref = local_ts->sym_identifier;
 		}
 	}
+}
+
+/* Gets a local TokenSym pointer for a given extended TokenSym of the given tok,
+ * and adds the extended tok's flags to the local tok's id. */
+int get_local_tok_for_extended_tok(int orig_tok, TokenSym** symtab) {
+	int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+	int orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD);      /* strip flags  */
+	TokenSym* orig_ts = symtab[orig_tok_no_fields - tok_start];         /* get ext ts   */
+	TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab); /* get local ts */
+	return local_ts->tok | (orig_tok & (SYM_STRUCT | SYM_FIELD));       /* add flags    */
+}
+
+Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
+	if (from == NULL) return NULL;
 	
-	/* Create the new symbol on the current symbol stack */
+	/* Copy the flags and CType from the "from" sym and push on the symbol stack */
+	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+	CType to_type;
+	copy_ctype(&to_type, from, symtab);
 	Sym * s = sym_push(to_tok, &to_type, from->r, from->c);
-	
-	/* Copy over a few more bits. See copy_extended_symtab for details. */
 	
 	/* Copy the assembler label, if present */
 	if (from->asm_label != NULL) {
@@ -2346,55 +2355,31 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 		s->asm_label = tcc_malloc(asm_label_len);
 		memcpy(s->asm_label, from->asm_label, asm_label_len);
 	}
-	// can't just copy_extended_sym: must determine tok, which may involve anon flag
-//	s->next = copy_extended_sym(symtab, from->next, 
 	
 	/* All done unless we have a next field to copy as well. */
 	if (from->next == NULL) return s;
 	
-	/* Copy the next field, which unfortunately duplicates a lot of the above */
+	/* Copy the linked list started in the next field. Much of this code
+	 * resembles copy_ctype, unfortunately. */
 	Sym * from_next = from->next;
 	Sym **psnext = &s->next;
 	while (from_next) {
-		/* Get the from->type.ref's token and look for it here */
 		if (from_next->v & SYM_FIRST_ANOM) {
-			/* Anonymous symbol; just copy it. */
+			/* Anonymous symbol; not attached to a TokenSym, so just copy it. */
 			*psnext = copy_extended_sym(symtab, from_next,
 				anon_sym++ | (from_next->v & (SYM_STRUCT | SYM_FIELD)));
+			/* copy_extended_sym is a recursive function call which copied the
+			 * remaining elements of the next chain. Thus, we're done. */
 			return s;
 		}
-		else {
-			/* Not anonymous: get the tokensym */
-			int orig_tok = from_next->v & ~(SYM_STRUCT | SYM_FIELD);
-			TokenSym* orig_ts = symtab[orig_tok - tok_start];
-			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
-			
-			/* Push a Sym copy to the symbol stack, preserving fields. The hard
-			 * part, honestly, is getting the CType right. */
-			int new_tok = local_ts->tok | (from_next->v & (SYM_STRUCT | SYM_FIELD));
-			/* Make sure the CType refers to Syms in the current compiler context */
-			CType new_next_type = {0, 0};
-			int btype = from_next->type.t & VT_BTYPE;
-			new_next_type.t = from_next->type.t;
-			if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-				/* Get the from_next->type.ref's token and look for it here */
-				if (from_next->type.ref->v | SYM_FIRST_ANOM) {
-					/* Anonymous symbol; just copy it. */
-					to_type.ref = copy_extended_sym(symtab, from_next->type.ref,
-						anon_sym++ | (from_next->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
-				}
-				else {
-					/* Not anonymous: get the tokensym */
-					int orig_tok = from_next->type.ref->v & ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED);
-					TokenSym* orig_ts = symtab[orig_tok - tok_start];
-					TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
-					if (btype == VT_STRUCT) new_next_type.ref = local_ts->sym_struct;
-					else new_next_type.ref = local_ts->sym_identifier;
-				}
-			}
-			/* Push, now that the CType is all set up. */
-			*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
-		}
+		
+		/* Push a copy of the Sym to the local symbol stack. */
+		int new_tok = get_local_tok_for_extended_tok(from_next->v, symtab);
+		CType new_next_type;
+		copy_ctype(&new_next_type, from_next, symtab);
+		*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
+		
+		/* Cycle the pointers. */
 		from_next = from_next->next;
 		psnext = &((*psnext)->next);
 	}
