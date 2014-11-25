@@ -2314,7 +2314,6 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	
 	/* Copy the flags from the "from" sym */
 	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
-printf("to_tok is %X\n", to_tok);
 	
 	/* Make sure the CType refers to Syms in the current compiler context */
 	CType to_type;
@@ -2360,7 +2359,6 @@ printf("to_tok is %X\n", to_tok);
 		/* Get the from->type.ref's token and look for it here */
 		if (from_next->v & SYM_FIRST_ANOM) {
 			/* Anonymous symbol; just copy it. */
-printf("Copying anonymous symbol for token %X\n", from_next->v);
 			*psnext = copy_extended_sym(symtab, from_next,
 				anon_sym++ | (from_next->v & (SYM_STRUCT | SYM_FIELD)));
 			return s;
@@ -2374,7 +2372,6 @@ printf("Copying anonymous symbol for token %X\n", from_next->v);
 			/* Push a Sym copy to the symbol stack, preserving fields. The hard
 			 * part, honestly, is getting the CType right. */
 			int new_tok = local_ts->tok | (from_next->v & (SYM_STRUCT | SYM_FIELD));
-printf("Copying from old tok %X (%s) to new tok %X\n", from_next->v, orig_ts->str, new_tok);
 			/* Make sure the CType refers to Syms in the current compiler context */
 			CType new_next_type = {0, 0};
 			int btype = from_next->type.t & VT_BTYPE;
@@ -2396,20 +2393,12 @@ printf("Copying from old tok %X (%s) to new tok %X\n", from_next->v, orig_ts->st
 				}
 			}
 			/* Push, now that the CType is all set up. */
-printf("from_next->r is %ld and from_next->c is %ld\n", from_next->r, from_next->c);
 			*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
 		}
 		from_next = from_next->next;
 		psnext = &((*psnext)->next);
 	}
 	
-/* Check the next fields of our about-to-be-returned s */
-Sym * next = s->next;
-int i;
-for(i = 0; next; i++) {
-printf("%dth element in next list has token %X\n", i, next->v);
-next = next->next;
-}
 	return s;
 }
 
