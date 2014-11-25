@@ -792,3 +792,23 @@ field-not-found problem.
 
 The next step will be to examine how struct fields are set up and stored, and to
 set a dbg breakpoint on tccpp.c:2354 to step through how my fields are copied.
+
+Line 3944 of tccgen.c suggests that the token ids of struct elements---the v
+field of the Sym in the linked list of next fields---includes the SYM_FIELD
+flag. This seems to be true based on tccgen.c:2984:
+  ss = sym_push(v | SYM_FIELD, &type1, 0, offset);
+
+This observation has led me to attempt a nontrivial addition to
+copy_extended_sym, but it has yet to bear fruit.
+
+November 25, 2014
+=================
+
+As I prepared for bed last night, I realized why all of the modifications I made
+(late) last night were not doing any good. Nearly all of those changes focused
+on CType of Syms that are in the next field of another Sym. However, the test
+that I'm working with (#30) involves a struct of basic types (ints) and don't
+exercise the code paths that I was modifying. That's why most of hte changes I
+made last night gave no change in behavior.
+
+What differentiates the behavior of tccpp.c line 2399 and tccgen.c line 2984?

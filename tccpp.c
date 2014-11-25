@@ -2314,6 +2314,7 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	
 	/* Copy the flags from the "from" sym */
 	to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+printf("to_tok is %X\n", to_tok);
 	
 	/* Make sure the CType refers to Syms in the current compiler context */
 	CType to_type;
@@ -2321,10 +2322,10 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 	to_type.t = from->type.t;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
 		/* Get the from->type.ref's token and look for it here */
-		if (from->type.t | SYM_FIRST_ANOM) {
+		if (from->type.ref->v | SYM_FIRST_ANOM) {
 			/* Anonymous symbol; just copy it. */
 			to_type.ref = copy_extended_sym(symtab, from->type.ref,
-				anon_sym++);
+				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
 		}
 		else {
 			/* Not anonymous: get the tokensym */
@@ -2346,25 +2347,59 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
 		s->asm_label = tcc_malloc(asm_label_len);
 		memcpy(s->asm_label, from->asm_label, asm_label_len);
 	}
+	// can't just copy_extended_sym: must determine tok, which may involve anon flag
+//	s->next = copy_extended_sym(symtab, from->next, 
 	
 	/* All done unless we have a next field to copy as well. */
 	if (from->next == NULL) return s;
 	
-	/* Copy the next field */
-	Sym * next = from->next;
-	/* Get the from->type.ref's token and look for it here */
-	if (next->v & SYM_FIRST_ANOM) {
-		/* Anonymous symbol; just copy it. */
-		s->next = copy_extended_sym(symtab, next->type.ref,
-			anon_sym++);
-	}
-	else {
-		/* Not anonymous: get the tokensym */
-		int orig_tok = next->v & ~(SYM_STRUCT | SYM_FIELD);
-		TokenSym* orig_ts = symtab[orig_tok - tok_start];
-		TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
-		if (next->v | SYM_STRUCT) s->next = local_ts->sym_struct;
-		else s->next = local_ts->sym_identifier;
+	/* Copy the next field, which unfortunately duplicates a lot of the above */
+	Sym * from_next = from->next;
+	Sym **psnext = &s->next;
+	while (from_next) {
+		/* Get the from->type.ref's token and look for it here */
+		if (from_next->v & SYM_FIRST_ANOM) {
+			/* Anonymous symbol; just copy it. */
+printf("Copying anonymous symbol for token %X\n", from_next->v);
+			*psnext = copy_extended_sym(symtab, from_next,
+				anon_sym++ | (from_next->v & (SYM_STRUCT | SYM_FIELD)));
+			return s;
+		}
+		else {
+			/* Not anonymous: get the tokensym */
+			int orig_tok = from_next->v & ~(SYM_STRUCT | SYM_FIELD);
+			TokenSym* orig_ts = symtab[orig_tok - tok_start];
+			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
+			
+			/* Push a Sym copy to the symbol stack, preserving fields. The hard
+			 * part, honestly, is getting the CType right. */
+			int new_tok = local_ts->tok | (from_next->v & (SYM_STRUCT | SYM_FIELD));
+printf("Copying from old tok %X (%s) to new tok %X\n", from_next->v, orig_ts->str, new_tok);
+			/* Make sure the CType refers to Syms in the current compiler context */
+			CType new_next_type = {0, 0};
+			int btype = from_next->type.t & VT_BTYPE;
+			new_next_type.t = from_next->type.t;
+			if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+				/* Get the from_next->type.ref's token and look for it here */
+				if (from_next->type.ref->v | SYM_FIRST_ANOM) {
+					/* Anonymous symbol; just copy it. */
+					to_type.ref = copy_extended_sym(symtab, from_next->type.ref,
+						anon_sym++ | (from_next->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
+				}
+				else {
+					/* Not anonymous: get the tokensym */
+					int orig_tok = from_next->type.ref->v & ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED);
+					TokenSym* orig_ts = symtab[orig_tok - tok_start];
+					TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
+					if (btype == VT_STRUCT) new_next_type.ref = local_ts->sym_struct;
+					else new_next_type.ref = local_ts->sym_identifier;
+				}
+			}
+			/* Push, now that the CType is all set up. */
+			*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
+		}
+		from_next = from_next->next;
+		psnext = &((*psnext)->next);
 	}
 	
 	return s;
