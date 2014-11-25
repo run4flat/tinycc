@@ -2396,6 +2396,7 @@ printf("Copying from old tok %X (%s) to new tok %X\n", from_next->v, orig_ts->st
 				}
 			}
 			/* Push, now that the CType is all set up. */
+printf("from_next->r is %ld and from_next->c is %ld\n", from_next->r, from_next->c);
 			*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
 		}
 		from_next = from_next->next;

@@ -812,3 +812,14 @@ exercise the code paths that I was modifying. That's why most of hte changes I
 made last night gave no change in behavior.
 
 What differentiates the behavior of tccpp.c line 2399 and tccgen.c line 2984?
+Well, obviously, the last two arguments to sym_push in the tccgen.c code are 0
+and offset. These should be the values found in from_next->r and from_next->c.
+Is this the case? To find out, I added a printf and I have (along with a couple
+of other nice pieces):
+  Copying from old tok 10000472 (x) to new tok 50000471
+  from_next->r is 0 and from_next->c is 0
+  Copying from old tok 10000473 (yval) to new tok 50000472
+  from_next->r is 0 and from_next->c is 4
+
+These are the correct values for these two arguments, and the new token id has
+the field bit correctly set (SYM_FIELD = 0x10000000).
