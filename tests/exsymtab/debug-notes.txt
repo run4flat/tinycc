@@ -843,7 +843,27 @@ AND NOW TEST 30 PASSES! HURRAY!
 Time to clean up those printfs.
 
 Alright, now on to test 35. Without any additional modifications, test 35
-segfaults after test 4.
+segfaults after test 4. GDB reports a segfault on line 2093 of tccpp.c, and a
+backtrace reveals infinite recursion (and therefore stack overflow). Apparently
+copy_ctype itself calls copy_extended_sym, which calls copy_ctype, etc. This all
+arises from the copy of a function pointer, which is an element of a struct.
+Here are my notes from a debugging session:
+
+  1. From the backtrace, we see that copy_extended_sym gets called by 
+     copy_extended_tokensym, almost assuredly to copy the point struct's layout.
+  2. The entry point in our infinite recursion is the copy of the function
+     pointer's ctype (as confirmed by looking at the from_next->c field in the
+     calling frame).
+  3. The function pointer's CType has a basic type of pointer, unsurprisingly,
+     so we start the ref copy logic in copy_ctype...
+
+Aha! The if condition for anonymous type.ref was
+  from->type.ref->v | SYM_FIRST_ANOM
+
+which obviously should be
+  from->type.ref->v & SYM_FIRST_ANOM
+
+and that fixes the stack overflow.
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.

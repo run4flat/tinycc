@@ -2314,7 +2314,7 @@ void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
 	to_type->t = from->type.t;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
 		/* Get the from->type.ref's token and look for it here */
-		if (from->type.ref->v | SYM_FIRST_ANOM) {
+		if (from->type.ref->v & SYM_FIRST_ANOM) {
 			/* Anonymous symbol; just copy it. */
 			to_type->ref = copy_extended_sym(symtab, from->type.ref,
 				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
