@@ -3941,6 +3941,7 @@ ST_FUNC void unary(void)
             s = vtop->type.ref;
             /* find field */
             tok |= SYM_FIELD;
+            tok &= ~SYM_EXTENDED;
 printf("Looking for token %X (%s)\n", tok, get_tok_str(tok & ~SYM_FIELD, NULL));
             while ((s = s->next) != NULL) {
                 if (s->v == tok)

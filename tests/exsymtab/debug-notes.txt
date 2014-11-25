@@ -838,6 +838,9 @@ problem is quite clear now: the token id for "x" includes the extended symbol
 flag, which was not included in the token id in the sym in the next field. This
 means I need to mask off the extended token bit before the search.
 
+AND NOW TEST 30 PASSES! HURRAY!
+
+Time to clean up those printfs.
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
