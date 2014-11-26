@@ -22,10 +22,10 @@ TESTS =	\
  20-two-contexts-define-share.test \
  25-two-contexts-intertwined-preprocessor-macro.test \
  28-three-contexts-intertwined-preprocessor-macro.test \
- 30-two-contexts-struct-share.test
-# 35-two-contexts-vtable-share.test \
-# 40-two-contexts-func-decl-share.test \
-# 42-three-contexts-func-share.test \
+ 30-two-contexts-struct-share.test \
+ 35-two-contexts-vtable-share.test \
+ 40-two-contexts-func-decl-share.test \
+ 42-three-contexts-func-share.test 
 # 45-two-contexts-func-share.test \
 # 47-many-consuming-contexts-func-share.test \
 # 48-many-consuming-contexts-delete.test \
@@ -40,10 +40,10 @@ PROVES =	\
  20-two-contexts-define-share.prove \
  25-two-contexts-intertwined-preprocessor-macro.prove \
  28-three-contexts-intertwined-preprocessor-macro.prove \
- 30-two-contexts-struct-share.prove
-# 35-two-contexts-vtable-share.prove \
-# 40-two-contexts-func-decl-share.prove \
-# 42-three-contexts-func-share.prove \
+ 30-two-contexts-struct-share.prove \
+ 35-two-contexts-vtable-share.prove \
+ 40-two-contexts-func-decl-share.prove \
+ 42-three-contexts-func-share.prove 
 # 45-two-contexts-func-share.prove \
 # 47-many-consuming-contexts-func-share.prove \
 # 48-many-consuming-contexts-delete.prove \
@@ -76,6 +76,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 35-two-contexts-vtable-share.test
-curr-prove: 35-two-contexts-vtable-share.prove
-curr-dbg: 35-two-contexts-vtable-share.dbg
+curr-test: 42-three-contexts-func-share.test
+curr-prove: 42-three-contexts-func-share.prove
+curr-dbg: 42-three-contexts-func-share.dbg
