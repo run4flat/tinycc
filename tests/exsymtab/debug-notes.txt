@@ -884,6 +884,15 @@ a kind of anonymous symbol, which can be copied with the exact same token id.
 
 That squashed *that* segfault, leaving me with yet another.
 
+The segfault arises on this line:
+  TokenSym* orig_ts = symtab[from->type.ref->v - tok_start];
+This gives trouble because from->type.ref->v has the value
+  0x20000471
+which clearly needs to be masked off. And now test 35 passes!
+
+
+
+
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 

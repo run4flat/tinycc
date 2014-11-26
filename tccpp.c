@@ -2325,8 +2325,9 @@ void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
 		}
 		else {
 			/* Not anonymous: get the tokensym */
-			int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
-			TokenSym* orig_ts = symtab[from->type.ref->v - tok_start];
+			int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD);
+			int tok_from = from->type.ref->v & ~(SYM_STRUCT | SYM_FIELD);
+			TokenSym* orig_ts = symtab[tok_from - tok_start];
 			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
 			if (btype == VT_STRUCT) to_type->ref = local_ts->sym_struct;
 			else to_type->ref = local_ts->sym_identifier;
