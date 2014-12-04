@@ -27,8 +27,8 @@ TESTS =	\
  40-two-contexts-func-decl-share.test \
  42-three-contexts-func-share.test \
  45-two-contexts-func-share.test \
- 47-many-consuming-contexts-func-share.test 
-# 48-many-consuming-contexts-delete.test \
+ 47-many-consuming-contexts-func-share.test \
+ 48-many-consuming-contexts-delete.test 
 # 49-many-consuming-contexts-early-delete.test \
 # 50-two-contexts-mixup.test \
 # 51-many-consuming-contexts-with-constants-early-delete.test \
@@ -45,8 +45,8 @@ PROVES =	\
  40-two-contexts-func-decl-share.prove \
  42-three-contexts-func-share.prove \
  45-two-contexts-func-share.prove \
- 47-many-consuming-contexts-func-share.prove 
-# 48-many-consuming-contexts-delete.prove \
+ 47-many-consuming-contexts-func-share.prove \
+ 48-many-consuming-contexts-delete.prove 
 # 49-many-consuming-contexts-early-delete.prove \
 # 50-two-contexts-mixup.prove \
 # 51-many-consuming-contexts-with-constants-early-delete.prove \
@@ -76,6 +76,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 47-many-consuming-contexts-func-share.test
-curr-prove: 47-many-consuming-contexts-func-share.prove
-curr-dbg: 47-many-consuming-contexts-func-share.dbg
+curr-test: 48-many-consuming-contexts-delete.test
+curr-prove: 48-many-consuming-contexts-delete.prove
+curr-dbg: 48-many-consuming-contexts-delete.dbg

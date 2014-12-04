@@ -1439,6 +1439,7 @@ a git bisect couldn't find, though. Turns out the local stack on/off logic was
 not quite right, so I made it simpler.
 
 With a couple of tcc_add_symbol lines commented out, test 47 now passes, too.
+The same is true for test 48.
 
 
 
