@@ -57,9 +57,7 @@ int main(int argc, char **argv) {
 	/* ---- Compile the second string ---- */
 	
 	TCCState *s2 = tcc_new();
-pass("foo");
 	setup_and_compile_second_state(s2, second_code);
-pass("bar");
 	tcc_add_symbol(s2, "fib", fib_def);
 	relocate_second_state(s2);
 	
