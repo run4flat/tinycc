@@ -1441,6 +1441,18 @@ not quite right, so I made it simpler.
 With a couple of tcc_add_symbol lines commented out, test 47 now passes, too.
 The same is true for test 48.
 
+AND NOW FOR SOMETHING INTERESTING. Test 49 passes WITHOUT MODIFICATION. That is,
+even with the tcc_add_symbol lines, it does not throw any errors. The difference
+between 49 and the previous two is that the tcc compiler states were deleted
+immediately after the machine code was relocated, preserving only the machine
+code and note the compiler state. In that case, the functions *do* need to be
+added, or I get an "undefined symbol 'fib'" error message! Put differently, if I
+keep the compiler states around, then tcc correctly "links" against previously
+compiled blocks of code.
+
+This, of course, suggests a different test, one in which I write two functions
+with the same name in non-shared contexts. Which one gets the linkage?
+
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
