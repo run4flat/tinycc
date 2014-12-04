@@ -7,10 +7,6 @@
 
 #include "test_setup.h"
 
-char decl_code[] =
-"int fib(int);"
-;
-
 char first_code[] =
 "int fib(int n)\n"
 "{\n"
@@ -51,7 +47,7 @@ int main(int argc, char **argv) {
 	
 	TCCState *s2 = tcc_new();
 	setup_and_compile_second_state(s2, second_code);
-	tcc_add_symbol(s2, "fib", fib_from_first);
+//	tcc_add_symbol(s2, "fib", fib_from_first);
 	relocate_second_state(s2);
 	
 	/* ---- Check the function pointer addresses ---- */

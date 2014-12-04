@@ -1414,6 +1414,28 @@ of sym_push into its own subfunction, I think it would be easier to just backup
 the current value of local_stack and set it to null upon entering the extended
 copy machinery, so that sym_push Just Works. This I can do in next_nomacro1!
 
+HURRAY! HURRAY! AT LONG LAST, IT WORKS! HURRAY!
+
+December 3, 2014
+================
+
+And, with no change, test 45 passes its test suite, too, though perhaps it
+shouldn't. In particular, when the "fib" symbol is added to the second compiler
+state, tcc issues an error ("defined twice"), but continues anyway.
+
+Tests 42 and 45 are fairly similar. The first one emulates a pre-compiled
+library together with a header file, only the latter of which is shared in the
+sense of extended symbol tables. The second emulates two compilation states in
+which the second one depends upon the first, and the first *defines* a function
+used in the second.
+
+Interestingly enough, if I *omit* the tcc_add_symbol call in test 45, IT WORKS!
+
+I am going to leave the line commented out, and make a note to address this idea
+later, when the rest of the test suite is up and running.
+
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
+
+Note: might be able to streamline external linkage of functions. See test 45.
