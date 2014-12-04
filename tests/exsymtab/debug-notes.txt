@@ -1453,7 +1453,9 @@ compiled blocks of code.
 This, of course, suggests a different test, one in which I write two functions
 with the same name in non-shared contexts. Which one gets the linkage?
 
-With the tcc_add_symbol line commented out, test 50 passes.
+With the tcc_add_symbol line commented out, test 50 passes. And as before, test
+51 passes without any modifications because it deletes it tcc states early and
+often.
 
 
 
