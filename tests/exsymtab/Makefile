@@ -25,8 +25,8 @@ TESTS =	\
  30-two-contexts-struct-share.test \
  35-two-contexts-vtable-share.test \
  40-two-contexts-func-decl-share.test \
- 42-three-contexts-func-share.test 
-# 45-two-contexts-func-share.test \
+ 42-three-contexts-func-share.test \
+ 45-two-contexts-func-share.test 
 # 47-many-consuming-contexts-func-share.test \
 # 48-many-consuming-contexts-delete.test \
 # 49-many-consuming-contexts-early-delete.test \
@@ -43,8 +43,8 @@ PROVES =	\
  30-two-contexts-struct-share.prove \
  35-two-contexts-vtable-share.prove \
  40-two-contexts-func-decl-share.prove \
- 42-three-contexts-func-share.prove 
-# 45-two-contexts-func-share.prove \
+ 42-three-contexts-func-share.prove \
+ 45-two-contexts-func-share.prove 
 # 47-many-consuming-contexts-func-share.prove \
 # 48-many-consuming-contexts-delete.prove \
 # 49-many-consuming-contexts-early-delete.prove \
@@ -76,6 +76,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 42-three-contexts-func-share.test
-curr-prove: 42-three-contexts-func-share.prove
-curr-dbg: 42-three-contexts-func-share.dbg
+curr-test: 45-two-contexts-func-share.test
+curr-prove: 45-two-contexts-func-share.prove
+curr-dbg: 45-two-contexts-func-share.dbg
