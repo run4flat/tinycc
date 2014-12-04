@@ -1434,6 +1434,10 @@ Interestingly enough, if I *omit* the tcc_add_symbol call in test 45, IT WORKS!
 I am going to leave the line commented out, and make a note to address this idea
 later, when the rest of the test suite is up and running.
 
+Now, though, when I run test 20, it dies with a segmentation fault. :-( Nothing
+a git bisect couldn't find, though. Turns out the local stack on/off logic was
+not quite right, so I made it simpler.
+
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
