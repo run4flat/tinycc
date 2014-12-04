@@ -29,8 +29,8 @@ TESTS =	\
  45-two-contexts-func-share.test \
  47-many-consuming-contexts-func-share.test \
  48-many-consuming-contexts-delete.test \
- 49-many-consuming-contexts-early-delete.test 
-# 50-two-contexts-mixup.test \
+ 49-many-consuming-contexts-early-delete.test \
+ 50-two-contexts-mixup.test 
 # 51-many-consuming-contexts-with-constants-early-delete.test \
 # 70-symtab-use-check.test
 
@@ -47,8 +47,8 @@ PROVES =	\
  45-two-contexts-func-share.prove \
  47-many-consuming-contexts-func-share.prove \
  48-many-consuming-contexts-delete.prove \
- 49-many-consuming-contexts-early-delete.prove 
-# 50-two-contexts-mixup.prove \
+ 49-many-consuming-contexts-early-delete.prove \
+ 50-two-contexts-mixup.prove 
 # 51-many-consuming-contexts-with-constants-early-delete.prove \
 # 70-symtab-use-check.prove
 
@@ -76,6 +76,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 49-many-consuming-contexts-early-delete.test
-curr-prove: 49-many-consuming-contexts-early-delete.prove
-curr-dbg: 49-many-consuming-contexts-early-delete.dbg
+curr-test: 50-two-contexts-mixup.test
+curr-prove: 50-two-contexts-mixup.prove
+curr-dbg: 50-two-contexts-mixup.dbg
