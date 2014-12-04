@@ -112,6 +112,19 @@ ST_FUNC void test_lvalue(void)
         expect("lvalue");
 }
 
+/* Provide a mechanism for turning the local_stack off and back on outside of
+ * the current static file scope. */
+ST_DATA local_stack_backup;
+void local_stack_off() {
+	if (local_stack != NULL) {
+		local_stack_backup = local_stack;
+		local_stack = NULL;
+	}
+}
+void local_stack_on() {
+	if (local_stack_backup) local_stack = local_stack_backup;
+}
+
 /* ------------------------------------------------------------------------- */
 /* symbol allocator */
 static Sym *__sym_malloc(void)

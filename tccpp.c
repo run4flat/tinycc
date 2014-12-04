@@ -2413,6 +2413,9 @@ Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
         }                                       \
         break;
 
+void local_stack_off ();
+void local_stack_on ();
+
 /* return next token without macro substitution */
 static inline void next_nomacro1(void)
 {
@@ -2581,7 +2584,11 @@ maybe_newline:
 				TokenSym** containing_symtab;
 				TokenSym * extended_ts = tcc_state->symtab_name_callback(
 					p1, len, tcc_state->symtab_callback_data, &containing_symtab);
-				if (extended_ts) copy_extended_tokensym(containing_symtab, extended_ts, ts);
+				if (extended_ts) {
+					local_stack_off(); /* backup */
+					copy_extended_tokensym(containing_symtab, extended_ts, ts);
+					local_stack_on();  /* restore */
+				}
 			}
         token_found: ;
         } else {

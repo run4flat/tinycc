@@ -891,9 +891,529 @@ This gives trouble because from->type.ref->v has the value
 which clearly needs to be masked off. And now test 35 passes!
 
 
+November 26, 2014
+=================
+
+Test 42 fails with 
+  <string>:5: error: 'fib' undeclared
+
+That's line 5 of the second code string, which is part of get_fib_address.
+
+
+line 3892
+
+Decmeber 1, 2014
+================
+
+Strange, strage behavior. Here is a gdb session that shows why things are weird:
+
+$ make curr-dbg
+(gdb) break 42-three-contexts-func-share.c:61
+Breakpoint 1 at 0x402244: file 42-three-contexts-func-share.c, line 61.
+(gdb) run
+Starting program: /home/dcmertens/projects/Perl/tinycc/tests/exsymtab/42-three-contexts-func-share.dbg lib_path=../..
+ok 1 - Code string with definition of fib function compiled and relocated fine
+ok 2 - Found fib
+ok 3 - Calling fib from first compiler context works
+ok 4 - First code string compiled and relocated fine
+ok 5 - foo
+
+Breakpoint 1, main (argc=2, argv=0x7fffffffdd48) at 42-three-contexts-func-share.c:61
+61		setup_and_compile_second_state(s2, second_code);
+
+=====================
+At this point we know that def_code and first_code copied without a hiccup.
+We are about to "setup_and_compile_second_state", which is written in
+test_setup.h. Before getting to that, we will add a breakpoint to tccpp.c in
+copy_extended_tokensym. This function is responsible for copying the TokenSym
+in the first state to a TokenSym in the second state.
+=====================
+
+(gdb) break tccpp.c:2203
+Breakpoint 2 at 0x40b81a: file tccpp.c, line 2203.
+(gdb) c
+Continuing.
+
+Breakpoint 2, copy_extended_tokensym (symtab=0x663af8, from=0x663d60, to=0x65bcc0) at tccpp.c:2203
+2203		to->sym_identifier = copy_extended_sym(symtab, from->sym_identifier, to->tok);
+
+=====================
+Now within the tokensym copy, let's get an idea of what we're about to copy, and
+where we're about to copy it.
+=====================
+
+(gdb) p/x to->tok
+$1 = 0x40000470
+(gdb) p (char *)(from->str)
+$2 = 0x663d90 "fib"
+(gdb) p/x from->tok
+$3 = 0x46f
+(gdb) p *from
+$4 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x663b10, tok = 1135, len = 3, str = "f"}
+(gdb) p *(from->sym_identifier)
+$5 = {v = 1135, asm_label = 0x0, r = 560, {c = 0, d = 0x0}, type = {t = 134, ref = 0x663b58}, {next = 0x0, jnext = 0}, prev = 0x0, 
+  prev_tok = 0x0}
+(gdb) p/x *(from->sym_identifier)
+$6 = {v = 0x46f, asm_label = 0x0, r = 0x230, {c = 0x0, d = 0x0}, type = {t = 0x86, ref = 0x663b58}, {next = 0x0, jnext = 0x0}, prev = 0x0, 
+  prev_tok = 0x0}
+(gdb) p/x *(from->sym_identifier.type.ref)
+$7 = {v = 0x10000000, asm_label = 0x0, r = 0x10800, {c = 0x1, d = 0x1}, type = {t = 0x0, ref = 0x0}, {next = 0x663ba0, jnext = 0x663ba0}, 
+  prev = 0x0, prev_tok = 0x0}
+(gdb) p/x *(from->sym_identifier.type.ref->next)
+$8 = {v = 0x10000470, asm_label = 0x0, r = 0x0, {c = 0x0, d = 0x0}, type = {t = 0x0, ref = 0xe00000469}, {next = 0x0, jnext = 0x0}, 
+  prev = 0x0, prev_tok = 0x0}
+
+=====================
+We are copying the token for "fib" from token id 0x46f to token id 0x470. A
+quick examination of the code in test 42 indicates that the first code block has
+a function declaration "int fib (int n)". This is in agreement with the data
+structure we see for from:
+  from is a TokenSym for token "fib"
+   ->sym_identifier has basic type of 0x6, a function
+    ->type.ref is an anonymous symbol with type int
+     ->next is a symbol with type int
+Let's see if copy_extended_sym properly copies all of this information.
+=====================
+
+(gdb) s
+copy_extended_sym (symtab=0x663af8, from=0x663b10, to_tok=1073742960) at tccpp.c:2348
+2348	Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
+(gdb) s 4
+copy_ctype (to_type=0x7fffffffd460, from=0x663b10, symtab=0x663af8) at tccpp.c:2313
+2313		int btype = from->type.t & VT_BTYPE;
+(gdb) s
+2314		to_type->t = from->type.t;
+(gdb) 
+2315		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+(gdb) p/x to_type->t
+$9 = 0x86
+(gdb) p/x btype
+$10 = 0x6
+
+=====================
+At this point we are about to copy the function's ctype. The basic type is 0x6,
+i.e. VT_FUNC, so we will perform the deep copy. The type.ref field of the from
+TokenSym is SYM_FIELD, so we expect to enter the middle branch of the deep copy.
+=====================
+
+(gdb) s
+2317			if (from->type.ref->v & SYM_FIRST_ANOM) {
+(gdb) s
+2322			else if (from->type.ref->v == SYM_FIELD) {
+(gdb) s
+2324				to_type->ref = copy_extended_sym(symtab, from->type.ref, SYM_FIELD);
+(gdb) s
+copy_extended_sym (symtab=0x663af8, from=0x663b58, to_tok=268435456) at tccpp.c:2348
+
+=====================
+We are now in copy_extended_sym to copy the type->ref. The type copy should be
+trivial since the function returns a basic data type, an int.
+=====================
+
+(gdb) s
+2349		if (from == NULL) return NULL;
+(gdb) s
+2352		to_tok |= from->v & (SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+(gdb) 
+2354		copy_ctype(&to_type, from, symtab);
+(gdb) 
+copy_ctype (to_type=0x7fffffffd390, from=0x663b58, symtab=0x663af8) at tccpp.c:2313
+2313		int btype = from->type.t & VT_BTYPE;
+(gdb) 
+2314		to_type->t = from->type.t;
+(gdb) p/x btype
+$11 = 0x0
+(gdb) s
+2315		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+(gdb) 
+2336	}
+(gdb) 
+copy_extended_sym (symtab=0x663af8, from=0x663b58, to_tok=268435456) at tccpp.c:2355
+2355		Sym * s = sym_push(to_tok, &to_type, from->r, from->c);
+
+=====================
+The next step of copy_extended_sym is to create a symbol on the symbol stack
+where we can copy this function declaration data.
+=====================
+
+(gdb) p/x to_tok
+$12 = 0x10000000
+(gdb) p/x to_type
+$13 = {t = 0x0, ref = 0x7fffffffd3d0}
+(gdb) p/x from->r
+$14 = 0x10800
+(gdb) p/x from->c
+$15 = 0x1
+(gdb) n
+2358		if (from->asm_label != NULL) {
+(gdb) n
+2365		if (from->next == NULL) return s;
+
+=====================
+The assembler label is null but the next field is not: it is the first argument:
+=====================
+
+(gdb) p from->next
+$16 = (struct Sym *) 0x663ba0
+(gdb) p *(from->next)
+$17 = {v = 268436592, asm_label = 0x0, r = 0, {c = 0, d = 0x0}, type = {t = 0, ref = 0xe00000469}, {next = 0x0, jnext = 0}, prev = 0x0, 
+  prev_tok = 0x0}
+
+=====================
+Note at this point that I don't care about the name of the token if we are
+talking about a function argument. I could probably simply create a new
+anonymous symbol for it. However, we do care about the token for structs, so I
+cannot simply revise this code to create anonymous symbols for all "next"
+fields.
+=====================
+
+(gdb) n
+2369		Sym * from_next = from->next;
+(gdb) n
+2370		Sym **psnext = &s->next;
+(gdb) n
+2371		while (from_next) {
+(gdb) n
+2372			if (from_next->v & SYM_FIRST_ANOM) {
+(gdb) n
+2380			else if (from_next->v == SYM_FIELD) {
+(gdb) n
+2391			int new_tok = get_local_tok_for_extended_tok(from_next->v, symtab);
+(gdb) n
+
+Breakpoint 2, copy_extended_tokensym (symtab=0x663af8, from=0x663db0, to=0x65bdf0) at tccpp.c:2203
+2203		to->sym_identifier = copy_extended_sym(symtab, from->sym_identifier, to->tok);
+(gdb) break 2392
+Breakpoint 3 at 0x40be8a: file tccpp.c, line 2392.
+(gdb) c
+Continuing.
+
+Breakpoint 3, copy_extended_sym (symtab=0x663af8, from=0x663b58, to_tok=268435456) at tccpp.c:2393
+2393			copy_ctype(&new_next_type, from_next, symtab);
+
+=====================
+At this point I have begun the copy procedure for the first argument in the
+function. It has a named token ('n'), which needs to be looked up and copied.
+The copy procedure tripped the breakpoint in copy_extended_tokensym, but I
+simply moved on by setting a breakpoint where I just was (line 2391) and
+continuing.
+=====================
+
+(gdb) p/x new_tok
+$19 = 0x50000471
+(gdb) n
+2394			*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
+(gdb) p/x new_next_type
+$20 = {t = 0x0, ref = 0x65b360}
+(gdb) n
+2397			from_next = from_next->next;
+(gdb) n
+2398			psnext = &((*psnext)->next);
+(gdb) p from_next
+$21 = (Sym *) 0x0
+(gdb) n
+2371		while (from_next) {
+
+=====================
+The new token has a different number from the old one, and also has the extended
+sym flag. The new type is correct (.t = 0, so ignore ref) and from_next is null,
+so we will be done when we evaluate this while check.
+=====================
+
+(gdb) n
+2401		return s;
+(gdb) p/x *s
+$22 = {v = 0x10000000, asm_label = 0x0, r = 0x10800, {c = 0x1, d = 0x1}, type = {t = 0x0, ref = 0x7fffffffd3d0}, {next = 0x65a6d0, 
+    jnext = 0x65a6d0}, prev = 0x65a760, prev_tok = 0x7ffff78c97b8}
+(gdb) n
+2402	}
+(gdb) n
+copy_ctype (to_type=0x7fffffffd460, from=0x663b10, symtab=0x663af8) at tccpp.c:2336
+2336	}
+(gdb) bt
+#0  copy_ctype (to_type=0x7fffffffd460, from=0x663b10, symtab=0x663af8) at tccpp.c:2336
+#1  0x000000000040bd34 in copy_extended_sym (symtab=0x663af8, from=0x663b10, to_tok=1073742960) at tccpp.c:2354
+#2  0x000000000040b83b in copy_extended_tokensym (symtab=0x663af8, from=0x663d60, to=0x65bcc0) at tccpp.c:2203
+#3  0x000000000040c3c6 in next_nomacro1 () at tccpp.c:2584
+#4  0x000000000040ceef in next_nomacro_spc () at tccpp.c:2871
+#5  0x000000000040cefa in next_nomacro () at tccpp.c:2878
+#6  0x000000000040df2f in next () at tccpp.c:3315
+#7  0x0000000000416c95 in block (bsym=0x0, csym=0x0, case_sym=0x0, def_sym=0x0, case_reg=0, is_expr=0) at tccgen.c:4636
+#8  0x0000000000416b70 in block (bsym=0x0, csym=0x0, case_sym=0x0, def_sym=0x0, case_reg=0, is_expr=0) at tccgen.c:4602
+#9  0x0000000000419501 in gen_function (sym=0x65a7f0) at tccgen.c:5717
+#10 0x0000000000419e36 in decl0 (l=48, is_for_loop_init=0) at tccgen.c:5960
+#11 0x000000000041a1bf in decl (l=48) at tccgen.c:6034
+#12 0x0000000000403b8d in tcc_compile (s1=0x665340) at libtcc.c:795
+#13 0x0000000000403dc1 in tcc_compile_string (s=0x665340, 
+    str=0x638340 <second_code> "int fib_of_5() {\n    return fib(5);\n}\nvoid* get_fib_address() {\n    return &fib;\n}\n") at libtcc.c:849
+#14 0x00000000004022f9 in main (argc=2, argv=0x7fffffffdd48) at 42-three-contexts-func-share.c:61
+
+=====================
+The anonymous symbol that holds the type for the function looks right. As the
+stack trace reminds us, all of this was part of the ctype copy for the
+identifier Sym in the "fib" TokenSym copy. We are finally beginning to unwind
+the stack, returning to where we were back on line 982!
+=====================
+
+(gdb) n
+copy_extended_sym (symtab=0x663af8, from=0x663b10, to_tok=1073742960) at tccpp.c:2355
+2355		Sym * s = sym_push(to_tok, &to_type, from->r, from->c);
+(gdb) p/x to_tok
+$23 = 0x40000470
+(gdb) n
+2358		if (from->asm_label != NULL) {
+(gdb) n
+2365		if (from->next == NULL) return s;
+(gdb) p from->next
+$24 = (struct Sym *) 0x0
+(gdb) n
+2402	}
+(gdb) p s
+$25 = (Sym *) 0x65a688
+(gdb) n
+copy_extended_tokensym (symtab=0x663af8, from=0x663d60, to=0x65bcc0) at tccpp.c:2210
+2210		if (from->sym_define == NULL || from->sym_define->d == NULL) {
+
+=====================
+The sym_push seemed to work fine---it is not null. Note the token id is 0x470.
+We are nonw back in copy_extended_tokensym. Let's get to the end of the function
+and then double-check that we've properly set up the "to" TokenSym.
+=====================
+
+(gdb) n
+2211			to->sym_define = NULL;
+(gdb) n
+2307	}
+(gdb) p/x *to
+$26 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x65a688, tok = 0x40000470, len = 0x3, 
+  str = {0x66}}
+(gdb) p (char *)(to->str)
+$27 = 0x65bcf0 "fib"
+
+=====================
+Token id looks right, string is correct, sym_identifier is NOT NULL. Let's keep
+rolling and see what happens.
+=====================
+
+(gdb) info break
+Num     Type           Disp Enb Address            What
+1       breakpoint     keep y   0x0000000000402244 in main at 42-three-contexts-func-share.c:61
+	breakpoint already hit 1 time
+2       breakpoint     keep y   0x000000000040b81a in copy_extended_tokensym at tccpp.c:2203
+	breakpoint already hit 2 times
+3       breakpoint     keep y   0x000000000040be8a in copy_extended_sym at tccpp.c:2392
+	breakpoint already hit 1 time
+(gdb) delete 1
+(gdb) delete 2
+(gdb) delete 3
+(gdb) break tccgen.c:206
+Breakpoint 4 at 0x40e7df: file tccgen.c, line 206.
+
+=====================
+I've cleared the breakpoints set so far and added a breakpoint for sym_find.
+=====================
+
+(gdb) c
+Continuing.
+
+Breakpoint 4, sym_find (v=1073742960) at tccgen.c:206
+206	    int is_extended = v & SYM_EXTENDED;
+(gdb) p/x v
+$28 = 0x40000470
+
+=====================
+Got it!
+=====================
+
+(gdb) n
+207	    v &= ~SYM_EXTENDED;
+(gdb) n
+208	    v -= TOK_IDENT;
+(gdb) n
+213	    if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
+(gdb) p/x v
+$29 = 0x370
+(gdb) p/x tok_ident
+$30 = 0x472
+(gdb) n
+221	    if (is_extended && (table_ident[v]->tok & SYM_EXTENDED)) {
+(gdb) n
+222	        TokenSym *ts = table_ident[v];
+(gdb) n
+225	        ts->tok &= ~SYM_EXTENDED;
+(gdb) p *ts
+$31 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x65a688, tok = 1073742960, len = 3, 
+  str = "f"}
+(gdb) p/x tok
+$32 = 0x28
+(gdb) p/x ts->tok
+$33 = 0x40000470
+(gdb) n
+228	        if (tcc_state->symtab_sym_used_callback != NULL)
+(gdb) p/x ts->tok
+$34 = 0x470
+(gdb) n
+230	            tcc_state->symtab_sym_used_callback(ts->str, ts->len,
+(gdb) n
+231	                tcc_state->symtab_callback_data);
+(gdb) n
+230	            tcc_state->symtab_sym_used_callback(ts->str, ts->len,
+(gdb) n
+234	    return table_ident[v]->sym_identifier;
+(gdb) p/x *(table_ident[v]->sym_identifier)
+$35 = {v = 0x470, asm_label = 0x0, r = 0x230, {c = 0x0, d = 0x0}, type = {t = 0x86, ref = 0x65a718}, {next = 0x0, jnext = 0x0}, 
+  prev = 0x65a6d0, prev_tok = 0x0}
+(gdb) p table_ident[v]->sym_identifier
+$36 = (struct Sym *) 0x65a688
+
+=====================
+Everything looks good here. We cleared the extended token flag for this local
+TokenSym having called the callback. We are about to return a Sym pointer that
+is not null.
+=====================
+
+(gdb) n
+235	}
+(gdb) n
+unary () at tccgen.c:3892
+3892	        if (!s) {
+(gdb) p s
+$37 = (Sym *) 0x65a688
+(gdb) n
+3902	        if ((s->type.t & (VT_STATIC | VT_INLINE | VT_BTYPE)) ==
+(gdb) n
+3913	            r = s->r;
+
+=====================
+OK... so everything looks fine. This whole lookup is part of the first use of
+"fib" in the second code, namely the "return fib(5)". So, let's keep running and
+see what happens as we trip the sym_find function.
+=====================
+
+(gdb) c
+Continuing.
+
+Breakpoint 4, sym_find (v=1138) at tccgen.c:206
+206	    int is_extended = v & SYM_EXTENDED;
+(gdb) p/x v
+$38 = 0x472
+(gdb) p *(table_ident[0x372])
+$48 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x65a718, tok = 1138, len = 15, str = "g"}
+(gdb) p (char*) (table_ident[0x372]->str)
+$49 = 0x65bfc0 "get_fib_address"
+
+=====================
+OK, looks right to me. We shouldn't find a symbol for this since we're defining
+it. Move on.
+=====================
+
+(gdb) c
+Continuing.
+
+Breakpoint 4, sym_find (v=263) at tccgen.c:206
+206	    int is_extended = v & SYM_EXTENDED;
+(gdb) p/x 263
+$50 = 0x107
+(gdb) p *(table_ident[0x7])
+$53 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x0, tok = 263, len = 6, str = "r"}
+(gdb) p (char*) (table_ident[0x7]->str)
+$52 = 0x663a60 "return"
+
+=====================
+Yep, the first non-symbolic token in get_fib_address is "return". Keep going.
+=====================
+
+(gdb) c
+Continuing.
+
+Breakpoint 4, sym_find (v=1136) at tccgen.c:206
+206	    int is_extended = v & SYM_EXTENDED;
+(gdb) p *(table_ident[1036])
+Cannot access memory at address 0x0
+(gdb) p/x v
+$43 = 0x470
+(gdb) p *(table_ident[470])
+$44 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x0, tok = 726, len = 5, str = "s"}
+(gdb) p *(table_ident[370])
+$45 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x0, tok = 626, len = 3, str = "s"}
+(gdb) p *(table_ident[0x370])
+$46 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x0, tok = 1136, len = 3, str = "f"}
+(gdb) p (char*) (table_ident[0x370]->str)
+$47 = 0x65bcf0 "fib"
+
+=====================
+This is definitely the correct number, but certainly the wrong sym_identifier!
+(I also realized that I was referring to the wrong symbols before. I made a
+couple of retroactive corrections, hence the out-of-order $return_variables
+above.)
+
+WHAT HAPPENED?
+
+To find out what happened, I will need to place a watch on the sym_identifier
+field of the TokenSym, after restarting the debugger. That looked like this:
+
+=====================
+(gdb) break 42-three-contexts-func-share.c:61
+Breakpoint 1 at 0x402244: file 42-three-contexts-func-share.c, line 61.
+(gdb) run
+Starting program: /home/dcmertens/projects/Perl/tinycc/tests/exsymtab/42-three-contexts-func-share.dbg lib_path=../..
+ok 1 - Code string with definition of fib function compiled and relocated fine
+ok 2 - Found fib
+ok 3 - Calling fib from first compiler context works
+ok 4 - First code string compiled and relocated fine
+ok 5 - foo
+
+Breakpoint 1, main (argc=2, argv=0x7fffffffdd48) at 42-three-contexts-func-share.c:61
+61		setup_and_compile_second_state(s2, second_code);
+(gdb) break tccpp.c:2203
+Breakpoint 2 at 0x40b81a: file tccpp.c, line 2203.
+(gdb) c
+Continuing.
+
+Breakpoint 2, copy_extended_tokensym (symtab=0x663af8, from=0x663d60, to=0x65bcc0) at tccpp.c:2203
+2203		to->sym_identifier = copy_extended_sym(symtab, from->sym_identifier, to->tok);
+(gdb) delete 1
+(gdb) delete 2
+(gdb) n
+2210		if (from->sym_define == NULL || from->sym_define->d == NULL) {
+(gdb) p *to
+$1 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x65a688, tok = 1073742960, len = 3, 
+  str = "f"}
+(gdb) watch to->sym_identifier
+Hardware watchpoint 3: to->sym_identifier
+(gdb) c
+Continuing.
+
+Watchpoint 3 deleted because the program has left the block in
+which its expression is valid.
+0x000000000040c3c6 in next_nomacro1 () at tccpp.c:2584
+2584					if (extended_ts) copy_extended_tokensym(containing_symtab, extended_ts, ts);
+(gdb) p/x *table_ident[0x370]
+$2 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x65a688, tok = 0x40000470, len = 0x3, str = {
+    0x66}}
+(gdb) watch table_ident[0x370]->sym_identifier
+Hardware watchpoint 4: table_ident[0x370]->sym_identifier
+(gdb) c
+Continuing.
+Hardware watchpoint 4: table_ident[0x370]->sym_identifier
+
+Old value = (struct Sym *) 0x65a688
+New value = (struct Sym *) 0x0
+sym_pop (ptop=0x648fa8 <local_stack>, b=0x65a7a8) at tccgen.c:315
+315	        sym_free(s);
+
+=====================
+The first few are working on getting me close enough to set a useful watch
+point. The last few lines are what matter, indicating that the sym_identifier
+gets reset during sym_pop, which is called whenever the compiler exits a block.
+Hmm...
+
+A close examination of sym_push reveals that it will push symbols to the local
+symbol stack IF THE LOCAL SYMBOL STACK IS NOT NULL. While I could copy the code
+of sym_push into its own subfunction, I think it would be easier to just backup
+the current value of local_stack and set it to null upon entering the extended
+copy machinery, so that sym_push Just Works. This I can do in next_nomacro1!
 
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
-
-
