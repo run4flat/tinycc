@@ -31,8 +31,8 @@ TESTS =	\
  48-many-consuming-contexts-delete.test \
  49-many-consuming-contexts-early-delete.test \
  50-two-contexts-mixup.test \
- 51-many-consuming-contexts-with-constants-early-delete.test 
-# 70-symtab-use-check.test
+ 51-many-consuming-contexts-with-constants-early-delete.test \
+ 70-symtab-use-check.test
 
 PROVES =	\
  01-test-symtab-copy.prove \
@@ -49,8 +49,8 @@ PROVES =	\
  48-many-consuming-contexts-delete.prove \
  49-many-consuming-contexts-early-delete.prove \
  50-two-contexts-mixup.prove \
- 51-many-consuming-contexts-with-constants-early-delete.prove 
-# 70-symtab-use-check.prove
+ 51-many-consuming-contexts-with-constants-early-delete.prove \
+ 70-symtab-use-check.prove
 
 # some tests do not pass on all platforms, remove them for now
 #ifeq ($(TARGETOS),Darwin)
@@ -76,6 +76,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 51-many-consuming-contexts-with-constants-early-delete.
-curr-prove: 51-many-consuming-contexts-with-constants-early-delete.prove
-curr-dbg: 51-many-consuming-contexts-with-constants-early-delete.
+curr-test: 70-symtab-use-check.test
+curr-prove: 70-symtab-use-check.prove
+curr-dbg: 70-symtab-use-check.dbg

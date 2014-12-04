@@ -1457,6 +1457,8 @@ With the tcc_add_symbol line commented out, test 50 passes. And as before, test
 51 passes without any modifications because it deletes it tcc states early and
 often.
 
+And with correct test harness setup, test 70 passes, too! WOW!
+
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.

@@ -98,6 +98,7 @@ int main(int argc, char **argv) {
 	TCCState *s_consumer = tcc_new();
 	second_callback_data callback_data;
 	callback_data.first_symtab = def_symtab;
+	callback_data.first_context = s1;
 	setup_and_compile_second_state(s_consumer, consumer_code);
     
     diag("After dependent compilation, before symbol addition");
