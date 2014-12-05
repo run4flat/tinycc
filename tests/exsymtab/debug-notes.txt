@@ -1459,6 +1459,30 @@ often.
 
 And with correct test harness setup, test 70 passes, too! WOW!
 
+December 4, 2014
+================
+
+I have decided that I will need to create my own lookup table for function
+pointers (and other symbols) that can live on even after I have deleted a tcc
+state. That is, I need some way to say "tcc_get_symbol" even after I've deleted
+the tcc state. This led me to create tccexsymtab.c, into which I will migrate
+the bulk of the code I've written. The first functionality I wrote into that
+file was a compressed trie, which I will use to create the symbol lookup table.
+I may also use it to create a default lookup system for extended symbol tables.
+
+My first thought was, "How hard is it to look up the global symbols in a
+compiled tcc state?" A little bit of digging around tccelf.c, where
+tcc_get_symbol is defined, led to a bit of hacking and the realization that it
+is *really* *easy*. The current state of progress is codified in dump_sym_names,
+a function that currently resides in tccelf.c. This function is called by the
+not-quite-test dump-elf-syms.c in this directory. It seems to be working very
+well.
+
+
+At some point, should I add a test that checks which function gets linked when I
+have multiple functions compiled in previous states under the same name?
+
+
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
