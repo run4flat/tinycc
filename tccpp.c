@@ -2786,23 +2786,23 @@ static int macro_subst_tok(TokenString *tok_str,
             } else {
                 ch = file->buf_ptr[0];
                 while (is_space(ch) || ch == '\n' || ch == '/')
-                  {
-                    if (ch == '/')
-                      {
-                        int c;
-                        uint8_t *p = file->buf_ptr;
-                        PEEKC(c, p);
-                        if (c == '*') {
-                            p = parse_comment(p);
-                            file->buf_ptr = p - 1;
-                        } else if (c == '/') {
-                            p = parse_line_comment(p);
-                            file->buf_ptr = p - 1;
-                        } else
-                          break;
-                      }
-                    cinp();
-                  }
+		  {
+		    if (ch == '/')
+		      {
+			int c;
+			uint8_t *p = file->buf_ptr;
+			PEEKC(c, p);
+			if (c == '*') {
+			    p = parse_comment(p);
+			    file->buf_ptr = p - 1;
+			} else if (c == '/') {
+			    p = parse_line_comment(p);
+			    file->buf_ptr = p - 1;
+			} else
+			  break;
+		      }
+		    cinp();
+		  }
                 t = ch;
             }
             if (t != '(') /* no macro subst */
@@ -3099,12 +3099,12 @@ ST_INLN void unget_tok(int last_tok)
     if (unget_buffer_enabled)
       {
         /* assert(macro_ptr == unget_saved_buffer + 1);
-           assert(*macro_ptr == 0);  */
+	   assert(*macro_ptr == 0);  */
       }
     else
       {
-        unget_saved_macro_ptr = macro_ptr;
-        unget_buffer_enabled = 1;
+	unget_saved_macro_ptr = macro_ptr;
+	unget_buffer_enabled = 1;
       }
     q = unget_saved_buffer;
     macro_ptr = q;
