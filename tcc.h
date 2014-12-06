@@ -1383,6 +1383,9 @@ ST_FUNC void pe_add_unwind_data(unsigned start, unsigned end, unsigned stack);
 #endif
 #endif
 
+/* ------------ tccexsymtab.c ----------------- */
+#include "tccexsymtab.h"
+
 /* ------------ tccrun.c ----------------- */
 #ifdef TCC_IS_NATIVE
 #ifdef CONFIG_TCC_STATIC

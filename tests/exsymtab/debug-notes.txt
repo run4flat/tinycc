@@ -1478,6 +1478,15 @@ a function that currently resides in tccelf.c. This function is called by the
 not-quite-test dump-elf-syms.c in this directory. It seems to be working very
 well.
 
+December 5, 2014
+================
+
+OK, now we get to it. I would like to write a function that uses the compressed
+trie I just implemented to store all of the global symbol pointers found in a
+state's Section. I think, however, that I shall first move all of the extended
+symbol table code into tccexsymtab.c to keep my work as cleanly separated from
+the main codebase as possible.
+
 
 At some point, should I add a test that checks which function gets linked when I
 have multiple functions compiled in previous states under the same name?

@@ -156,24 +156,6 @@ ST_FUNC int find_elf_sym(Section *s, const char *name)
     return 0;
 }
 
-void dump_sym_names(TCCState *state) {
-	Section * s;
-    ElfW(Sym) *sym;
-    int sym_index;
-    const char *name;
-    
-    s = state->symtab;
-	sym_index = 2;
-	sym = &((ElfW(Sym) *)s->data)[sym_index];
-	name = s->link->data + sym->st_name;
-	while (strcmp("_etext", name) != 0) {
-		printf("%s: sym_index = %d, st_shndx is %x, address is %p\n", name, sym_index, sym->st_shndx, (void*)sym->st_value);
-		sym_index++;
-		sym = &((ElfW(Sym) *)s->data)[sym_index];
-		name = s->link->data + sym->st_name;
-	}
-}
-
 /* return elf symbol value, signal error if 'err' is nonzero */
 ST_FUNC addr_t get_elf_sym_addr(TCCState *s, const char *name, int err)
 {
