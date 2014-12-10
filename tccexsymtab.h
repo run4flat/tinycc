@@ -81,15 +81,6 @@ LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, ch
 /* tcc_get_extended_tokensym declared in libtcc.h */
 /* tcc_get_extended_symbol declared in libtcc.h */
 
-LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym); /* deprecated */
-LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym); /* deprecated */
-LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym); /* deprecated */
-LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym); /* deprecated */
-LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym); /* deprecated */
-LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym * tokensym); /* deprecated */
-LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok);
-LIBTCCAPI TokenSym* tcc_tokensym_by_tok(int tok, TokenSym ** list);
-
 /*****************************************************************************/
 /*                      copy extended symbol into local                      */
 /*****************************************************************************/

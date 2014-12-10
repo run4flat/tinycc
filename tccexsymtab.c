@@ -725,38 +725,6 @@ LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p symtab, int to_test, ch
 	return 0;
 }
 
-/* We don't expose the entire TokenSym structure to the user. Thus, we
- * need to give them some way to at least know what symbol names they
- * have on hand. */
-LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym) {
-	return tokensym->str;
-}
-
-LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym) {
-	return tokensym->tok;
-}
-
-LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym) {
-	return tokensym != NULL && tokensym->sym_define != NULL;
-}
-LIBTCCAPI int tcc_tokensym_has_struct (TokenSym * tokensym) {
-	return tokensym != NULL && tokensym->sym_struct != NULL;
-}
-LIBTCCAPI int tcc_tokensym_has_identifier (TokenSym * tokensym) {
-	return tokensym != NULL && tokensym->sym_identifier != NULL;
-}
-LIBTCCAPI int tcc_tokensym_is_shareable (TokenSym * tokensym) {
-	return	tokensym->sym_define != NULL
-			|| tokensym->sym_struct != NULL
-			|| tokensym->sym_identifier != NULL
-			;
-}
-
-LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok) {
-	return (~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM) & tok);
-}
-
-
 /*****************************************************************************/
 /*                      copy extended symbol into local                      */
 /*****************************************************************************/
