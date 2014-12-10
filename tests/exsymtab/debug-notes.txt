@@ -1487,6 +1487,14 @@ state's Section. I think, however, that I shall first move all of the extended
 symbol table code into tccexsymtab.c to keep my work as cleanly separated from
 the main codebase as possible.
 
+December 9, 2014
+================
+
+After many days of hacking, I have re-implemented the bulk of the code using the
+trie for lookup. The result is a huge commit with lots of changes, including a
+few that could have been applied as small point-fixes. Oh well. The tests now
+pass, and the whole thing is easier to comprehend, I hope.
+
 
 At some point, should I add a test that checks which function gets linked when I
 have multiple functions compiled in previous states under the same name?

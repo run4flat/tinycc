@@ -22,59 +22,75 @@
 /*                              compressed trie                              */
 /*****************************************************************************/
 
-/* Define the compressed trie used for extended table lookups. */
+/* Define the compressed trie used for extended table lookups. For an excellent
+ * paper on the topic, see http://lampwww.epfl.ch/papers/triesearches.pdf.gz
+ * This is a slightly simplified implementation of the array mapped trie. If
+ * benchmarks warrant it, I may rewrite this in terms of an array compacted trie. */
 
-/* for an excellent paper on the topic, see http://lampwww.epfl.ch/papers/triesearches.pdf.gz
- * This is a slightly simplified implementation, but it may get more complete if
- * benchmarks warrant it. */
-
-/* How many buckets? in 0-9, A-Z, a-z, and _, we have 10 + 26 + 26 + 1 = 63.
- * That fits nicely into an unsigned long long. */
+/* How many slots? in 0-9, A-Z, a-z, and _, we have 10 + 26 + 26 + 1 = 63. That
+ * fits nicely into an unsigned long long, leaving one extra bit that I can use
+ * to indicate the presence of data in this node. The mapping of characters to
+ * bits/slots is given in _c_trie_bit_offset_for_char. */
 
 /* Returns a c_trie with a single allocated child. This should serve as the head
  * of the data structure. It does not store any data itself. The single child is
  * actually the first node in the trie. */
 c_trie * c_trie_new() {
 	c_trie * new_trie = tcc_malloc(sizeof(c_trie));
-	/* set to 1 so that c_trie_free works recursively without special treatment
-	 * of head node */
-	new_trie->filled_bits = 1;
-	new_trie->data = 0;
+	/* The head of the trie is in this node's first node slot: */
+	new_trie->filled_bits = 2;
+	new_trie->children[0] = tcc_mallocz(sizeof(c_trie));
 	return new_trie;
 }
 
 /* See http://stackoverflow.com/questions/109023/how-to-count-the-number-of-set-bits-in-a-32-bit-integer
  * with the explanation that begins, "I think the fastest way-without using
- * lookup tables and popcount-is the following..." */
+ * lookup tables and popcount-is the following..."  At some point, if
+ * performance merits it, I can use preprocessor hacks to substitute optimzied
+ * versions of this calculation. See http://danluu.com/assembly-intrinsics/. In
+ * all likelihood, cache misses will be the bigger bottleneck for this,
+ * switching to the array compacted trie would be the best course for speedups. */
 unsigned char _c_trie_popcount (unsigned long long v) {
 	/* put count of each 2 bits into those 2 bits */
 	v = v - ((v >> 1) & 0x5555555555555555);
 	/* put count of each 4 bits into those 4 bits */
 	v = (v & 0x3333333333333333) + ((v >> 2) & 0x3333333333333333);
 	/* put count of each 8 bits into those 8 bits */
-	v = (v & 0x1111111111111111) + ((v >> 4) & 0x1111111111111111);
+	v = (v & 0x707070707070707) + ((v >> 4) & 0x707070707070707);
 	/* sum up those bits */
 	return ((v + ((v >> 8) & 0xF000F000F000F)) * 0x1000100010001) >> 48;
 }
 
+#define C_TRIE_HAS_DATA 1
+
 /* Recursively free all children, then free self */
 void c_trie_free(c_trie * curr) {
 	unsigned char N_children = _c_trie_popcount(curr->filled_bits);
-	unsigned char i;
-	for (i = 0; i < N_children; i++) c_trie_free(curr->children[i]);
+	unsigned char i = curr->filled_bits & C_TRIE_HAS_DATA;
+	for (; i < N_children; i++) c_trie_free(curr->children[i]);
 	tcc_free(curr);
 }
 
+/* Find the bit offset. This requires some algebra in order to fit the allowable
+ * ASCII characters into just 64 bits. Since most characters in the trie are
+ * going to be lowercase, I handle their calculation first. Most C programming
+ * uses_underscores_rather_thanCamelCase, so I place the underscore before
+ * capitals for a tiny speed boost. I then handle uppercase, and last of all
+ * digits.
+ * 
+ * Note that the very first bit indicates that "the first element is data", and
+ * is internally notated with a '$' character, though I think the character is
+ * never used in the codebase.
+ * 
+ * Finally, note that this assumes that it is given good input. It does not
+ * check for invalid characters, and could potentially give bad slots,
+ * most likely for characters beyond 'Z' and before 'A', i.e. square brackets. */
 unsigned char _c_trie_bit_offset_for_char (char c) {
-	/* Find the bit offset. This requires some algebra in order to fit the
-	 * allowable ASCII characters into just 64 bits. Since most characters in
-	 * the trie are going to be lowercase, I handle their calculation first.
-	 * I then move on to uppercase (after handling the underscore to keep the
-	 * logic simple), and lastly to digits. */
-	if (c >= 'a') return c - 'a';
-	if (c == '_') return 62;
-	if (c >= 'A') return c - 'A' + 26;
-	return c - '0' + 52;
+	if (c == '$') return 0; /* data slot */
+	if (c >= 'a') return c - 'a' + 1;
+	if (c == '_') return 27;
+	if (c >= 'A') return c - 'A' + 28;
+	return c - '0' + 54;
 }
 
 /* Find the slot where this character lives and return a pointer to the child. A
@@ -82,8 +98,10 @@ unsigned char _c_trie_bit_offset_for_char (char c) {
 c_trie ** _c_trie_find_child (c_trie * current, char * string) {
 	unsigned char bit_offset = _c_trie_bit_offset_for_char(*string);
 	
-	/* Create the bit associated with the character */
-	unsigned long long curr_bit = 1 << bit_offset;
+	/* Figure out which bit will be occupied next. Split across two lines so
+	 * that the bit shift is not accidentally truncated. */
+	unsigned long long curr_bit = 1;
+	curr_bit <<= bit_offset;
 	
 	/* See if it is in our set of buckets */
 	if ((current->filled_bits & curr_bit) == 0) return NULL;
@@ -104,8 +122,53 @@ void * c_trie_get_data (c_trie * head, char * string) {
 		child_p = _c_trie_find_child(*child_p, string++);
 		if (child_p == NULL) return NULL;
 	}
-	/* At this point we have found the node that supposedly contains our data */
-	return (*child_p)->data;
+	/* At this point we have found the node that supposedly contains our data.
+	 * If the data bit is set, then return the pointer in the data slot. */
+	if ((*child_p)->filled_bits & C_TRIE_HAS_DATA) return (void*) (*child_p)->children[0];
+	return NULL;
+}
+
+/* Allocates one more slot, if necessary, and copies data into it. */
+c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset) {
+	/* Figure out which bit will be occupied next. Split across two lines so
+	 * that the bit shift is not accidentally truncated. */
+	unsigned long long new_bit = 1;
+	new_bit <<= slot_offset;
+	
+	/* c_trie objects are always allocated with room for at least one. If this
+	 * reports zero room, it has room and the data can simply be added. */
+	if ((*curr_p)->filled_bits == 0) {
+		(*curr_p)->filled_bits = new_bit;
+		(*curr_p)->children[0] = to_add;
+		return &((*curr_p)->children[0]);
+	}
+	
+	/* Otherwise, we need to allocate new space and copy over the previous
+	 * children. */
+	c_trie * old = *curr_p;
+	unsigned char N_children = _c_trie_popcount(old->filled_bits);
+	c_trie * new = tcc_mallocz(sizeof(c_trie) + N_children * sizeof(c_trie*));
+	N_children++;
+	
+	/* Set the new filled bits */
+	new->filled_bits = old->filled_bits | new_bit;
+	
+	/* Copy old children located in slots that come before the new one. */
+	unsigned char N_before = _c_trie_popcount(old->filled_bits
+		& (0xFFFFFFFFFFFFFFFF >> (64 - slot_offset))
+	);
+	unsigned char i;
+	for(i = 0; i < N_before; i++) new->children[i] = old->children[i];
+	
+	/* Copy the new child and remaining children. */
+	new->children[i] = to_add;
+	for(i++; i < N_children; i++) new->children[i] = old->children[i-1];
+	
+	tcc_free(old); /* free old node */
+	*curr_p = new; /* update parent's list to point to the new node */
+	
+	/* Return address of the newly allocated slot */
+	return &(new->children[N_before]);
 }
 
 void c_trie_add_data (c_trie * head, char * string, void * data) {
@@ -117,39 +180,15 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 	while(*string > 0) {
 		child_p = _c_trie_find_child(*curr_p, string);
 		if (child_p == NULL) {
-			/* No child for this character, so create a new child. */
-			c_trie * new_child = tcc_mallocz(sizeof(c_trie) - sizeof(c_trie*));
+			/* No child for this character, so create a new child. Always
+			 * allocate room for one slot: it'll eventually be filled with the
+			 * data pointer or with the next character. See _c_trie_add_one_more_slot
+			 * for details. */
+			c_trie * new_child = tcc_mallocz(sizeof(c_trie));
 			
-			/* Create a new curr with additional storage for this child */
-			c_trie * old = *curr_p;
-			unsigned char N_children = _c_trie_popcount(old->filled_bits);
-			c_trie * new = tcc_malloc(sizeof(c_trie) + N_children * sizeof(c_trie*));
-			N_children++;
-			
-			/* Set the new filled bits */
-			unsigned long long new_bit = 1 << _c_trie_bit_offset_for_char(*string);
-			new->filled_bits = old->filled_bits | new_bit;
-			
-			/* Copy the old children, interleavinig the new child */
-			unsigned char i = 0;
-			unsigned char old_i = 0;
-			unsigned long long curr_bit = 1;
-			while(i < N_children) {
-				if (old->filled_bits & curr_bit) {
-					new->children[i] = old->children[old_i];
-					i++;
-					old_i++;
-				}
-				else if (new_bit == curr_bit) {
-					new->children[i] = new_child;
-					child_p = &(new->children[i]); /* update child_p */
-					i++;
-				}
-				curr_bit <<= 1;
-			}
-			
-			tcc_free(old); /* free old node */
-			*curr_p = new; /* update parent's list to point to the new node */
+			/* Create a new slot in the current node and add the new child to it. */
+			child_p = _c_trie_add_one_more_slot(curr_p, new_child,
+				_c_trie_bit_offset_for_char(*string));
 		}
 		
 		/* next character, advance through the trie */
@@ -157,9 +196,8 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 		curr_p = child_p;
 	}
 	
-	/* Finally, the node pointed to by curr_p has a data slot that we want to
-	 * update. */
-	(*curr_p)->data = data;
+	/* Finally, add the new data to the "data" slot. */
+	_c_trie_add_one_more_slot(curr_p, (c_trie*)data, 0);
 }
 
 /******************************************************************************/
@@ -182,6 +220,44 @@ void dump_sym_names(TCCState *state) {
 		sym = &((ElfW(Sym) *)s->data)[sym_index];
 		name = s->link->data + sym->st_name;
 	}
+}
+
+LIBTCCAPI void tcc_copy_extended_symbols(TCCState *state, extended_symtab_p symtab) {
+	Section * s;
+    ElfW(Sym) *sym;
+    int sym_index;
+    const char *name;
+    
+    s = state->symtab;
+	sym_index = 2;
+	sym = &((ElfW(Sym) *)s->data)[sym_index];
+	name = s->link->data + sym->st_name;
+	while (strcmp("_etext", name) != 0) {
+		/* Copy the symbol's pointer into the hash_next field of the TokenSym */
+		TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
+		if (ts == NULL) {
+			tcc_warning("Global symbol %s does not exist in extended symbol table; not copying\n",
+				name);
+		}
+		else {
+			ts->hash_next = (void*)sym->st_value;
+		}
+		/* Next iteration */
+		sym_index++;
+		sym = &((ElfW(Sym) *)s->data)[sym_index];
+		name = s->link->data + sym->st_name;
+	}
+}
+
+LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name) {
+	/* delegate to the symtab's trie */
+	return (TokenSym*)c_trie_get_data(symtab->trie, name);
+}
+
+LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * name) {
+	TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
+	if (ts == NULL) return NULL;
+	return (void*) ts->hash_next;
 }
 
 /******************************************************************************/
@@ -286,33 +362,6 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
 	
-	/* The extended case should never be a problem. An extended token is not allowed to
-	 * be reused as a global variable. It can be used as a macro argument, but in that
-	 * case it will have a symbol on the define stack that is not reachable via a
-	 * TokenSym reference. */
-#if 0
-	if (old->v >= SYM_EXTENDED) {
-		TokenSym* tsym;
-		/* Call the extended symbol lookup. */
-		if (s->symtab_number_callback == NULL) {
-			tcc_error_noabort("exsymtab copy found extended symbol but no symtab_number_callback");
-			return NULL;
-		}
-		tsym = s->symtab_number_callback(old->v, s->symtab_callback_data, 0);
-		if (tsym == NULL) {
-			tcc_error_noabort("exsymtab copy unable to locate extended symbol for preprocessor token %x", old->v);
-			return NULL;
-		}
-		/* Preprocessor args may have a null sym_define, but otherwise we should issue a
-		 * warning. */
-		if (tsym->sym_define == NULL && !(old->v & SYM_FIELD)) {
-			tcc_warning("exsymtab copy found extended token but no preprocessor symbol for \"%s\" (%x)"
-				, tsym->str, old->v);
-		}
-		return tsym->sym_define;
-	}
-#endif
-	
 	/* Otherwise use the non-extended symbol lookup */
 	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
 	if (to_return != NULL) return to_return;
@@ -340,23 +389,24 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 	
     int i;
     
-	/* Allocate the memory for the extended symbol table. The structure
-	 * for this table will be:
-	 * Sym* SymList
-	 * Sym* PastEndOfSymList
-	 * Sym* defineList
-	 * Sym* PastEndOfDefineList
-	 * TokenSym** TAIL (contains the address of the last TokenSym*)
-	 * TokenSym* = table_ident[0], <- returned pointer points here
-	 * TokenSym* = table_ident[1],
-	 * ...
-	 * TokenSym* = table_ident[n-1] <- TAIL points to this offset
-	 * 
-	 * So we need N_tokens + 5
-	 */
-    
     int N_tokens = tok_ident - tok_start;
-    void ** to_return = tcc_malloc(sizeof(void*) * (N_tokens + 5));
+    /* Room for the first TokenSym is included in the struct definition, so I
+     * need to allocate room for the extended symtab plus N_tokens - 1. */
+/*struct extended_symtab {
+	Sym * sym_list;
+	Sym * sym_last;
+	Sym * def_list;
+	Sym * def_last;
+	c_trie * trie;
+	TokenSym ** tokenSym_last;
+	TokenSym [1] tokenSym_list;
+     */
+    
+    extended_symtab * to_return = tcc_malloc(sizeof(extended_symtab)
+		+ sizeof(void*) * (N_tokens - 1));
+	
+	/* Allocate the trie */
+	to_return->trie = c_trie_new();
     
     /********* symbol stack *********/
     
@@ -376,8 +426,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
      * increment N_Syms by one.
      * working here - is this reasoning correct? */
     N_Syms++;
-    Sym * sym_list = to_return[0] = tcc_malloc(sizeof(Sym) * (N_Syms + 1));
-    to_return[1] = sym_list + N_Syms;
+    Sym * sym_list = to_return->sym_list = tcc_malloc(sizeof(Sym) * (N_Syms + 1));
+    to_return->sym_last = sym_list + N_Syms;
     
 	/* Zero out last sym */
     sym_list[N_Syms-1].v = sym_list[N_Syms].v = 0;
@@ -477,8 +527,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		N_Defs++;
 	}
     /* Allocate the Def list */
-    Sym * def_list = to_return[2] = tcc_malloc(sizeof(Sym) * (N_Defs + 1));
-    to_return[3] = def_list + N_Defs;
+    Sym * def_list = to_return->def_list = tcc_malloc(sizeof(Sym) * (N_Defs + 1));
+    to_return->def_last = def_list + N_Defs;
     
 	/* Zero out last sym */
     def_list[N_Defs].v = 0;
@@ -549,8 +599,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     
     /* Set the tail pointer, which points to the first address past the
      * last element. */
-    to_return[4] = to_return + N_tokens + 5;
-    to_return += 5;
+    to_return->tokenSym_last = to_return->tokenSym_list + N_tokens;
     
     /********* TokenSym list *********/
     
@@ -558,7 +607,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 	for (i = 0; i < N_tokens; i++) {
 		TokenSym * tok_copy = table_ident[tok_start + i - TOK_IDENT];
 		int tokensym_size = sizeof(TokenSym) + tok_copy->len;
-		TokenSym * tok_sym = to_return[i] = tcc_malloc(tokensym_size);
+		TokenSym * tok_sym = to_return->tokenSym_list[i]
+			= tcc_malloc(tokensym_size);
 		
 		/* Follow the code from tok_alloc_new in tccpp.c */
 		tok_sym->tok = tok_copy->tok;
@@ -573,21 +623,22 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		tok_sym->hash_next = NULL;
 		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
 		tok_sym->str[tok_copy->len] = '\0';
+		
+		/* Add this to the trie */
+		c_trie_add_data(to_return->trie, tok_sym->str, tok_sym);
 	}
 
-	/* Send the pointer to the first TokenSym* to the callback */
+	/* Call the callback with a pointer to the extended symtab */
 	extended_symtab_copy_callback to_call = s->symtab_copy_callback;
-	to_call((TokenSym**)to_return, s->symtab_callback_data);
+	to_call(to_return, s->symtab_callback_data);
 }
 
 /* Frees memory associated with a copied extended symbol table. For a
  * description of the structure of the allocated memory, see the copy
  * function above. */
-LIBTCCAPI void tcc_delete_extended_symbol_table (
-	TokenSym** my_extended_symtab
-) {
-	Sym * sym_to_delete = (Sym*)my_extended_symtab[-5];
-	Sym * last = (Sym*)my_extended_symtab[-4];
+LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
+	Sym * sym_to_delete = symtab->sym_list;
+	Sym * last = symtab->sym_last;
 	
 	/* clear out the anonymous symbol stack */
 	Sym * curr_sym = (last - 1)->prev;
@@ -603,28 +654,58 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (
 		tcc_free(sym_to_delete->asm_label);
 		sym_to_delete++;
 	}
-	tcc_free(my_extended_symtab[-5]);
+	tcc_free(symtab->sym_list);
 	
 	/* clear out the define list */
-	sym_to_delete = (Sym*)my_extended_symtab[-3];
-	last = (Sym*)my_extended_symtab[-2];
+	sym_to_delete = symtab->def_list;
+	last = symtab->def_last;
 	while(sym_to_delete < last) {
 		/* free the token stream */
 		tcc_free(sym_to_delete->d);
 		sym_to_delete++;
 	}
-	tcc_free(my_extended_symtab[-3]);
+	tcc_free(symtab->def_list);
+	
+	/* Clear out the trie */
+	c_trie_free(symtab->trie);
 	
 	/* Clear out the allocated TokenSym pointers */
-	TokenSym** ts_to_delete = my_extended_symtab;
-	TokenSym** done = (TokenSym**)my_extended_symtab[-1];
+	TokenSym** ts_to_delete = symtab->tokenSym_list;
+	TokenSym** done = symtab->tokenSym_last;
 	while (ts_to_delete < done) {
 		tcc_free(*ts_to_delete);
 		ts_to_delete++;
 	}
 	
 	/* Clear out the full memory allocation. */
-	tcc_free(my_extended_symtab - 5);
+	tcc_free(symtab);
+}
+
+/* A function that performs a number of tests for me. I only export a single
+ * function to avoid cluttering up the TCC API. */
+enum {
+	TS_TEST_GET_TOK,
+	TS_TEST_HAS_DEFINE,
+	TS_TEST_HAS_STRUCT,
+	TS_TEST_HAS_IDENTIFIER
+};
+LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p symtab, int to_test, char * name) {
+	/* Get the tokenSym by the given name */
+	TokenSym * ts = c_trie_get_data(symtab->trie, name);
+	if (ts == NULL) return 0;
+	
+	/* Perform the requested test */
+	switch(to_test) {
+		case TS_TEST_GET_TOK:
+			return ts->tok;
+		case TS_TEST_HAS_DEFINE:
+			return ts->sym_define != NULL;
+		case TS_TEST_HAS_IDENTIFIER:
+			return ts->sym_identifier != NULL;
+		case TS_TEST_HAS_STRUCT:
+			return ts->sym_struct != NULL;
+	}
+	return 0;
 }
 
 /* We don't expose the entire TokenSym structure to the user. Thus, we
@@ -636,17 +717,6 @@ LIBTCCAPI char * tcc_tokensym_name (TokenSym * tokensym) {
 
 LIBTCCAPI int tcc_tokensym_tok (TokenSym * tokensym) {
 	return tokensym->tok;
-}
-
-LIBTCCAPI long tcc_tokensym_get_id_c(TokenSym * tokensym) {
-	Sym * sym_id = tokensym->sym_identifier;
-	if (sym_id == NULL) return 0;
-	return sym_id->c;
-}
-
-LIBTCCAPI void tcc_tokensym_set_id_c(TokenSym * tokensym, long new_c) {
-	Sym * sym_id = tokensym->sym_identifier;
-	if (sym_id != NULL) sym_id->c = new_c;
 }
 
 LIBTCCAPI int tcc_tokensym_has_define (TokenSym * tokensym) {
@@ -669,23 +739,6 @@ LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok) {
 	return (~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM) & tok);
 }
 
-LIBTCCAPI TokenSym* tcc_tokensym_by_tok(int tok, TokenSym ** list) {
-	int tok_no_flags = tcc_tokensym_no_extra_bits(tok);
-	int first_tok = tcc_tokensym_no_extra_bits(list[0]->tok);
-	if (tok_no_flags < first_tok) return 0;
-	TokenSym ** tail = *(TokenSym***)(list - 1) - 1;
-	if (tok_no_flags > tcc_tokensym_no_extra_bits((*tail)->tok)) return 0;
-	return list[tok_no_flags - first_tok];
-}
-
-
-/* We also don't provide a means for the user to know if they've reached
- * the end of the list. Instead, we provide a function to get the number
- * of TokenSyms. */
-LIBTCCAPI int tcc_tokensym_list_length (TokenSym ** list) {
-	TokenSym ** tail = *(TokenSym***)(list - 1);
-	return (int)(tail - list);
-}
 
 /*****************************************************************************/
 /*                      copy extended symbol into local                      */
@@ -753,7 +806,7 @@ int tokenstream_len (int * stream) {
 	return len + 1;
 }
 
-void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to) {
+void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym * to) {
 	/* Mark this token as extended. This will cause a symbol-used callback to be
 	 * fired the first time this token is used in reference to a symbol (at
 	 * which point the extended flag will be cleared). */
@@ -795,7 +848,8 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		memcpy(to_stream, from_stream, sizeof(int) * len);
 		
 		/* Get the starting token's id, used for correct extended table lookups */
-		int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+		int tok_start = symtab->tokenSym_list[0]->tok
+			& ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 		
 		/* Update TokenSym references to point to TokenSyms in the current
 		 * compiler context. Most of this code involves stepping over the other
@@ -842,7 +896,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 						 * local token's tok id. */
 						int from_tok = from_stream[len] & ~SYM_EXTENDED;
 						to_stream[len] = get_local_ts_for_extended_ts(
-							symtab[from_tok - tok_start], symtab)->tok;
+							symtab->tokenSym_list[from_tok - tok_start], symtab)->tok;
 					}
 					/* Any token value less than tok_start refers to a value in
 					 * the symbol table that is pre-defined, such as the C
@@ -862,7 +916,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 		) {
 			/* Get local TokenSym associated with curr_from_arg */
 			int from_tok = (curr_from_arg->v & ~SYM_FIELD) - tok_start;
-			TokenSym * local_ts = get_local_ts_for_extended_ts(symtab[from_tok],
+			TokenSym * local_ts = get_local_ts_for_extended_ts(symtab->tokenSym_list[from_tok],
 				symtab);
 			/* Add the argument to the local define stack and move the chains */
 			newest_arg = sym_push2(&define_stack, local_ts->tok | SYM_FIELD,
@@ -880,7 +934,7 @@ void copy_extended_tokensym (TokenSym ** symtab, TokenSym * from, TokenSym * to)
 /* Copy the CType information from an extended sym into a local CType. The hard
  * part here is finding the local tokensym associated with the type.ref field,
  * which is only an issue if the type is a pointer, struct, or function. */
-void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
+void copy_ctype(CType * to_type, Sym * from, extended_symtab * symtab) {
 	int btype = from->type.t & VT_BTYPE;
 	to_type->t = from->type.t;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
@@ -896,9 +950,9 @@ void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
 		}
 		else {
 			/* Not anonymous: get the tokensym */
-			int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD);
+			int tok_start = symtab->tokenSym_list[0]->tok & ~(SYM_STRUCT | SYM_FIELD);
 			int tok_from = from->type.ref->v & ~(SYM_STRUCT | SYM_FIELD);
-			TokenSym* orig_ts = symtab[tok_from - tok_start];
+			TokenSym* orig_ts = symtab->tokenSym_list[tok_from - tok_start];
 			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
 			if (btype == VT_STRUCT) to_type->ref = local_ts->sym_struct;
 			else to_type->ref = local_ts->sym_identifier;
@@ -908,15 +962,15 @@ void copy_ctype(CType * to_type, Sym * from, TokenSym**symtab) {
 
 /* Gets a local TokenSym pointer for a given extended TokenSym of the given tok,
  * and adds the extended tok's flags to the local tok's id. */
-int get_local_tok_for_extended_tok(int orig_tok, TokenSym** symtab) {
-	int tok_start = symtab[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
+int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab) {
+	int tok_start = symtab->tokenSym_list[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 	int orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD);      /* strip flags  */
-	TokenSym* orig_ts = symtab[orig_tok_no_fields - tok_start];         /* get ext ts   */
+	TokenSym* orig_ts = symtab->tokenSym_list[orig_tok_no_fields - tok_start];         /* get ext ts   */
 	TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab); /* get local ts */
 	return local_ts->tok | (orig_tok & (SYM_STRUCT | SYM_FIELD));       /* add flags    */
 }
 
-Sym * copy_extended_sym (TokenSym ** symtab, Sym * from, int to_tok) {
+Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok) {
 	if (from == NULL) return NULL;
 	
 	/* Copy the flags and CType from the "from" sym and push on the symbol stack */

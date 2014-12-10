@@ -30,11 +30,11 @@ typedef struct {
 	TCCState * oldest_context;
 	TCCState * middle_context;
 	TCCState * current_context;
-	TokenSym_p* oldest_symtab;
-	TokenSym_p* middle_symtab;
+	extended_symtab_p oldest_symtab;
+	extended_symtab_p middle_symtab;
 } three_callback_data;
 
-void my_copy_symtab(TokenSym_p* copied_symtab, void * data) {
+void my_copy_symtab(extended_symtab_p copied_symtab, void * data) {
 	three_callback_data* my_data = (three_callback_data*)data;
 	if (my_data->oldest_symtab == 0) my_data->oldest_symtab = copied_symtab;
 	else my_data->middle_symtab = copied_symtab;
@@ -63,7 +63,7 @@ void setup_mock_data (second_callback_data *mock, void * data) {
 }
 
 TokenSym_p my_lookup_by_name (char * name, int len, void * data,
-	TokenSym_p**containing_symtab
+	extended_symtab_p*containing_symtab
 ) {
 	/* Simply wrap the testing infrastructure's call appropriately */
 	second_callback_data mock;

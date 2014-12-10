@@ -100,10 +100,11 @@ LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 
 /* ---- Extended symbol table management ---- */
 typedef struct TokenSym* TokenSym_p;
+typedef struct extended_symtab* extended_symtab_p;
 typedef TokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name,
-	int len, void * data, TokenSym_p**containing_symtab);
+	int len, void * data, extended_symtab_p* containing_symtab);
 typedef void (*extended_symtab_sym_used_callback)(char * sym_name, int len, void * data);
-typedef void (*extended_symtab_copy_callback)(TokenSym_p* new_symtab, void * data);
+typedef void (*extended_symtab_copy_callback)(extended_symtab_p new_symtab, void * data);
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * compiler_state,
 	extended_symtab_copy_callback new_copy_callback,
@@ -111,14 +112,15 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	extended_symtab_sym_used_callback new_sym_used_callback,
 	void * data
 );
+LIBTCCAPI void tcc_copy_extended_symbols(TCCState *s, extended_symtab_p symtab);
+LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab_p symtab);
+LIBTCCAPI TokenSym_p tcc_get_extended_tokensym(extended_symtab_p symtab, const char * name);
+LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab_p symtab, const char * name);
 
-LIBTCCAPI int tcc_tokensym_list_length (TokenSym_p* list);
-LIBTCCAPI TokenSym_p tcc_tokensym_by_tok(int tok, TokenSym_p* list);
-LIBTCCAPI void tcc_delete_extended_symbol_table (TokenSym_p* my_extended_symtab);
+LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, char * name);
+
 LIBTCCAPI char * tcc_tokensym_name (TokenSym_p tokensym);
 LIBTCCAPI int tcc_tokensym_tok (TokenSym_p tokensym);
-LIBTCCAPI long tcc_tokensym_get_id_c(TokenSym_p tokensym);
-LIBTCCAPI void tcc_tokensym_set_id_c(TokenSym_p tokensym, long new_c);
 LIBTCCAPI int tcc_tokensym_no_extra_bits(int tok);
 LIBTCCAPI int tcc_tokensym_has_define (TokenSym_p tokensym);
 LIBTCCAPI int tcc_tokensym_has_struct (TokenSym_p tokensym);

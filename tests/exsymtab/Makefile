@@ -72,6 +72,10 @@ PROVES =	\
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
 	gdb --args $@ lib_path=$(top_srcdir); rm $@
 
+%.valgrind: %.c $(top_builddir)/$(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
+	valgrind --leak-check=yes ./$@ lib_path=$(top_srcdir); rm $@
+
 all test: $(TESTS)
 
 prove: $(PROVES)

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 	
 	TCCState *s1 = tcc_new();
 	SIMPLE_SETUP(s1);
-	TokenSym_p* my_symtab;
+	extended_symtab_p my_symtab;
 	
 	/* Code taken from test_setup.h and modified to work with my own relocation
 	 * point. */

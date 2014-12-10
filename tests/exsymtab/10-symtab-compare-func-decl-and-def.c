@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     TCCState *s_decl = tcc_new();
     SIMPLE_SETUP(s_decl);
 	/* Set the copy callback */
-	TokenSym_p* decl_symtab;
+	extended_symtab_p decl_symtab;
 	tcc_set_extended_symtab_callbacks(s_decl, &copy_symtab, NULL, NULL, &decl_symtab);
 	/* Compile */
     if (tcc_compile_string(s_decl, declaration_code) == -1) return 1;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     /* MUST BE CALLED before any compilation */
     tcc_set_output_type(s_def, TCC_OUTPUT_MEMORY);
 	/* Set the copy callback */
-	TokenSym_p* def_symtab;
+	extended_symtab_p def_symtab;
 	tcc_set_extended_symtab_callbacks(s_def, &copy_symtab, NULL, NULL, &def_symtab);
 	/* Compile */
     if (tcc_compile_string(s_def, definition_code) == -1) return 1;
@@ -46,27 +46,27 @@ int main(int argc, char **argv) {
     pass("Built definition compiler state's symbol table");
     
     /* get the symbol table layouts of the two */
-	int i;
-	Sym * foo_decl;
-	for (i = 0; i < tcc_tokensym_list_length(decl_symtab); i++) {
-		if (strcmp("foo", tcc_tokensym_name(decl_symtab[i])) == 0) {
-			if (decl_symtab[i]->sym_identifier == NULL) {
-				printf("foo TokenSym has no sym_identifier???\n");
-				return(1);
-			}
-			foo_decl = decl_symtab[i]->sym_identifier;
-		}
+	TokenSym * ts = tcc_get_extended_tokensym(decl_symtab, "foo");
+	if (ts == NULL) {
+		printf("could not find foo tokensym in declaration symtab\n");
+		return(1);
 	}
-    Sym * foo_def;
-    for (i = 0; i < tcc_tokensym_list_length(def_symtab); i++) {
-    	if (strcmp("foo", tcc_tokensym_name(def_symtab[i])) == 0) {
-    		if (def_symtab[i]->sym_identifier == NULL) {
-	    		printf("foo TokenSym has no sym_identifier???\n");
-	    		return(1);
-    		}
-    		foo_def = def_symtab[i]->sym_identifier;
-    	}
-    }
+	if (ts->sym_identifier == NULL) {
+		printf("foo TokenSym in declaration has no sym_identifier\n");
+		return(1);
+	}
+	Sym * foo_decl = ts->sym_identifier;
+	
+	ts = tcc_get_extended_tokensym(def_symtab, "foo");
+	if (ts == NULL) {
+		printf("could not find foo tokensym in definition symtab\n");
+		return(1);
+	}
+	if (ts->sym_identifier == NULL) {
+		printf("foo TokenSym in definition has no sym_identifier\n");
+		return(1);
+	}
+    Sym * foo_def = ts->sym_identifier;
 	
 	/* ---- Compare them ---- */
 	

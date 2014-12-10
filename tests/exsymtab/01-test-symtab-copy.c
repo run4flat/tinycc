@@ -23,10 +23,17 @@ char to_compile[] =
 "#define PI 3.14159\n"
 ;
 
-void copy_symtab(TokenSym_p* copied_symtab, void * data) {
-	TokenSym_p** my_symtab_p = (TokenSym_p**)data;
+void copy_symtab(extended_symtab_p copied_symtab, void * data) {
+	extended_symtab_p* my_symtab_p = (extended_symtab_p*)data;
 	*my_symtab_p = copied_symtab;
 }
+
+enum {
+	GET_TOK,
+	HAS_DEFINE,
+	HAS_STRUCT,
+	HAS_IDENTIFIER
+};
 
 int main(int argc, char **argv) {
     TCCState *s;
@@ -47,7 +54,7 @@ int main(int argc, char **argv) {
 	pass("Set output type to memory");
 	
 	/* Set the copy callback */
-	TokenSym_p* my_symtab;
+	extended_symtab_p my_symtab;
 	tcc_set_extended_symtab_callbacks(s, &copy_symtab, NULL, NULL, &my_symtab);
 	pass("Set the symtab copy function");
 
@@ -55,36 +62,10 @@ int main(int argc, char **argv) {
         return 1;
 	pass("Compiled the test code");
 	
-	/* The token symbol table will include tokens that are not attached
-	 * to symbols. The globally accessible stuff must have an affiliated
-	 * symbol of some sort. We can count the number of global symbols
-	 * and confirm that it is what we expect: fib, linked_list, and PI
-	 */
-	int i, N_symbols = 0;
-	int fib_is_identifier = 0, PI_is_define = 0, linked_list_is_struct = 0;
-	for (i = 0; i < tcc_tokensym_list_length(my_symtab); i++) {
-		if (tcc_tokensym_has_define(my_symtab[i])) {
-			if (strcmp("PI", tcc_tokensym_name(my_symtab[i])) == 0)
-				PI_is_define = 1;
-			N_symbols++;
-		}
-		if (tcc_tokensym_has_identifier(my_symtab[i])) {
-			if (strcmp("fib", tcc_tokensym_name(my_symtab[i])) == 0)
-				fib_is_identifier = 1;
-			N_symbols++;
-		}
-		if (tcc_tokensym_has_struct(my_symtab[i])) {
-			if (strcmp("linked_list", tcc_tokensym_name(my_symtab[i])) == 0)
-				linked_list_is_struct = 1;
-			N_symbols++;
-		}
-	}
-	
-	/* Can we find the fib symbol? */
-	is_i(N_symbols, 3, "Reported symbol table length is correct");
-	ok(fib_is_identifier, "fib is an identifier");
-	ok(PI_is_define, "PI is a macro");
-	ok(linked_list_is_struct, "linked_list is a struct");
+	/* See if the known things are accessible */
+	ok(tcc_extended_symtab_test(my_symtab, HAS_DEFINE, "PI"), "PI is a macro");
+	ok(tcc_extended_symtab_test(my_symtab, HAS_IDENTIFIER, "fib"), "fib is an identifier");
+	ok(tcc_extended_symtab_test(my_symtab, HAS_STRUCT, "linked_list"), "linked_list is a struct");
 	
 	/* Clean up */
 	tcc_delete_extended_symbol_table(my_symtab);

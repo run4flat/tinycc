@@ -18,8 +18,8 @@
 
 /******** Setup first compiler state, with a symbol table ********/
 
-void copy_symtab(TokenSym_p* copied_symtab, void * data) {
-	TokenSym_p** my_symtab_p = (TokenSym_p**)data;
+void copy_symtab(extended_symtab_p copied_symtab, void * data) {
+	extended_symtab_p* my_symtab_p = (extended_symtab_p*)data;
 	*my_symtab_p = copied_symtab;
 }
 
@@ -44,36 +44,31 @@ void copy_symtab(TokenSym_p* copied_symtab, void * data) {
 typedef struct {
 	TCCState * second_context;
 	TCCState * first_context;
-	TokenSym_p* first_symtab;
+	extended_symtab_p first_symtab;
 } second_callback_data;
 
 TokenSym_p lookup_by_name (char * name, int len, void * data,
-	TokenSym_p**containing_symtab
+	extended_symtab_p*containing_symtab
 ) {
 	/* Extract the name from the full string passed in */
 	char name_to_find[len + 1];
 	strncpy(name_to_find, name, len);
 	name_to_find[len] = '\0';
+
 	/* Pull out the symtab */
-	TokenSym_p* my_symtab = ((second_callback_data*)data)->first_symtab;
+	extended_symtab_p my_symtab = ((second_callback_data*)data)->first_symtab;
 	*containing_symtab = my_symtab;
-	int i;
-	for (i = 0; i < tcc_tokensym_list_length(my_symtab); i++) {
-		if (strncmp(name, tcc_tokensym_name(my_symtab[i]), len) == 0) {
-			DIAG("Found [%s]", name_to_find);
-			return my_symtab[i];
-		}
-	}
+	/* Get the tokensym and return if found */
+	TokenSym_p ts = tcc_get_extended_tokensym(my_symtab, name_to_find);
+	if (ts != NULL) return ts;
+	/* Warn otherwise */
 	DIAG("Did not find [%s]", name_to_find);
 	return NULL;
 }
 
 void sym_used (char * name, int len, void * data) {
 	/* Extract the name from the full string passed in */
-	char name_to_find[len + 1];
-	strncpy(name_to_find, name, len);
-	name_to_find[len] = '\0';
-	DIAG("Adding external identifier %s to second context\n", name_to_find);
+	DIAG("Adding external identifier %s to second context\n", name);
 	
 	/* Unpack the two compilation contexts */
 	second_callback_data * my_data = (second_callback_data *)data;
@@ -81,12 +76,12 @@ void sym_used (char * name, int len, void * data) {
 	TCCState * orig_context = my_data->first_context;
 	
 	/* Get the symbol and add it */
-	void * orig_symbol = tcc_get_symbol(orig_context, name_to_find);
+	void * orig_symbol = tcc_get_symbol(orig_context, name);
 	if (!orig_symbol) {
-		DIAG("COULD NOT FIND %s!!\n", name_to_find);
+		DIAG("COULD NOT FIND %s!!\n", name);
 		return;
 	}
-	tcc_add_symbol(curr_context, name_to_find, orig_symbol);
+	tcc_add_symbol(curr_context, name, orig_symbol);
 }
 
 /* ---- code for setting up the second compiler state ---- */
