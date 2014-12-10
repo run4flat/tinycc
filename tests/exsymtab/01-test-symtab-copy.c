@@ -56,8 +56,10 @@ int main(int argc, char **argv) {
         return 1;
 	pass("Compiled the test code");
 	
-	/* retrieve the symbol table */
+	/* retrieve the symbol table and clean up the compiler */
 	extended_symtab_p my_symtab = tcc_get_extended_symbol_table(s);
+	tcc_delete(s);
+	pass("Got extended symtab, cleaned up compilation state");
 	
 	/* See if the known things are accessible */
 	ok(tcc_extended_symtab_test(my_symtab, HAS_DEFINE, "PI"), "PI is a macro");
@@ -66,8 +68,7 @@ int main(int argc, char **argv) {
 	
 	/* Clean up */
 	tcc_delete_extended_symbol_table(my_symtab);
-	tcc_delete(s);
-	pass("Cleaned up extended symbol table memory");
+	pass("Cleaned up extended symtab memory");
 	
 	done_testing();
 	
