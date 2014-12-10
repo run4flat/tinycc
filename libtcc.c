@@ -805,8 +805,8 @@ static int tcc_compile(TCCState *s1)
 
     s1->error_set_jmp_enabled = 0;
     
-    /* Perform the symbol table callback, if requested */
-    if (s1->nb_errors == 0 && s1->symtab_copy_callback != NULL) {
+    /* Make an extended copy of the symbol table, if requested */
+    if (s1->nb_errors == 0 && s1->exsymtab == (extended_symtab*)1) {
 		copy_extended_symtab(s1, define_start, tok_start);
 	}
 
@@ -1065,6 +1065,10 @@ LIBTCCAPI void tcc_delete(TCCState *s1)
 
     tcc_cleanup();
 
+    /* Clean up the extended symbol table if it was never copied. */
+    if (s1->exsymtab > (extended_symtab*)1)
+		tcc_delete_extended_symbol_table(s1->exsymtab);
+    
     /* free all sections */
     for(i = 1; i < s1->nb_sections; i++)
         free_section(s1->sections[i]);

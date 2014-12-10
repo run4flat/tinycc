@@ -23,11 +23,6 @@ char to_compile[] =
 "#define PI 3.14159\n"
 ;
 
-void copy_symtab(extended_symtab_p copied_symtab, void * data) {
-	extended_symtab_p* my_symtab_p = (extended_symtab_p*)data;
-	*my_symtab_p = copied_symtab;
-}
-
 enum {
 	GET_TOK,
 	HAS_DEFINE,
@@ -53,14 +48,16 @@ int main(int argc, char **argv) {
     tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
 	pass("Set output type to memory");
 	
-	/* Set the copy callback */
-	extended_symtab_p my_symtab;
-	tcc_set_extended_symtab_callbacks(s, &copy_symtab, NULL, NULL, &my_symtab);
-	pass("Set the symtab copy function");
-
-    if (tcc_compile_string(s, to_compile) == -1)
+	/* Tell the compiler to save an extended symbol table */
+	tcc_save_extended_symtab(s);
+	
+   /* Compile the symbol table */
+   if (tcc_compile_string(s, to_compile) == -1)
         return 1;
 	pass("Compiled the test code");
+	
+	/* retrieve the symbol table */
+	extended_symtab_p my_symtab = tcc_get_extended_symbol_table(s);
 	
 	/* See if the known things are accessible */
 	ok(tcc_extended_symtab_test(my_symtab, HAS_DEFINE, "PI"), "PI is a macro");
@@ -69,6 +66,7 @@ int main(int argc, char **argv) {
 	
 	/* Clean up */
 	tcc_delete_extended_symbol_table(my_symtab);
+	tcc_delete(s);
 	pass("Cleaned up extended symbol table memory");
 	
 	done_testing();

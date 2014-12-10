@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 	TCCState *s1 = tcc_new();
 	extended_symtab_p my_symtab;
 	setup_and_compile_s1(my_symtab, first_code);
-	SETUP_SECOND_CALLBACK_DATA(s1);
+	SETUP_SECOND_CALLBACK_DATA();
 	
 	/* ---- Check code string that depends on the macro ---- */
 	

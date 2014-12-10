@@ -1495,6 +1495,24 @@ trie for lookup. The result is a huge commit with lots of changes, including a
 few that could have been applied as small point-fixes. Oh well. The tests now
 pass, and the whole thing is easier to comprehend, I hope.
 
+December 10, 2014
+=================
+
+I decided that calling tcc_copy_extended_symbols after relocation is a
+pessimization. I revised things so that the TCCState has a pointer slot for the
+current extended symbol table, and symbols are automatically added during the
+relocation stage if the slot has an extended symbol table. Since the state has a
+slot for the extended symbol table, I can simply store the extended symbol table
+there during compilation, rather than requiring a contorted callback function.
+Now, callbacks are used only for extended symbol table lookups. This leads to
+two code simplificatons. First, I reduce the number of callback functions,
+easing the burden on library authors. Second, all callback functions and data
+are only focused on symbol lookup, which makes them less cluttered.
+
+At this stage, all of the tests pass, though many emit warnings. I am now in a
+position to rewrite the tests to delete the tcc states as early as possible,
+which will let me really test how the system is working.
+
 
 At some point, should I add a test that checks which function gets linked when I
 have multiple functions compiled in previous states under the same name?

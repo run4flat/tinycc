@@ -39,13 +39,7 @@ c_trie ** _c_trie_find_child (c_trie * current, char * string);
 c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset);
 
 /******************************************************************************/
-/*                           compiled symbol lookup                           */
-/******************************************************************************/
-
-void dump_sym_names(TCCState *state);
-
-/******************************************************************************/
-/*                            extended symtab copy                            */
+/*                           extended symtab struct                           */
 /******************************************************************************/
 
 typedef struct extended_symtab {
@@ -58,13 +52,22 @@ typedef struct extended_symtab {
 	TokenSym * tokenSym_list [1];
 } extended_symtab;
 
-LIBTCCAPI void tcc_set_extended_symtab_callbacks (
-	TCCState * s,
-	extended_symtab_copy_callback new_copy_callback,
-	extended_symtab_lookup_by_name_callback new_name_callback,
-	extended_symtab_sym_used_callback new_sym_used_callback,
-	void * data
-);
+/******************************************************************************/
+/*                           compiled symbol lookup                           */
+/******************************************************************************/
+
+void dump_sym_names(TCCState *state);
+void copy_extended_symbols_to_exsymtab(TCCState *state);
+/* tcc_get_extended_symbol_table in libtcc.h */
+/* tcc_get_extended_tokensym in libtcc.h */
+/* tcc_get_extended_symbol in libtcc.h */
+
+/******************************************************************************/
+/*                            extended symtab copy                            */
+/******************************************************************************/
+
+/* tcc_set_extended_symtab_callbacks is in libtcc.h */
+/* tcc_save_extended_symtab is in libtcc.h */
 
 int _sym_is_all_zeros(Sym * to_check);
 Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack);

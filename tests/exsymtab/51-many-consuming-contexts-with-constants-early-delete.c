@@ -41,17 +41,17 @@ int main(int argc, char **argv) {
 	
 	TCCState *s1 = tcc_new();
 	SIMPLE_SETUP(s1);
-	extended_symtab_p my_symtab;
 	
 	/* Code taken from test_setup.h and modified to work with my own relocation
 	 * point. */
-	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &my_symtab);
+	tcc_save_extended_symtab(s1);
     if (tcc_compile_string(s1, def_code) == -1) return 1;
     tcc_add_symbol(s1, "fib", fib);
     int def_code_size = tcc_relocate(s1, 0);
     void * code = malloc(def_code_size);
     if (code == NULL) return 1;
 	if (tcc_relocate(s1, code) == -1) return 1;
+	extended_symtab_p my_symtab = tcc_get_extended_symbol_table(s1);
 	pass("First code string compiled and relocated fine");
 	
 	/* ---- Get the fib_of_5 function and evaluate it ---- */
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 	
 	/* ---- Compile the second string ---- */
 	
-	SETUP_SECOND_CALLBACK_DATA(s1);
+	SETUP_SECOND_CALLBACK_DATA();
 	TCCState *s_first = tcc_new();
 	setup_and_compile_second_state(s_first, first_code);
 	tcc_add_symbol(s_first, "fib_of_5", fib5);

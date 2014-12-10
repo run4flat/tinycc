@@ -31,19 +31,19 @@ void copy_symtab(extended_symtab_p copied_symtab, void * data) {
 		tcc_set_lib_path(state, "../..");             \
 	tcc_set_output_type(state, TCC_OUTPUT_MEMORY);
 
-#define setup_and_compile_s1(symtab, code)                                    \
-    SIMPLE_SETUP(s1);                                                         \
-	tcc_set_extended_symtab_callbacks(s1, &copy_symtab, NULL, NULL, &symtab); \
-    if (tcc_compile_string(s1, code) == -1) return 1;                         \
-	APPLY_MALLOC(s1);                                                         \
-	if (tcc_relocate(s1, TCC_RELOCATE_AUTO) == -1) return 1;                  \
+#define setup_and_compile_s1(symtab, code)                   \
+    SIMPLE_SETUP(s1);                                        \
+	tcc_save_extended_symtab(s1);                            \
+    if (tcc_compile_string(s1, code) == -1) return 1;        \
+	APPLY_MALLOC(s1);                                        \
+	if (tcc_relocate(s1, TCC_RELOCATE_AUTO) == -1) return 1; \
+	symtab = tcc_get_extended_symbol_table(s1);              \
 	pass("First code string compiled and relocated fine")
 
 /******** Setup the ensuing compiler states with symbol tables ********/
 
 typedef struct {
 	TCCState * second_context;
-	TCCState * first_context;
 	extended_symtab_p first_symtab;
 } second_callback_data;
 
@@ -73,10 +73,10 @@ void sym_used (char * name, int len, void * data) {
 	/* Unpack the two compilation contexts */
 	second_callback_data * my_data = (second_callback_data *)data;
 	TCCState * curr_context = my_data->second_context;
-	TCCState * orig_context = my_data->first_context;
+	extended_symtab_p my_symtab = my_data->first_symtab;
 	
 	/* Get the symbol and add it */
-	void * orig_symbol = tcc_get_symbol(orig_context, name);
+	void * orig_symbol = tcc_get_extended_symbol(my_symtab, name);
 	if (!orig_symbol) {
 		DIAG("COULD NOT FIND %s!!\n", name);
 		return;
@@ -86,21 +86,20 @@ void sym_used (char * name, int len, void * data) {
 
 /* ---- code for setting up the second compiler state ---- */
 
-#define SETUP_SECOND_CALLBACK_DATA(state)   \
+#define SETUP_SECOND_CALLBACK_DATA()        \
 	second_callback_data callback_data;     \
-	callback_data.first_symtab = my_symtab; \
-	callback_data.first_context = state
+	callback_data.first_symtab = my_symtab;
 
-#define setup_and_compile_second_state(s, code)                 \
-	if (!s) return 1;                                           \
-	if (argc == 2 && !memcmp(argv[1], "lib_path=",9))           \
-		tcc_set_lib_path(s, argv[1]+9);                         \
-	else                                                        \
-	    tcc_set_lib_path(s, "../..");                           \
-	tcc_set_output_type(s, TCC_OUTPUT_MEMORY);                  \
-	callback_data.second_context = s;                           \
-	tcc_set_extended_symtab_callbacks(s, NULL, &lookup_by_name, \
-		&sym_used, &callback_data);                     \
+#define setup_and_compile_second_state(s, code)           \
+	if (!s) return 1;                                     \
+	if (argc == 2 && !memcmp(argv[1], "lib_path=",9))     \
+		tcc_set_lib_path(s, argv[1]+9);                   \
+	else                                                  \
+	    tcc_set_lib_path(s, "../..");                     \
+	tcc_set_output_type(s, TCC_OUTPUT_MEMORY);            \
+	callback_data.second_context = s;                     \
+	tcc_set_extended_symtab_callbacks(s, &lookup_by_name, \
+		&sym_used, &callback_data);                       \
    	if (tcc_compile_string(s, code) == -1) return 1
 
 #define relocate_second_state(s)                                \

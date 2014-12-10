@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 	TCCState *s1 = tcc_new();
 	extended_symtab_p my_symtab;
 	setup_and_compile_s1(my_symtab, first_code);
-	SETUP_SECOND_CALLBACK_DATA(s1);
+	SETUP_SECOND_CALLBACK_DATA();
 	
 	/* ---- Make sure the algorithm is correct ---- */
 	int (*sum_up_ptr)(int, int) = tcc_get_symbol(s1, "sum_up");

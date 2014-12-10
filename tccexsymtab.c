@@ -222,19 +222,21 @@ void dump_sym_names(TCCState *state) {
 	}
 }
 
-LIBTCCAPI void tcc_copy_extended_symbols(TCCState *state, extended_symtab_p symtab) {
+void copy_extended_symbols_to_exsymtab(TCCState *state) {
 	Section * s;
     ElfW(Sym) *sym;
     int sym_index;
     const char *name;
+    extended_symtab* exsymtab;
     
+    exsymtab = state->exsymtab;
     s = state->symtab;
 	sym_index = 2;
 	sym = &((ElfW(Sym) *)s->data)[sym_index];
 	name = s->link->data + sym->st_name;
 	while (strcmp("_etext", name) != 0) {
 		/* Copy the symbol's pointer into the hash_next field of the TokenSym */
-		TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
+		TokenSym * ts = tcc_get_extended_tokensym(exsymtab, name);
 		if (ts == NULL) {
 			tcc_warning("Global symbol %s does not exist in extended symbol table; not copying\n",
 				name);
@@ -247,6 +249,20 @@ LIBTCCAPI void tcc_copy_extended_symbols(TCCState *state, extended_symtab_p symt
 		sym = &((ElfW(Sym) *)s->data)[sym_index];
 		name = s->link->data + sym->st_name;
 	}
+}
+
+/* A value of NULL for exsymtab means that the extended symtab was not supposed
+ * to be generated in the first place. A value of 1 means that it is supposed to
+ * be created, but the state hasn't compiled yet. Otherwise, we have a fully
+ * formed extended symbol table, which we can return. In that case, we assume
+ * that the user takes responsibility for cleaning it up. */
+LIBTCCAPI extended_symtab * tcc_get_extended_symbol_table(TCCState * s) {
+	if (s->exsymtab <= (extended_symtab*)1) return NULL;
+	/* clear the pointer value; otherwise we would free it, leading to a
+	 * double-free situation when the user also frees it. */
+	extended_symtab * to_return = s->exsymtab;
+	s->exsymtab = (extended_symtab*)1;
+	return to_return;
 }
 
 LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name) {
@@ -269,15 +285,17 @@ LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * 
  * number */
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
-	extended_symtab_copy_callback new_copy_callback,
 	extended_symtab_lookup_by_name_callback new_name_callback,
 	extended_symtab_sym_used_callback new_sym_used_callback,
 	void * data
 ) {
-	s->symtab_copy_callback = new_copy_callback;
 	s->symtab_name_callback = new_name_callback;
 	s->symtab_sym_used_callback = new_sym_used_callback;
 	s->symtab_callback_data = data;
+}
+
+LIBTCCAPI void tcc_save_extended_symtab(TCCState * s) {
+	if (s->exsymtab == NULL) s->exsymtab = (extended_symtab*)1;
 }
 
 int _sym_is_all_zeros(Sym * to_check) {
@@ -628,9 +646,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		c_trie_add_data(to_return->trie, tok_sym->str, tok_sym);
 	}
 
-	/* Call the callback with a pointer to the extended symtab */
-	extended_symtab_copy_callback to_call = s->symtab_copy_callback;
-	to_call(to_return, s->symtab_callback_data);
+	/* Store the extended symtab */
+	s->exsymtab = to_return;
 }
 
 /* Frees memory associated with a copied extended symbol table. For a

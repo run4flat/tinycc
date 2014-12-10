@@ -15,11 +15,12 @@ char declaration_code[] = "double foo(int bar, double *baz);\n";
 int main(int argc, char **argv) {
     TCCState *s_decl = tcc_new();
     SIMPLE_SETUP(s_decl);
-	/* Set the copy callback */
-	extended_symtab_p decl_symtab;
-	tcc_set_extended_symtab_callbacks(s_decl, &copy_symtab, NULL, NULL, &decl_symtab);
+	/* Indicate that we want the symtab */
+	tcc_save_extended_symtab(s_decl);
 	/* Compile */
     if (tcc_compile_string(s_decl, declaration_code) == -1) return 1;
+    /* Get symtab */
+	extended_symtab_p decl_symtab = tcc_get_extended_symbol_table(s_decl);
     /* All done with that compiler, clean up */
     tcc_free(s_decl);
     
@@ -35,11 +36,12 @@ int main(int argc, char **argv) {
         tcc_set_lib_path(s_def, argv[1]+9);
     /* MUST BE CALLED before any compilation */
     tcc_set_output_type(s_def, TCC_OUTPUT_MEMORY);
-	/* Set the copy callback */
-	extended_symtab_p def_symtab;
-	tcc_set_extended_symtab_callbacks(s_def, &copy_symtab, NULL, NULL, &def_symtab);
+	/* indicate that we want the symtab */
+	tcc_save_extended_symtab(s_def);
 	/* Compile */
     if (tcc_compile_string(s_def, definition_code) == -1) return 1;
+    /* Get the symtab */
+	extended_symtab_p def_symtab = tcc_get_extended_symbol_table(s_def);
     /* All done with that compiler, clean up */
     tcc_free(s_def);
 
