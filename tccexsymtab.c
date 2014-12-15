@@ -267,7 +267,7 @@ LIBTCCAPI extended_symtab * tcc_get_extended_symbol_table(TCCState * s) {
 
 LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name) {
 	/* delegate to the symtab's trie */
-	return (TokenSym*)c_trie_get_data(symtab->trie, name);
+	return (TokenSym*)c_trie_get_data(symtab->trie, (char*)name);
 }
 
 LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * name) {
