@@ -23,6 +23,7 @@ TESTS =	\
  25-two-contexts-intertwined-preprocessor-macro.test \
  28-three-contexts-intertwined-preprocessor-macro.test \
  30-two-contexts-struct-share.test \
+ 31-two-contexts-struct-array-share.test \
  35-two-contexts-vtable-share.test \
  40-two-contexts-func-decl-share.test \
  42-three-contexts-func-share.test \
@@ -41,6 +42,7 @@ PROVES =	\
  25-two-contexts-intertwined-preprocessor-macro.prove \
  28-three-contexts-intertwined-preprocessor-macro.prove \
  30-two-contexts-struct-share.prove \
+ 31-two-contexts-struct-array-share.prove \
  35-two-contexts-vtable-share.prove \
  40-two-contexts-func-decl-share.prove \
  42-three-contexts-func-share.prove \
@@ -80,6 +82,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 70-symtab-use-check.test
-curr-prove: 70-symtab-use-check.prove
-curr-dbg: 70-symtab-use-check.dbg
+curr-test: 31-two-contexts-struct-array-share.test
+curr-prove: 31-two-contexts-struct-array-share.prove
+curr-dbg: 31-two-contexts-struct-array-share.dbg
