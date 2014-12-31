@@ -39,6 +39,7 @@ ST_DATA struct TCCState *tcc_state;
 #include "tccgen.c"
 #include "tccelf.c"
 #include "tccrun.c"
+#include "tccexsymtab.c"
 #ifdef TCC_TARGET_I386
 #include "i386-gen.c"
 #endif
