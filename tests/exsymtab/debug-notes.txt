@@ -1548,6 +1548,13 @@ declared for this compiler context, including "string", "space", "word", and
 compiler contexts, so referring to these tokens is simply a matter of copying
 the token id.
 
+However, all is not well with the world. While I no longer have a segfault, I do
+have an "error: function pointer expected" with test 31. This, of course, is
+because I try to re-use the token "new_list" as a variable name and as a
+function name. Changing the variable "new_list" to simply "list" fixes that.
+Looking closer, I realized that the test function was broken and didn't return
+anything! Fixing that leads to a test 31 that passes! Hurray!
+
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 
 Note: might be able to streamline external linkage of functions. See test 45.

@@ -23,12 +23,13 @@ char first_code[] =
 ;
 
 char second_code[] =
-"int newz_list(int N) {\n"
-"    struct list * new_list = new_list(N);\n"
+"void * newz_list(int N) {\n"
+"    struct list * list = new_list(N);\n"
 "    int i;\n"
 "    for (i = 0; i < N; i++) {\n"
-"        new_list->data[i] = 0;\n"
+"        list->data[i] = 0;\n"
 "    }\n"
+"    return list;\n"
 "}\n"
 "int sum(struct list * list) {\n"
 "    int i, sum;\n"
