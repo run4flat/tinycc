@@ -1518,7 +1518,35 @@ At some point, should I add a test that checks which function gets linked when I
 have multiple functions compiled in previous states under the same name?
 
 
+December 31, 2014
+=================
 
+Added a new test, #31. There appear to be issues with struct members that are
+arrays: the token for such members is (or at least can be) less than tok_start.
+Why? How?
+
+Look at the struct declared in test 31. Rumaging around using gdb, I see that
+the int member has a good token id. The next member has a hax token id of
+0x10000193. The last three digits should be a number greater than (roughly) 470.
+To understand what's going on, start with tccgen.c:2862. This sees "int data[1]"
+and so the first step, parse_btype, sets btype->t to 0 (type int). The next
+token is the field's name, "data", so we proceed to call type_decl. This sets
+the value of "v" to the token id of the token for "data" (line 3423), before
+looking at the post-type, bringing me to line 3319. Following the code, we get
+to line 3363, which pushes an anonymous symbol containing the array element
+type; the token id is SYM_FIELD, a case that is already handled. Finally (as far
+as the token id is concerned), we push the symbol on line 2984 with the v OR'ed
+with SYM_FIELD. Which leads to the question: is "data" a token that exists
+before we begin?
+
+Aha! It is! To see this, type this into the debugger:
+  p (char*)(table_ident[0x93]->str)
+We get "data". At 0x92 we have "text" and at 0x94 we have "bss". Earlier in the
+table give perfectly normal looking words that have (apparently) already been
+declared for this compiler context, including "string", "space", "word", and
+"align". Ostensibly, the exact same words are also declared for all other
+compiler contexts, so referring to these tokens is simply a matter of copying
+the token id.
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 

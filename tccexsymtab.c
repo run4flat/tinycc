@@ -950,6 +950,11 @@ void copy_ctype(CType * to_type, Sym * from, extended_symtab * symtab) {
 int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab) {
 	int tok_start = symtab->tokenSym_list[0]->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_FIRST_ANOM);
 	int orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD);      /* strip flags  */
+	
+	/* special case for ordinary tokens that exist in all compiler contexts,
+	 * including "data", "string", and others. */
+	if (orig_tok_no_fields < tok_start) return orig_tok;
+	
 	TokenSym* orig_ts = symtab->tokenSym_list[orig_tok_no_fields - tok_start];         /* get ext ts   */
 	TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab); /* get local ts */
 	return local_ts->tok | (orig_tok & (SYM_STRUCT | SYM_FIELD));       /* add flags    */
