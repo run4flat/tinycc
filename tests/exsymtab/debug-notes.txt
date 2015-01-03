@@ -1555,6 +1555,165 @@ function name. Changing the variable "new_list" to simply "list" fixes that.
 Looking closer, I realized that the test function was broken and didn't return
 anything! Fixing that leads to a test 31 that passes! Hurray!
 
+January 1, 2015
+===============
+
+C::Blocks work has uncovered what appears to be another bug involving the issue
+I just fixed: a subtraction of tok_start. Reproducing the problem with a simple
+C test case is difficult at the moment, so I am going to rely on a C::Blocks
+test tha core dumps to figure out what's going on.
+
+January 2, 2015
+===============
+
+Running the C::Blocks test through valgrind gives an interesting issue. By using
+valgrind with --track-origins=yes, I get an "Uninitialised value" warning that I
+can trace back to TOK___LINE__. This macro is "defined" as a null macro in
+tcc_new, and its handling is special cased in tccpp.c. The problem appears to be
+with type.t value, ostensibly being uninitialized. Yet this value *is*
+initialized during sym_push2 to the function's third argument, which in this
+case is called during define_push. The third argument to sym_push2 is the second
+argument to define_push, which is MACRO_OBJ, which is defined in tcc.h as a
+numeric constant. There should be no undefinedness going on here.
+
+At this point I might figure that the type.t value was changed after its
+initialization, to some value that was not initialized, but I don't think so. I
+don't think anything messes with this token. You don't define struct members
+with the name __LINE__.
+
+All of this leads to the question: why is __LINE__ even showing up? Why would it
+end up as a token being processed in get_new_symtab_pointer?
+
+And then it hits me: the *allocation* occurs when __LINE__ is defined, but that
+allocation is for a block of Syms. The Sym that is giving trouble is not the
+__LINE__ Sym, but some other Sym that was allocated in that block. In that case,
+the moment of creation for the Sym is worthless. However, I could change the
+allocation of Syms to be on-demand...
+
+And now we are on to something! It appears that there is a symbol that is
+referenced which was freed:
+==23182== Invalid read of size 8
+==23182==    at 0x7275177: get_new_symtab_pointer (tccexsymtab.c:364)
+==23182==    by 0x72759D5: copy_extended_symtab (tccexsymtab.c:510)
+==23182==    by 0x72543C0: tcc_compile (libtcc.c:811)
+==23182==    by 0x72544A2: tcc_compile_string_ex (libtcc.c:836)
+==23182==    by 0x7047A7D: execute_compiler (Blocks.xs:524)
+==23182==    by 0x70481B4: my_keyword_plugin (Blocks.xs:704)
+==23182==    by 0x44FE0D: Perl_yylex (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==23182==    by 0x462717: Perl_yyparse (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==23182==    by 0x43C50D: perl_parse (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==23182==    by 0x41BD58: main (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==23182==  Address 0x6f35460 is 16 bytes inside a block of size 72 free'd
+==23182==    at 0x4C2BE10: free (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==23182==    by 0x7252CCA: tcc_free (libtcc.c:210)
+==23182==    by 0x725DA65: sym_free (tccgen.c:153)
+==23182==    by 0x725DFE4: sym_pop (tccgen.c:318)
+==23182==    by 0x72669A8: block (tccgen.c:4626)
+==23182==    by 0x7269537: gen_function (tccgen.c:5720)
+==23182==    by 0x7269F19: decl0 (tccgen.c:5963)
+==23182==    by 0x726A2AF: decl (tccgen.c:6037)
+==23182==    by 0x72542B9: tcc_compile (libtcc.c:794)
+==23182==    by 0x72544A2: tcc_compile_string_ex (libtcc.c:836)
+==23182==    by 0x7047A7D: execute_compiler (Blocks.xs:524)
+==23182==    by 0x70481B4: my_keyword_plugin (Blocks.xs:704)
+
+More sleuthing and adding some code led to this:
+
+==26972== Invalid read of size 4
+==26972==    at 0x72759AE: copy_extended_symtab (tccexsymtab.c:509)
+==26972==    by 0x72543C0: tcc_compile (libtcc.c:811)
+==26972==    by 0x72544A2: tcc_compile_string_ex (libtcc.c:836)
+==26972==    by 0x7047A7D: execute_compiler (Blocks.xs:524)
+==26972==    by 0x70481B4: my_keyword_plugin (Blocks.xs:704)
+==26972==    by 0x44FE0D: Perl_yylex (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==26972==    by 0x462717: Perl_yyparse (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==26972==    by 0x43C50D: perl_parse (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==26972==    by 0x41BD58: main (in /home/dcmertens/perl5/perlbrew/perls/perl-5.20.1/bin/perl)
+==26972==  Address 0x6f35450 is 0 bytes inside a block of size 72 free'd
+==26972==    at 0x4C2BE10: free (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==26972==    by 0x7252CCA: tcc_free (libtcc.c:210)
+==26972==    by 0x725DA65: sym_free (tccgen.c:153)
+==26972==    by 0x725DFE4: sym_pop (tccgen.c:318)
+==26972==    by 0x72669A8: block (tccgen.c:4626)
+==26972==    by 0x7269537: gen_function (tccgen.c:5720)
+==26972==    by 0x7269F19: decl0 (tccgen.c:5963)
+==26972==    by 0x726A2AF: decl (tccgen.c:6037)
+==26972==    by 0x72542B9: tcc_compile (libtcc.c:794)
+==26972==    by 0x72544A2: tcc_compile_string_ex (libtcc.c:836)
+==26972==    by 0x7047A7D: execute_compiler (Blocks.xs:524)
+==26972==    by 0x70481B4: my_keyword_plugin (Blocks.xs:704)
+==26972== 
+token id is 8000000
+
+I managed to trip the invalid read one level up the stack trace and print out
+the token id, in hex. This token value is SYM_FIRST_ANOM and corresponds with
+the first anonymous symbol. What odities are occurring with the first anonymous
+symbol? To find out, run gdb with:
+
+  LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/temp-install/lib" \
+    gdb --args perl -Mblib -Mlib=inc t/11-clex-series.t
+  
+  (gdb) break tcc_new
+  (gdb) run
+  ... breaks ...
+  (gdb) clear
+  (gdb) watch anon_sym
+  (gdb) c
+  ...
+
+With the first change, set a watch on that symbol's type.ref:
+  Hardware watchpoint 2: anon_sym
+  
+  Old value = 134217728
+  New value = 134217729
+  0x00007ffff6384345 in get_sym_ref (type=0x7fffffffc770, sec=0xba4bb0, offset=0, size=7) at tccgen.c:417
+  warning: Source file is more recent than executable.
+  417	    v = anon_sym++;
+  (gdb) n
+  418	    sym = global_identifier_push(v, type->t | VT_STATIC, 0);
+  (gdb) n
+  419	    sym->type.ref = type->ref;
+
+Now that I have the type.ref of interest, I can see how the type.ref changes by
+creating another watchpoint:
+
+  (gdb) p &(sym->type.ref)
+  $1 = (struct Sym **) 0xba6508
+  (gdb) watch *$1
+
+That address triggers multiple times under various functions including
+__strcpy_sse2_unaligned, __memmove_ssse3_back, and __memmove_ssse3_back. These
+seem to refer to relocations. Examining the stack trace reveals that this branch
+of unary() is the one for string constants, i.e. "Hello!" in the test script.
+This value is "put" as an extern sym in get_sym_ref, so clearly this sym is
+tracking the pointer location of the string constant. Probably the most
+important marker for this is what is set in get_sym_ref for the r field:
+  sym->r = VT_CONST | VT_SYM
+This pairing shows up frequently in tccgen.c, but I suspect that if it is there,
+then the next field should either be ignored, or simply copied verbatim. In all
+likelihood, this refers to a Sym that I shouldn't be copying in the first place.
+After all, why am I copying a Sym that refers to a string constant that I'll
+never be able to invoke in later code blocks?
+
+The more I think about it and read around, the more I think I should ignore any
+symbol with an r flag of VT_SYM. Thus, in the "symbol stack" section of
+copy_extended_symtab, I should not count them in N_Syms, and I should not
+copy them later. Further investigations reveal, however, that a number of Syms
+have VT_SYM, but only the anonymous symbol causing trouble has VT_SYM in the r
+field and VT_STATIC in type.t. So, I think I can safely skip all such Syms in
+the copy process.
+
+But no! If I do that, I get this error:
+  function pointer expected
+
+Bother. So, I simply alter the copy behavior of the type.ref. If the Sym has all
+the outward markings of something whose next field would be modified during the
+actual compilation and/or relocation stage, then I copy the next value directly.
+Otherwise, I make a new Sym and copy the contents. In all likelihood, this will
+require modification for EXTERN Syms, too. Only tests will tell.
+
+
+
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 
 Note: might be able to streamline external linkage of functions. See test 45.

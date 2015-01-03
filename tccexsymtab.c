@@ -298,22 +298,6 @@ LIBTCCAPI void tcc_save_extended_symtab(TCCState * s) {
 	if (s->exsymtab == NULL) s->exsymtab = (extended_symtab*)1;
 }
 
-int _sym_is_all_zeros(Sym * to_check) {
-	if (to_check == NULL) return 0;
-	if (
-		to_check->v == 0
-		&& to_check->asm_label == NULL
-		&& to_check->r == 0
-		&& to_check->c == 0
-		&& to_check->type.t == 0
-		/*&& to_check->type.ref == NULL*/
-		&& to_check->next == NULL
-		/*&& to_check->prev == NULL*/
-		&& to_check->prev_tok == NULL
-	) return 1;
-	return 0;
-}
-
 Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack) {
 	/* We assume that old IS NOT null; this must be checked by the higher-level
 	 * functions that call this one. */
@@ -329,12 +313,6 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 		if (stack->v < SYM_EXTENDED) offset++;
 		stack = stack->prev;
 	}
-	/* There is this weird case where sometimes a symbol refers to this
-	 * strange empty symbol. Why the pointer points to it, instead of
-	 * null, is not clear to me. However, we have created just such a
-	 * pointer! So we use our own special empty Sym for this purpose.
-	 */
-	if (_sym_is_all_zeros(old)) return new_list + offset_of_last;
 	return NULL;
 }
 
@@ -503,8 +481,16 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * is a pointer, struct, or function. See code from tccgen's
 		 * compare_types for details. */
 		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-			sym_list[i].type.ref
-				= get_new_symtab_pointer(s, curr_Sym->type.ref, sym_list, N_Syms);
+			if ((sym_list[i].type.t & VT_STATIC) && (sym_list[i].r & VT_SYM)) {
+				/* If we have a static symbol, copy its pointer directly, since
+				 * after relocation it is no longer a Sym pointer at all! */
+				sym_list[i].type.ref = curr_Sym->type.ref;
+			}
+			else {
+				/* Otherwise it's safe: get a new Sym for it. */
+				sym_list[i].type.ref
+					= get_new_symtab_pointer(s, curr_Sym->type.ref, sym_list, N_Syms);
+			}
 		}
 		
 		/* Copy the c field, the "associated number." For functions, this is
