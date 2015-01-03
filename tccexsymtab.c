@@ -298,6 +298,12 @@ LIBTCCAPI void tcc_save_extended_symtab(TCCState * s) {
 	if (s->exsymtab == NULL) s->exsymtab = (extended_symtab*)1;
 }
 
+/* A test that indicates that the next field of this Sym is not a Sym, and must
+ * be copied verbatim. */
+int _type_ref_is_not_Sym(Sym * from) {
+	return ((from->type.t & VT_STATIC) && (from->r & VT_SYM));
+}
+
 Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack) {
 	/* We assume that old IS NOT null; this must be checked by the higher-level
 	 * functions that call this one. */
@@ -481,7 +487,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * is a pointer, struct, or function. See code from tccgen's
 		 * compare_types for details. */
 		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-			if ((sym_list[i].type.t & VT_STATIC) && (sym_list[i].r & VT_SYM)) {
+			if (_type_ref_is_not_Sym(sym_list + i)) {
 				/* If we have a static symbol, copy its pointer directly, since
 				 * after relocation it is no longer a Sym pointer at all! */
 				sym_list[i].type.ref = curr_Sym->type.ref;
@@ -909,8 +915,12 @@ void copy_ctype(CType * to_type, Sym * from, extended_symtab * symtab) {
 	int btype = from->type.t & VT_BTYPE;
 	to_type->t = from->type.t;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+		/* Copy pointers that are non-Sym pointers directly */
+		if (_type_ref_is_not_Sym(from)) {
+			to_type->ref = from->type.ref;
+		}
 		/* Get the from->type.ref's token and look for it here */
-		if (from->type.ref->v & SYM_FIRST_ANOM) {
+		else if (from->type.ref->v & SYM_FIRST_ANOM) {
 			/* Anonymous symbol; just copy it. */
 			to_type->ref = copy_extended_sym(symtab, from->type.ref,
 				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD)));
