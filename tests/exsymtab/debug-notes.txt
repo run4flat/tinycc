@@ -1843,8 +1843,55 @@ still getting segfaults, but that particular bug is finished.
 
 I am still getting trouble with the SV token. The good news is that for this
 particular set of code, the token id is always 5700. So, I can set a conditional
-breakpoint on that value.
+breakpoint on that value upon entry to copy_extended_tokensym. A gdb session
+would start like this:
 
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break copy_extended_tokensym if from->tok == 5700
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+
+This places me right at the root of the problem. Now I can begin excavation.
+
+... In the middle of the extended tokensym copy, I come to the sv_u member of
+SV struct (sv.h line 205/210). During the while-loop copy in copy_extended_sym,
+as it walks down the members of the struct, the sv_u member has token id of
+0x10001fce. To arrive at this point in the future, I can set a conditional
+breakpoint like this:
+
+  break copy_ctype if from->v == 0x10001fce
+
+This might be useful for a conditional checkpoint in later excavations.
+
+----------
+
+I must put this aside for now. Here is a summary of the problem and how to most
+quickly get back into excavation:
+
+tcc has no trouble parsing perl.h as far as I can tell. The problem seems to
+arise when a consuming context makes reference to (in this case) the SV struct.
+Upon seeing that, and obtaining a (valid) TokenSym pointer from an extended
+symbol table, tcc launches into the extended symbol table copy. The segfault
+arises during this copy, at least somewhere in the anonymous union known as
+sv_u. This is the fourth member of the SV struct, after the void pointer to
+sv_any and two U32s for refcounts and flags. I have validated everything down
+to the ctype copy of sv_u.
+
+The issue seems to be that the union includes the possibility of an SV*, and we
+get a recursive definition. To reproduce:
+
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break copy_ctype if from->v == 0x10001fce
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+
+After this breaks, if you attempt to continue, it'll break again deeper down
+the call stack. If you continue again, it'll break again. So, there appears to
+be an issue with circular references that needs to be resolved.
 
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
