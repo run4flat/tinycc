@@ -128,8 +128,11 @@ void * c_trie_get_data (c_trie * head, char * string) {
 	return NULL;
 }
 
+int DEBUG_IS_SV_TOKENSYM;
+
 /* Allocates one more slot, if necessary, and copies data into it. */
 c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset) {
+DEBUG_IS_SV_TOKENSYM = 0;
 	/* Figure out which bit will be occupied next. Split across two lines so
 	 * that the bit shift is not accidentally truncated. */
 	unsigned long long new_bit = 1;
@@ -157,6 +160,7 @@ c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_
 	unsigned char N_before = _c_trie_popcount(old->filled_bits
 		& (0xFFFFFFFFFFFFFFFF >> (64 - slot_offset))
 	);
+	if (slot_offset == 0) N_before = 0; /* corner case for data slot */
 	unsigned char i;
 	for(i = 0; i < N_before; i++) new->children[i] = old->children[i];
 	
@@ -176,6 +180,7 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 	 * order to begin the actual search. */
 	c_trie ** curr_p = head->children;
 	c_trie ** child_p;
+if (strcmp("SV", string) == 0) DEBUG_IS_SV_TOKENSYM = 1;
 	
 	while(*string > 0) {
 		child_p = _c_trie_find_child(*curr_p, string);

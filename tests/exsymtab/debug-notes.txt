@@ -1713,6 +1713,136 @@ Otherwise, I make a new Sym and copy the contents. In all likelihood, this will
 require modification for EXTERN Syms, too. Only tests will tell.
 
 
+February 7, 2015
+===============
+
+Once again, C::Blocks managed to trigger a segfault in the exsymtab code. To
+figure out what's going on, I once again modified __sym_malloc, found in
+tccgen.c, to simply return tcc_mallocz(sizeof(Sym)). Then I ran the code through
+valgrind with
+
+  $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" valgrind --track-origins=yes perl -Mblib -Mlib=inc t/04-libperl.t
+
+(A bit lengthy, but it contains everything I need for future runs of the same
+command, in case I ever find myself at need.) The output was not exactly clear
+to me, so next I ran it through gdb:
+
+... gdb perl ...
+
+ $ break next_nomacro1
+ $ run -Mblib -Mlib=inc t/04-libperl.t
+ $ (gdb) break 2312
+ $ c
+ 
+The process stays execution just as we have looked up the symbol for the SV
+type. At this point, we can examine the contents of the newly returned extended
+symbol:
+
+ (gdb) p *extended_ts
+ $2 = {hash_next = 0x8000000, sym_define = 0x179bd30, sym_label = 0x0, sym_struct = 0x21, sym_identifier = 0x1, tok = 25625232, len = 0, 
+   str = <incomplete sequence \360>}
+
+sym_struct is 0x21?? sym_identifier is 0x1??? What's going on? The callback
+function in Blocks.xs is pretty simple, and merely relies on
+tcc_get_extended_tokensym for the heavy lifting. That function is a simple
+wrapper for c_trie_get_data.
+
+An idea has occurred to me: I can temporarily add a conditional check to
+c_trie_add_data that checks if we're adding "SV". If so, it prints something.
+The message doesn't matter; what's important is that I can set a breakpoint on
+that printf statement, so that the code breaks when we're about to add the
+symbol. I can then examine the contents of the token symbol. If they look good,
+I can set a hardware watchpoint on the address of the trie pointer pointing to
+that symbol, which lets me track if and how the trie's data slot gets modified.
+
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break c_trie_add_data
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+ (gdb) clear c_trie_add_data
+ Deleted breakpoint 1
+ (gdb) break 180
+ Breakpoint 2 at ...
+ (gdb) c
+ ...
+ Breakpoint 2, c_trie_add_data (head=0x14620f0, string=0x1843130 "SV", data=0x1843100)  ...
+ ...
+
+Now that I've tripped the breakpoint, I want to watch the data address.
+
+ (gdb) watch *0x1843100
+ Hardware watchpoint 3: *0x1843100
+ (gdb) tbreak 203
+ Temporary breakpoint 4 at 0x7ffff639aca3: file tccexsymtab.c, line 203.
+ (gdb) c
+ ...
+ (gdb) s
+ _c_trie_add_one_more_slot (curr_p=0x1842e60, to_add=0x1843100, slot_offset=0 '\000') at tccexsymtab.c:135
+ ...
+
+Now that I'm in the _c_trie_add_one_more_slot function, I will run until the end
+
+ (gdb) tbreak 171
+ Temporary breakpoint 5 at 0x7ffff639abd1: file tccexsymtab.c, line 171.
+ (gdb) c
+ Continuing.
+ ...
+
+Double check that the new child's array offset is correct and the data bit is set:
+
+ (gdb) p N_before
+ $4 = 0 '\000'
+ (gdb) p *(TokenSym *)new->children[N_before]
+ $5 = {hash_next = 0x0, sym_define = 0x0, sym_label = 0x0, sym_struct = 0x0, sym_identifier = 0x7ffff7f35f50, tok = 5700, len = 2, 
+   str = "S"}
+ (gdb) p/x **curr_p
+ $6 = {filled_bits = 0x8100001, children = {0x1842240}}
+
+Good. Now set a read/write watch point on the address of the data element:
+
+ (gdb) p &new->children[N_before]
+ $7 = (struct compressed_trie **) 0x1840b68
+ (gdb) awatch *0x1840b68
+ Hardware access (read/write) watchpoint 6: *0x1840b68
+ (gdb) c
+
+Thus, I've set a hardware watch point on the original TokenSym struct as well as
+the array element holding the pointer to the TokenSym struct.
+
+... but now I must sleep. :-(
+
+February 7, 2015
+===============
+
+Continuing with the gdb work from last night, I found that the TokenSym that
+holds the information about the SV is not modified, so I need not watch that in
+my debugging. I've also simplified the procedure for honing in on the problem.
+I've added a global variable that gets set in the SV branch, rather than using a
+print statement. This lets me set a conditional breakpoint:
+
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break _c_trie_add_one_more_slot if DEBUG_IS_SV_TOKENSYM == 1
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+
+When this debugger breaks, I'm in the _c_trie_add_one_more_slot, adding the
+TokenSym pointer to the data slot. I can then run until the end:
+
+ (gdb) tbreak 174
+ Temporary breakpoint 5 at 0x7ffff639abd1: file tccexsymtab.c, line 171.
+ (gdb) c
+ Continuing.
+ ...
+
+Well... it looks like there was a bug in c_trie that I've managed to squash. I'm
+still getting segfaults, but that particular bug is finished.
+
+
+
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 
