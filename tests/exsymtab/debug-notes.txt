@@ -1841,6 +1841,9 @@ TokenSym pointer to the data slot. I can then run until the end:
 Well... it looks like there was a bug in c_trie that I've managed to squash. I'm
 still getting segfaults, but that particular bug is finished.
 
+I am still getting trouble with the SV token. The good news is that for this
+particular set of code, the token id is always 5700. So, I can set a conditional
+breakpoint on that value.
 
 
 
