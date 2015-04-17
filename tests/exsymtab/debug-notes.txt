@@ -1894,6 +1894,130 @@ the call stack. If you continue again, it'll break again. So, there appears to
 be an issue with circular references that needs to be resolved.
 
 
+April 11, 2015
+==============
+
+In light of the issues encountered in compiling perl.h in C::Blocks, I wrote a
+test that seems as though it should trigger the problem. Test 32 includes a
+self-referential struct, with the self reference enclosed within a union and a
+bunch of other redirections, as is the case with Perl's SV declaration. However,
+this compiles and runs without issue.
+
+Using the recipe given on February 7, I end up with the following backtrace:
+
+#0  copy_ctype (to_type=0x7fffffffc5e0, from=0x7ffff7f082e8, symtab=0x15fac90)
+		at tccexsymtab.c:916
+#1  0x00007ffff639db85 in copy_extended_sym (symtab=0x15fac90,
+		from=0x7ffff7f2df98, to_tok=1610613877) at tccexsymtab.c:1005
+#2  0x00007ffff639d4a4 in copy_extended_tokensym (symtab=0x15fac90,
+		from=0x1702d10, to=0x15ea9f0) at tccexsymtab.c:804
+#3  0x00007ffff6381fe9 in get_local_ts_for_extended_ts (
+		orig_symtab_ts=0x1702d10, orig_symtab=0x15fac90) at tccpp.c:2126
+#4  0x00007ffff639d90c in copy_ctype (to_type=0x7fffffffcb90,
+		from=0x7ffff7f2df50, symtab=0x15fac90) at tccexsymtab.c:938
+#5  0x00007ffff639da12 in copy_extended_sym (symtab=0x15fac90,
+		from=0x7ffff7f2df50, to_tok=1073742964) at tccexsymtab.c:966
+#6  0x00007ffff639d4d3 in copy_extended_tokensym (symtab=0x15fac90,
+		from=0x18004f0, to=0x15ea870) at tccexsymtab.c:805
+#7  0x00007ffff6382581 in next_nomacro1 () at tccpp.c:2313
+ ...
+
+Frame #7
+--------
+is where we begin in earnest, in the guts of tcc as it tries to parse the very
+first thing it sees, "SV". It was unable to find that token in the current
+symbol table, so it asks for and finds it in an extended token symbol table.
+After creating a new TokenSym in the current compilation context, it begins
+copying the TokenSym with the call to copy_extended_tokensym.
+
+Frame #6
+--------
+is tasked with copying the TokenSym "SV" from the extended token symbol to the
+local token symbol. "SV" is an identifier (via a typedef declaration) that
+refers to the type "struct sv" (after applying macro expansions). The third step
+of copy_extended_tokensym copies this identifier Sym data. Note that by the time
+this frame is entered, the "SV" TokenSym exists in the local symbol table, but
+it contains null entries.
+
+Frame #5
+--------
+is supposed to copy from the extended Sym, returning a newly created Sym, which
+has information for the (typedef) identifier associated with the "SV" token.
+(Note that any later down the call stack, the local TokenSym for "SV" does not
+yet know that it has a valid sym_identifier member.) Before anything interesting
+happens in copy_extended_sym, it begins a copy of the type.t data.
+
+Frame #4
+--------
+is supposed to copy the (typedef) identifier's type data. The type contains a
+type.t of 0x207, which refers to a "basic" type of "struct" with storage
+"typedef". See tcc.h around line 730 and 755 for these values. Seeing a basic
+type of VT_STRUCT, copy_ctype attempts to copy the type.ref. This involves
+identifying the extended TokenSym for the typedef's type.ref, which ultimately
+points to the token "sv". Before it can set the CType's ref field to a local
+Sym, it has to get a local Sym for the global Sym.
+
+Frame #3
+--------
+tries to identify a local TokenSym for the extended TokenSym, creating one if
+necessary. After not finding "sv" in the local symbol table, it uses the
+symtab_name_callback to get an extended TokenSym for "sv", which it finds. It
+allocates a new local TokenSym for "sv", and because that completes before our
+present point in the call stack, that local TokenSym should be findable in the
+local symbol table further down the call stack, albeit with no useful data yet.
+Before returning the local TokenSym, it starts a deep copy of the extended
+TokenSym.
+
+Frame #2
+--------
+aims to copy the gory details of the "sv" extended TokenSym to the local
+TokenSym. Before it has been able to accomplish much of anything,
+copy_extended_tokensym jumps into copy_extended_sym to copy the contents of the
+struct field. Given the assignment that takes place after the return of this
+function, the local TokenSym is not yet aware (later in the call stack) of the
+information about its struct.
+
+Frame #1
+--------
+finally gets to something interesting. Here we begin to copy information about
+the struct members. The actual symbol is the struct Sym; its next field points
+to the first member (and its next to the second in a chain). The actual type.t
+value is a bit odd to me, but it matters little as the ctype gets copied without
+any trouble. The next three items in the linked list are copied without trouble.
+Finally, we get to the ctype copy of the fourth item in the list.
+
+Frame #0
+--------
+breaks upon entry. The breakpoint is set to trigger when the from->v is the
+token id for "sv_u". This is a union containing all the different types,
+including SV*. Nothing has broken yet.
+
+--------
+So what happens next? Since unions are categorized as structs, copy_ctype begins
+work on the type.ref copy. It is a Sym, but UNLIKE previous cases, the type.ref
+is anonymous. So, we jump into copy_extended_sym.
+
+copy_extended_sym, in turn, jumps almost immediately into copy_ctype. Since the
+btype is 9, we do not worry about copying the type.ref. It then moves down to
+copying the various elements of the union: "svu_pv", "svu_iv", "svu_uv", and
+"svu_rv". Next comes: "svu_rx", and this is where things break.
+
+For future debugging, to print the token associated with a struct field member
+with token token id from_next->v, use the following command:
+
+  p (char*)(symtab->tokenSym_list[from_next->v - 0x10000000 - 1141].str)
+
+To pick up where I left off, use this incantation:
+
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break copy_ctype if from->v == 268443593
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+
+
+
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 
 Note: might be able to streamline external linkage of functions. See test 45.
