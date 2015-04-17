@@ -2017,6 +2017,59 @@ To pick up where I left off, use this incantation:
  ...
 
 
+April 17, 2015
+==============
+
+The previously specified breakpoint breaks on the struct entry for
+  struct regexp* svu_rx
+The next layer down is for
+  struct regexp
+which has a from->v == 268435456 and from->type.t == 7 upon entry to copy_ctype.
+The choke point continues in this function upon the call to
+get_local_ts_for_extended_ts, then get_local_ts_for_extended_ts for the token
+"regexp". After allocating the local TokenSym, we enter copy_extended_tokensym
+with a tok of 8136 followed shortly by a copy of the struct Sym with
+copy_extended_sym. To break at this point, you could use this breakpoint:
+ (gdb) break copy_extended_sym if from != 0 && from->v == 536879048
+The ctype copy for this struct goes fine.
+
+The first element in the regexp struct is an HV*, the class package, brought in
+as the first thing mentioned in the _XPV_HEAD preprocessor defintion. The choke
+point continues at copy_ctype for this first struct member. To land at this
+point in the stack you can set a breakpoint
+ (gdb) break copy_ctype if from->v == 268443668
+As the type.ref->v is SYM_FIELD, we have an anonymous symbol (because it's a
+pointer) and so we just copy that with copy_extended_sym. The only thing that
+is interesting here is the type.t (7, i.e. a pointer) and type.ref, which
+points to the actual HV struct. Thus the process continues into copy_ctype.
+This eventually leads into the copy of the HV struct, also called hv.
+get_local_ts_for_extended_ts is asked to do some work, the last step of which
+is to copy the extended tokensym to a local tokensym. The first step of that
+is to copy the tokensym's struct Sym, which can be trapped by breaking on
+ (gdb) break copy_extended_sym if from != 0 && from->v == 536877150
+The ctype is easy enough, bringing us to the struct membership.
+
+The first element in the hv struct is an XPVHV*, another pointer to another
+struct. (Sheesh!) The first element of this is an HV*, though, so we may soon
+approach the recursive trouble spot, if recursive trouble spot it truly is.
+
+---
+
+In an effort to reduce call stack confusion and stack pressure, I am going to
+inline the functions get_local_tok_for_extended_tok and copy_ctype. Having done
+this, the following is the easiest recipe to start where I left off, which is at
+the top of the struct hv copy:
+
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break copy_extended_sym if from != 0 && from->v == 536877150
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+
+Then hit "n" many times to reach the call to "copy_ctype".
+
+
 
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 
