@@ -2067,7 +2067,87 @@ the top of the struct hv copy:
  (gdb) run -Mblib -Mlib=inc t/04-libperl.t
  ...
 
-Then hit "n" many times to reach the call to "copy_ctype".
+Then hit "n" many times to reach the call to "copy_ctype" within the
+"while (from_next)" loop.
+
+
+April 20, 2015
+==============
+
+Here's my current recipe to dig into the internals of struct hv:
+
+ $ LD_LIBRARY_PATH="/home/dcmertens/projects/Perl/C-Blocks/tinycc/lib" gdb perl
+ ...
+ (gdb) break copy_extended_tokensym if from->tok == 6271
+ ...
+ (gdb) run -Mblib -Mlib=inc t/04-libperl.t
+ ...
+ (gdb) copy_extended_sym if from != 0 && from->v == 536877183
+
+
+To keep things straight, let's recap. The struct sv contains a standard
+head, followed by a union.
+
+ struct sv {
+   void * sv_any;  \
+   U32  sv_refcnt;  |- _SV_HEAD(void*)
+   U32  sv_flags;  /
+   union {
+     ...
+     struct regexp* svu_rx;
+     ...
+   } sv_u
+ }
+
+The trouble spot occurs with "svu_rx". That data structure can be understood as
+a struct whose first member is a pointer to a struct, whose first member is a
+pointer to a struct, etc. The layout looks something like this:
+
+struct regexp {
+	struct hv * xmg_stash { (stash)
+		struct xpvhv * sv_any {
+		    struct hv * xmg_stash { (stash)
+				...
+		    }
+			union _xmgu	xmg_u;
+			STRLEN      xhv_keys;       /* total keys, including placeholders */
+			STRLEN      xhv_max;        /* subscript of last element of xhv_array */
+		}
+		U32		sv_refcnt;	/* how many references to us */	\
+		U32		sv_flags	/* what we are */
+		...
+	}
+	...
+}
+
+The previously given breakpoint breaks at start of the copy for the layout of
+the "struct xpvhv". The first element is the member xmg_stash, A TOKEN WHICH
+EXISTS IN THE LOCAL COMPILER CONTEXT! A quick check up the call stack indicates
+that the token id for "xmg_stash" agrees with the token id we had earlier, so
+we were able to locate that token. Now it's time to copy the ctype. Let's see
+what happens!
+
+The ctype copy gets to the point where it is going to copy the type.ref for the
+xmg_stash struct member. So far we haven't duplicated anything. And, since the
+Sym is an anonymous Sym, the copy continues for another couple of steps. We call
+copy_extended_sym to copy the type.ref, which itself calls copy_ctype to copy
+the type.ref of the actual hv *.
+
+Finally we are in get_local_ts_for_extended_ts for something which should return
+an existing TokenSym. Let's see what happens... It found the hv*... and returns.
+So it looks like it's not a problem with the hv*.
+
+--------------
+So the problem wasn't with a recursive hv* copy! Humm... it looks like it's a
+problem with union _xmgu ctype copy. xmgu is the MAGIC... oh great.
+
+----------------
+
+OK, found it. It's a problem in which the Perl source code uses the token "loop"
+but that token exists in all compiling contexts. So, I need to solve the general
+problem of copying these sorts of tokens. I can't simply track tok_start. :-(
+
+
 
 
 
