@@ -730,7 +730,7 @@ LIBTCCAPI void tcc_prep_tokensym_list(TokenSym_p* local_ts_list, extended_symtab
 	int i, end;
 	end = symtab->tok_start - TOK_IDENT;
 	for (i = 0; i < end; i++) {
-		TokenSym_p local_ts = local_ts_list[i];
+		TokenSym_p local_ts = table_ident[i];
 		TokenSym_p ext_ts = symtab->tokenSym_list[i];
 		/* Skip if we've already copied something for this TokenSym from another
 		 * extended symbol table. */
