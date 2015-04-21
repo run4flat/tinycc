@@ -127,7 +127,7 @@ typedef TokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name,
 typedef void (*extended_symtab_sym_used_callback)(char * sym_name, int len, void * data);
 /* Callback function signature for compilation unit preparation:
  * void my_callback(TokenSym_p* local_ts_list, void * data) */
-typedef void (*extended_symtab_prep_callback)(TokenSym_p* local_ts_list, void * data);
+typedef void (*extended_symtab_prep_callback)(void * data);
 /* Set the lookup/sym-used callback functions */
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * compiler_state,
@@ -139,7 +139,7 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 
 /* Testing function, not really for general use */
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, char * name);
-LIBTCCAPI void tcc_prep_tokensym_list(TokenSym_p* local_ts_list, extended_symtab_p symtab);
+LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
 
 #ifndef SYM_EXTENDED
 	#define SYM_EXTENDED   0x40000000 /* extended symbol space */

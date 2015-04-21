@@ -66,10 +66,10 @@ void my_sym_used (char * name, int len, void * data) {
 	sym_used(name, len, &mock);
 }
 
-void my_prep (TokenSym_p* ts_list, void * data) {
+void my_prep (void * data) {
 	second_callback_data mock;
 	setup_mock_data(&mock, data);
-	prep_table(ts_list, &mock);
+	prep_table(&mock);
 }
 	
 int main(int argc, char **argv) {

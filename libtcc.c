@@ -783,7 +783,7 @@ static int tcc_compile(TCCState *s1)
     nocode_wanted = 1;
 
 	/* Perform tokensym preparation */
-	if (s1->symtab_prep_callback) s1->symtab_prep_callback(table_ident, s1->symtab_callback_data);
+	if (s1->symtab_prep_callback) s1->symtab_prep_callback(s1->symtab_callback_data);
 
     if (setjmp(s1->error_jmp_buf) == 0) {
         s1->nb_errors = 0;
