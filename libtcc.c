@@ -782,6 +782,9 @@ static int tcc_compile(TCCState *s1)
     define_start = define_stack;
     nocode_wanted = 1;
 
+	/* Perform tokensym preparation */
+	if (s1->symtab_prep_callback) s1->symtab_prep_callback(table_ident, s1->symtab_callback_data);
+
     if (setjmp(s1->error_jmp_buf) == 0) {
         s1->nb_errors = 0;
         s1->error_set_jmp_enabled = 1;
@@ -1056,6 +1059,7 @@ LIBTCCAPI TCCState *tcc_new(void)
     /* Extended symbol table API */
     s->symtab_name_callback = NULL;
     s->symtab_sym_used_callback = NULL;
+    s->symtab_prep_callback = NULL;
     s->symtab_callback_data = NULL;
     return s;
 }

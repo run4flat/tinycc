@@ -65,6 +65,12 @@ void my_sym_used (char * name, int len, void * data) {
 	setup_mock_data(&mock, data);
 	sym_used(name, len, &mock);
 }
+
+void my_prep (TokenSym_p* ts_list, void * data) {
+	second_callback_data mock;
+	setup_mock_data(&mock, data);
+	prep_table(ts_list, &mock);
+}
 	
 int main(int argc, char **argv) {
 	
@@ -85,7 +91,7 @@ int main(int argc, char **argv) {
 	SIMPLE_SETUP(s_second);
 	tcc_save_extended_symtab(s_second);
 	tcc_set_extended_symtab_callbacks(s_second, &my_lookup_by_name,
-		&my_sym_used, &my_data);
+		&my_sym_used, &my_prep,  &my_data);
     if (tcc_compile_string(s_second, second_code) == -1) return 1;
 	if (tcc_relocate(s_second, TCC_RELOCATE_AUTO) == -1) return 1;
 	my_data.middle_symtab = tcc_get_extended_symbol_table(s_second);
@@ -95,7 +101,7 @@ int main(int argc, char **argv) {
 	my_data.current_context = s_third;
 	SIMPLE_SETUP(s_third);
 	tcc_set_extended_symtab_callbacks(s_third, &my_lookup_by_name,
-		&my_sym_used, &my_data);
+		&my_sym_used, &my_prep, &my_data);
     if (tcc_compile_string(s_third, third_code) == -1) return 1;
 	if (tcc_relocate(s_third, TCC_RELOCATE_AUTO) == -1) return 1;
 	pass("Third code string compiled and relocated fine");

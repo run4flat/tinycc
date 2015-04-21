@@ -700,6 +700,7 @@ struct TCCState {
     struct extended_symtab * exsymtab;
     extended_symtab_lookup_by_name_callback symtab_name_callback;
     extended_symtab_sym_used_callback symtab_sym_used_callback;
+    extended_symtab_prep_callback symtab_prep_callback;
     void * symtab_callback_data;
 };
 

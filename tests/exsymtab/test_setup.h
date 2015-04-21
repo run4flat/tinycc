@@ -84,6 +84,12 @@ void sym_used (char * name, int len, void * data) {
 	tcc_add_symbol(curr_context, name, orig_symbol);
 }
 
+void prep_table (TokenSym_p* ts_list, void * data) {
+	/* Pull out the symtab */
+	extended_symtab_p my_symtab = ((second_callback_data*)data)->first_symtab;
+	tcc_prep_tokensym_list(ts_list, my_symtab);
+}
+
 /* ---- code for setting up the second compiler state ---- */
 
 #define SETUP_SECOND_CALLBACK_DATA()        \
@@ -99,7 +105,7 @@ void sym_used (char * name, int len, void * data) {
 	tcc_set_output_type(s, TCC_OUTPUT_MEMORY);            \
 	callback_data.second_context = s;                     \
 	tcc_set_extended_symtab_callbacks(s, &lookup_by_name, \
-		&sym_used, &callback_data);                       \
+		&sym_used, &prep_table, &callback_data);          \
    	if (tcc_compile_string(s, code) == -1) return 1
 
 #define relocate_second_state(s)                                \

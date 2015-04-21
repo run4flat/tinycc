@@ -48,6 +48,7 @@ typedef struct extended_symtab {
 	Sym * def_list;
 	Sym * def_last;
 	c_trie * trie;
+	int tok_start;
 	TokenSym ** tokenSym_last;
 	TokenSym * tokenSym_list [1];
 } extended_symtab;
@@ -80,6 +81,12 @@ LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, ch
 
 /* tcc_get_extended_tokensym declared in libtcc.h */
 /* tcc_get_extended_symbol declared in libtcc.h */
+
+/*****************************************************************************/
+/*                      Pre-compilation TokenSym Prep                        */
+/*****************************************************************************/
+
+LIBTCCAPI void tcc_prep_tokensym_list(TokenSym_p* local_ts_list, extended_symtab * symtab);
 
 /*****************************************************************************/
 /*                      copy extended symbol into local                      */

@@ -288,10 +288,12 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
 	extended_symtab_lookup_by_name_callback new_name_callback,
 	extended_symtab_sym_used_callback new_sym_used_callback,
+	extended_symtab_prep_callback new_prep_callback,
 	void * data
 ) {
 	s->symtab_name_callback = new_name_callback;
 	s->symtab_sym_used_callback = new_sym_used_callback;
+	s->symtab_prep_callback = new_prep_callback;
 	s->symtab_callback_data = data;
 }
 
@@ -392,7 +394,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 	
     int i;
     
-    int N_tokens = tok_ident - tok_start;
+    int N_tokens = tok_ident - TOK_IDENT;
     /* Room for the first TokenSym is included in the struct definition, so I
      * need to allocate room for the extended symtab plus N_tokens - 1. */
 /*struct extended_symtab {
@@ -401,12 +403,14 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 	Sym * def_list;
 	Sym * def_last;
 	c_trie * trie;
+	int tok_start;
 	TokenSym ** tokenSym_last;
 	TokenSym [1] tokenSym_list;
      */
     
     extended_symtab * to_return = tcc_malloc(sizeof(extended_symtab)
 		+ sizeof(void*) * (N_tokens - 1));
+	to_return->tok_start = tok_start;
 	
 	/* Allocate the trie */
 	to_return->trie = c_trie_new();
@@ -616,7 +620,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     
     /* Copy the tokens */
 	for (i = 0; i < N_tokens; i++) {
-		TokenSym * tok_copy = table_ident[tok_start + i - TOK_IDENT];
+		TokenSym * tok_copy = table_ident[i];
 		int tokensym_size = sizeof(TokenSym) + tok_copy->len;
 		TokenSym * tok_sym = to_return->tokenSym_list[i]
 			= tcc_malloc(tokensym_size);
@@ -716,6 +720,29 @@ LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p symtab, int to_test, ch
 			return ts->sym_struct != NULL;
 	}
 	return 0;
+}
+
+/*****************************************************************************/
+/*                      Pre-compilation TokenSym Prep                        */
+/*****************************************************************************/
+
+LIBTCCAPI void tcc_prep_tokensym_list(TokenSym_p* local_ts_list, extended_symtab * symtab) {
+	int i, end;
+	end = symtab->tok_start - TOK_IDENT;
+	for (i = 0; i < end; i++) {
+		TokenSym_p local_ts = local_ts_list[i];
+		TokenSym_p ext_ts = symtab->tokenSym_list[i];
+		/* Skip if we've already copied something for this TokenSym from another
+		 * extended symbol table. */
+		if (local_ts->sym_struct || local_ts->sym_identifier || local_ts->sym_define) continue;
+		
+		/* Copy if there's something interesting to copy */
+		if (ext_ts->sym_struct || ext_ts->sym_identifier
+			|| (ext_ts->sym_define && ext_ts->sym_define->d)
+		) {
+			copy_extended_tokensym(symtab, ext_ts, local_ts);
+		}
+	}
 }
 
 /*****************************************************************************/
