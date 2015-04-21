@@ -2148,6 +2148,12 @@ but that token exists in all compiling contexts. So, I need to solve the general
 problem of copying these sorts of tokens. I can't simply track tok_start. :-(
 
 
+April 21, 2015
+==============
+
+Hooray, it works!!! At least, mostly. Now I get a segfault with libperl *after*
+it does some cool stuff!!! And with a bit of investigation, I conclude that the
+problem is now with C::Blocks, not tcc. So that's all for now on this end...
 
 
 
