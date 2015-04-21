@@ -25,6 +25,7 @@ TESTS =	\
  30-two-contexts-struct-share.test \
  31-two-contexts-struct-array-share.test \
  32-two-contexts-struct-self-reference.test \
+ 33-two-contexts-struct-reserved-tokens.test \
  35-two-contexts-vtable-share.test \
  40-two-contexts-func-decl-share.test \
  42-three-contexts-func-share.test \
@@ -45,6 +46,7 @@ PROVES =	\
  30-two-contexts-struct-share.prove \
  31-two-contexts-struct-array-share.prove \
  32-two-contexts-struct-self-reference.prove \
+ 33-two-contexts-struct-reserved-tokens.prove \
  35-two-contexts-vtable-share.prove \
  40-two-contexts-func-decl-share.prove \
  42-three-contexts-func-share.prove \
@@ -84,6 +86,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 32-two-contexts-struct-self-reference.test
-curr-prove: 32-two-contexts-struct-self-reference.prove
-curr-dbg: 32-two-contexts-struct-self-reference.dbg
+curr-test: 33-two-contexts-struct-reserved-tokens.test
+curr-prove: 33-two-contexts-struct-reserved-tokens.prove
+curr-dbg: 33-two-contexts-struct-reserved-tokens.dbg
