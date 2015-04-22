@@ -127,6 +127,7 @@ set(MORETESTS
  52_unnamed_enum
  54_goto
  55_lshift_type
+ 56_32bit_pointer
 )
 if(WIN32)
   list(REMOVE_ITEM MORETESTS 24_math_library)

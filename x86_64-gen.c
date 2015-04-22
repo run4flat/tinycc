@@ -1594,7 +1594,7 @@ int gtst(int inv, int t)
         }
     } else {
         if (is_float(vtop->type.t) ||
-            (vtop->type.t & VT_BTYPE) == VT_LLONG) {
+            is64_type(vtop->type.t)) {
             vpushi(0);
             gen_op(TOK_NE);
         }
