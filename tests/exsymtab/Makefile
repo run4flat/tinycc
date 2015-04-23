@@ -35,6 +35,7 @@ TESTS =	\
  49-many-consuming-contexts-early-delete.test \
  50-two-contexts-mixup.test \
  51-many-consuming-contexts-with-constants-early-delete.test \
+ 60-two-contexts-globals.test\
  70-symtab-use-check.test
 
 PROVES =	\
@@ -56,6 +57,7 @@ PROVES =	\
  49-many-consuming-contexts-early-delete.prove \
  50-two-contexts-mixup.prove \
  51-many-consuming-contexts-with-constants-early-delete.prove \
+ 60-two-contexts-globals.prove \
  70-symtab-use-check.prove
 
 # some tests do not pass on all platforms, remove them for now
@@ -86,6 +88,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test: 33-two-contexts-struct-reserved-tokens.test
-curr-prove: 33-two-contexts-struct-reserved-tokens.prove
-curr-dbg: 33-two-contexts-struct-reserved-tokens.dbg
+curr-test:  60-two-contexts-globals.test
+curr-prove:  60-two-contexts-globals.prove
+curr-dbg:  60-two-contexts-globals.dbg
