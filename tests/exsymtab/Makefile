@@ -35,7 +35,8 @@ TESTS =	\
  49-many-consuming-contexts-early-delete.test \
  50-two-contexts-mixup.test \
  51-many-consuming-contexts-with-constants-early-delete.test \
- 60-two-contexts-globals.test\
+ 60-two-contexts-globals.test \
+ 61-two-contexts-const-globals.test \
  70-symtab-use-check.test
 
 PROVES =	\
@@ -58,6 +59,7 @@ PROVES =	\
  50-two-contexts-mixup.prove \
  51-many-consuming-contexts-with-constants-early-delete.prove \
  60-two-contexts-globals.prove \
+ 61-two-contexts-const-globals.prove \
  70-symtab-use-check.prove
 
 # some tests do not pass on all platforms, remove them for now
