@@ -281,9 +281,9 @@ LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * 
 /*                            extended symtab copy                            */
 /******************************************************************************/
 
-/* Allow the user to provide custom symbol table lookup functions. They
- * need to provide functions to look up symbols both by name and by
- * number */
+/* The user may want fine-grained control over the order of symbol table lookup.
+ * Thus, I provide a set of callbacks to look for names, add symbols to compiler
+ * contexts, and prep the compiler state before things get started. */
 LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	TCCState * s,
 	extended_symtab_lookup_by_name_callback new_name_callback,
@@ -469,24 +469,31 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			sym_list[i].asm_label = NULL;
 		}
 		
-		/* associated register. Except for functions, I believe this specifies
-		 * the register size that can hold the value. For function types,
+		/* associated register. For variables, I believe that the low bits
+		 * specify the register size that can hold the value while high bits
+		 * indicate storage details (VT_SYM, VT_LVAL, etc). For function types,
 		 * however, this gets cast as an AttributeDef and queried for function
-		 * attributes. So far, I have only seen the .r field queried for
-		 * the FUNC_CALL field, so I do not think that the full long data slot
-		 * is used. It matters little; copying the whole long is easy. At any
-		 * rate, I am fairly confident that this can just be copied straight. */
+		 * attributes; so far, I have only seen the .r field queried for the
+		 * FUNC_CALL field. It matters little; copying the whole long is easy
+		 * and it seems that everything works fine when it is the same for
+		 * consuming contexts as for the original compilation context. */
 		sym_list[i].r = curr_Sym->r;
 		
 		/* Set the type. Judging by the constants in tcc.h and code that
-		 * uses this field, I'm pretty sure that the .t field tells tcc
-		 * how to load the data into a register. Since that is not
-		 * something that can be extended at runtime, I should be able
-		 * to copy the value as-is. */
+		 * uses this field, I'm pretty sure that the low bits in the .t field
+		 * tells tcc how to load the data into a register. The high bits seem to
+		 * indicate storage details, such as VT_EXTERN. Since that is not
+		 * something that can be extended at runtime, I should be able to copy
+		 * the value as-is and add an extern flag for variables and functions. */
 		sym_list[i].type.t = curr_Sym->type.t;
-		/* All functions need to be declared as external definitions */
+		/* After compilation, functions and global variables point to hard
+		 * locations in memory. Consuming contexts should think of these as
+		 * having external storage, which is reflected in the VT_EXTERN bit of
+		 * the type.t field. */
 		int btype = curr_Sym->type.t & VT_BTYPE;
-		if (btype == VT_FUNC) sym_list[i].type.t |= VT_EXTERN;
+		if (btype == VT_FUNC
+			|| sym_list[i].r & (VT_SYM | VT_LVAL | VT_CONST) /* global variables ?? */
+		) sym_list[i].type.t |= VT_EXTERN;
 		
 		/* The type.ref field contains something useful only if the basic type
 		 * is a pointer, struct, or function. See code from tccgen's
@@ -509,10 +516,13 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * the size (in bytes), and for struct members it is the byte offset
 		 * of the member, according to the end of struct_decl().
 		 * Line 5982 of tccgen.c seems to suggest that this needs to be
-		 * **negative** and we need VT_CONST in order to get external linkage. 
-		 */
-		/* Working here, this almost certainly needs to be more nuanced... */
-		if ((sym_list[i].type.t & VT_BTYPE) == VT_FUNC) sym_list[i].c = 0;
+		 * **negative** and we need VT_CONST in order to get external linkage.
+		 * However, it seems to work if I simply set it to zero for functions
+		 * and global variables, so I'm going with that. This almost certainly
+		 * needs to be more nuanced. */
+		if (btype == VT_FUNC
+			|| sym_list[i].r & (VT_SYM | VT_LVAL | VT_CONST)
+		) sym_list[i].c = 0;
 		else sym_list[i].c = curr_Sym->c;
 		
 		/* Copy the next symbol field. Labels and gotos are tracked in a
