@@ -62,6 +62,7 @@ void copy_extended_symbols_to_exsymtab(TCCState *state);
 /* tcc_get_extended_symbol_table in libtcc.h */
 /* tcc_get_extended_tokensym in libtcc.h */
 /* tcc_get_extended_symbol in libtcc.h */
+/* tcc_get_next_extended_symbol_name in libtcc.h */
 
 /******************************************************************************/
 /*                            extended symtab copy                            */

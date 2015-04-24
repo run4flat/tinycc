@@ -140,6 +140,7 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 /* Testing function, not really for general use */
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, char * name);
 LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
+LIBTCCAPI char* tcc_get_next_extended_symbol_name(extended_symtab_p symtab, int * poffset);
 
 #ifndef SYM_EXTENDED
 	#define SYM_EXTENDED   0x40000000 /* extended symbol space */
