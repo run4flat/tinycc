@@ -52,13 +52,13 @@ c_trie * c_trie_new() {
  * switching to the array compacted trie would be the best course for speedups. */
 unsigned char _c_trie_popcount (unsigned long long v) {
 	/* put count of each 2 bits into those 2 bits */
-	v = v - ((v >> 1) & 0x5555555555555555);
+	v = v - ((v >> 1) & 0x5555555555555555ULL);
 	/* put count of each 4 bits into those 4 bits */
-	v = (v & 0x3333333333333333) + ((v >> 2) & 0x3333333333333333);
+	v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
 	/* put count of each 8 bits into those 8 bits */
-	v = (v & 0x707070707070707) + ((v >> 4) & 0x707070707070707);
+	v = (v & 0x707070707070707ULL) + ((v >> 4) & 0x707070707070707ULL);
 	/* sum up those bits */
-	return ((v + ((v >> 8) & 0xF000F000F000F)) * 0x1000100010001) >> 48;
+	return ((v + ((v >> 8) & 0xF000F000F000FULL)) * 0x1000100010001ULL) >> 48;
 }
 
 #define C_TRIE_HAS_DATA 1
@@ -108,7 +108,7 @@ c_trie ** _c_trie_find_child (c_trie * current, char * string) {
 	
 	/* Find the compressed offset of the child associated with this character
 	 * and return it. */
-	unsigned long long mask_to_popcount = 0xFFFFFFFFFFFFFFFF >> (64 - bit_offset);
+	unsigned long long mask_to_popcount = 0xFFFFFFFFFFFFFFFFULL >> (64 - bit_offset);
 	return &(current->children[_c_trie_popcount(current->filled_bits & mask_to_popcount)]);
 }
 
@@ -155,7 +155,7 @@ c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_
 	
 	/* Copy old children located in slots that come before the new one. */
 	unsigned char N_before = _c_trie_popcount(old->filled_bits
-		& (0xFFFFFFFFFFFFFFFF >> (64 - slot_offset))
+		& (0xFFFFFFFFFFFFFFFFULL >> (64 - slot_offset))
 	);
 	if (slot_offset == 0) N_before = 0; /* corner case for data slot */
 	unsigned char i;
