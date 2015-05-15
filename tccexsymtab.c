@@ -197,6 +197,12 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 		curr_p = child_p;
 	}
 	
+	/* Handle the case where the data slot is already used */
+	if (curr_p->filled_bits & 1) {
+		tcc_warning("Attempting to add data to ctrie node that already has data!\n");
+		return;
+	}
+	
 	/* Finally, add the new data to the "data" slot. */
 	_c_trie_add_one_more_slot(curr_p, (c_trie*)data, 0);
 }
