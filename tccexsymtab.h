@@ -102,3 +102,9 @@ Sym * copy_extended_sym (extended_symtab* symtab, Sym * from, int to_tok);
 void copy_extended_tokensym (extended_symtab* symtab, TokenSym * from, TokenSym * to);
 void copy_ctype(CType * to_type, Sym * from, extended_symtab*symtab);
 int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab);
+
+/*****************************************************************************/
+/*                      Extended Symbol Table Caching                        */
+/*****************************************************************************/
+
+/* tcc_set_extended_symbol is in libtcc.h; this assumes that the token exists in the trie */

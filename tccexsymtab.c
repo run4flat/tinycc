@@ -291,6 +291,13 @@ LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * 
 	return (void*) ts->hash_next;
 }
 
+LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * name, void * pointer) {
+	TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
+	if (ts == NULL) return 0; /* failed */
+	ts->hash_next = pointer;
+	return 1; /* succeeded */
+}
+
 /******************************************************************************/
 /*                            extended symtab copy                            */
 /******************************************************************************/

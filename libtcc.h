@@ -116,6 +116,8 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab_p symtab);
 LIBTCCAPI TokenSym_p tcc_get_extended_tokensym(extended_symtab_p symtab, const char * name);
 /* Get a Symbol (i.e. function pointer) from an extended symbol table */
 LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab_p symtab, const char * name);
+/* Set a Symbol pointer, i.e. handle linking by hand without needing a TCCState */
+LIBTCCAPI int tcc_set_extended_symbol(extended_symtab_p symtab, const char * name, void * pointer);
 
 /*** For using a symbol table in a dependent compilation unit ***/
 /* Callback function signature for lookup-by-name:
