@@ -223,7 +223,7 @@ void dump_sym_names(TCCState *state) {
 	}
 }
 
-/* tcc_get_next_global_symbol_name: a simple mechanism for getting the names
+/* tcc_get_next_extended_symbol_name: a simple mechanism for getting the names
  * of all of the global symbols known to the extended symbol table. */
 char * tcc_get_next_extended_symbol_name(extended_symtab * symtab, int * poffset) {
 	/* Increment the counter to get to the next TokenSym */
