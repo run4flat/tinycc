@@ -246,7 +246,7 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
     else {
 		/* Global symbol stack. This is OK for the local symbol stack, but don't allow
 		 * this for symbols that are in the extended symbol stack. */
-		if (v >= SYM_EXTENDED) {
+		if (v & SYM_EXTENDED) {
 			tcc_error("Cannot use name '%s' as a global variable, it is already in the "
 				"extended symbol table.", get_tok_str(v, 0));
 		}
@@ -284,7 +284,7 @@ ST_FUNC Sym *global_identifier_push(int v, int t, int c)
         s->prev_tok = NULL;
         *ps = s;
     }
-	if (v >= SYM_EXTENDED) {
+	if (v & SYM_EXTENDED) {
 		tcc_warning("pushing global identifier with name from extended symbol table '%s'",
 			get_tok_str(v, 0));
 	}
@@ -2324,9 +2324,7 @@ static void type_to_str(char *buf, int buf_size,
             tstr = "enum ";
         pstrcat(buf, buf_size, tstr);
         v = type->ref->v & ~SYM_STRUCT;
-        if ((v >= SYM_FIRST_ANOM && v < SYM_EXTENDED)
-			|| v >= (SYM_FIRST_ANOM & SYM_EXTENDED)
-        )
+        if ((v & ~SYM_EXTENDED) >= SYM_FIRST_ANOM)
             pstrcat(buf, buf_size, "<anonymous>");
         else
             pstrcat(buf, buf_size, get_tok_str(v, NULL));

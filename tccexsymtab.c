@@ -338,8 +338,8 @@ Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last
 	while(stack != NULL) {
 		/* Return pointer to the new symbol's location if found */
 		if (stack == old) return new_list + offset;
-		/* Advance to the next symbol */
-		if (stack->v < SYM_EXTENDED) offset++;
+		/* Advance to the next symbol (XXX is the extended symbol check necessary???) */
+		if ((stack->v & ~SYM_EXTENDED) == stack->v) offset++;
 		stack = stack->prev;
 	}
 	return NULL;
@@ -442,7 +442,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     int N_Syms = 0;
     while(curr_Sym != NULL) {
     	/* We only track non-extended symbols */
-		if (curr_Sym->v < SYM_EXTENDED) N_Syms++;
+		if ((curr_Sym->v & ~SYM_EXTENDED) == curr_Sym->v) N_Syms++;
 		/* Step to the next symbol in the list */
 		curr_Sym = curr_Sym->prev;
 	}
