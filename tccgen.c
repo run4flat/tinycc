@@ -240,7 +240,6 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
     Sym *s, **ps;
     TokenSym *ts;
 
-    v &= ~SYM_EXTENDED;
     if (local_stack)
         ps = &local_stack;
     else {
@@ -252,6 +251,7 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
 		}
         ps = &global_stack;
     }
+    v &= ~SYM_EXTENDED;
     s = sym_push2(ps, v, type->t, c);
     s->type.ref = type->ref;
     s->r = r;
