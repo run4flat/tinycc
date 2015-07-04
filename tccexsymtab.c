@@ -233,7 +233,16 @@ void * ram_tree_new() {
 	return tcc_mallocz(sizeof(void *) * 2);
 }
 
-/*
+/* ram_tree_get_ref: given an old pointer, returns a *reference* to the
+ * new pointer, building out intermediate tree branches as necessary.
+ * The reason this returns a reference to the pointer rather than the
+ * pointer itself is so that you can work with the result as an lvalue.
+ * 
+ *  void ** p_data = ram_tree_get_ref(my_ram_tree, old_ptr);
+ *  if (*p_data == NULL) {
+ *      *p_data = create_new_data();
+ *  }
+ * 
  * Algorithm: We begin at the head of our data structure and go left or
  * right depending on the bit. Thus the bits map to the *branches*, not
  * the *nodes*. From the TOP to the leaves, we will traverse N_bits
@@ -249,7 +258,7 @@ void * ram_tree_new() {
 0000 0001 0010 0011 0100 0101 0110 0111  1000 1001 1010 1011 1100 1101 1110 1111
 */
 
-void ram_tree_add(void * ram_tree, void * old, void * new) {
+void ** ram_tree_get_ref(void * ram_tree, void * old) {
 	void** rt = (void**) ram_tree;
 	unsigned long long mask = 1ULL << sizeof(void*) * 8 - 1
 	while(mask != 1) {
@@ -263,11 +272,11 @@ void ram_tree_add(void * ram_tree, void * old, void * new) {
 		mask >>= 1;
 	}
 	
-	/* The last layer contains the actual pointers. */
+	/* The last layer contains the actual pointers. Return a reference
+	 * to them so they can be dereferenced, and possibly modified. */
 	int offset = mask & (unsigned long long)old;
-	rt[offset] = new;
+	return (void**) (rt + offset);
 }
-
 
 /* ram_tree_free(void * ram_tree)
  * Frees memory associated with a ram_tree. Does not do anything with
