@@ -1255,6 +1255,23 @@ Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok) {
 /*                      Extended Symbol Table Caching                        */
 /*****************************************************************************/
 
+/* A few concerns that need to be balanced:
+ * 1) The deserialization code needs to allocate memory in a way that is
+ *    compatible with the deallocation code.
+ * 2) It seems sensible to write slow serialization code if it means I
+ *    can write fast deserialization code. For example, it would be nice
+ *    if I could load *ALL* Syms with a single fread.
+ * 3) Loading all Syms in one shot during deserialization would break
+ *    deallocation code, unless I start using different deallocation
+ *    code for the different symtabs. This is easily achievable if each
+ *    symtab keeps track of its type, and then if the major methods
+ *    delegate by symtab type. 
+ * 4) I am not quite proposing OOP, as the actual memory layout of all
+ *    symtabs will be the same. At least for now.
+ * 5) In that case, tcc_delete_extended_symbol_table needs to use a
+ *    switch statement that delegates to type-specific code.
+ */
+
 LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * name, void * pointer) {
 	TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
 	if (ts == NULL) return 0; /* failed */
@@ -1262,3 +1279,105 @@ LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * nam
 	return 1; /* succeeded */
 }
 
+/* Write the total number of tokens that live on the end of this exsymtab, as
+ * well as tok_start. */
+int serialize_N_tokens_and_tok_start(extended_symtab * symtab, FILE * out_fh) {
+	int to_write[2];
+	to_write[0] = symtab->tokenSym_last - symtab->tokenSym_list; /* N_tokens */
+	to_write[1] = symtab->tok_start;
+	if (fwrite(to_write, sizeof(int), 2, out_fh) == 2) return 1;
+	
+	/* Failed to serialize; write a message and return failure */
+	tcc_warning("Serialization failed: Unable to serialize the number of tokens and tok_start\n";
+	return 0;
+}
+
+/* Get the total number of tokens that live on the end of this exsymtab
+ * and allocate an exsymtab struct with enough room; read and set tok_start */
+extended_symtab * deserialize_init_symtab(FILE * in_fh) {
+	int N_tokens;
+	extended_symtab * symtab;
+	if (fread(&N_tokens, sizeof(int), 1, in_fh) != 1) {
+		tcc_warning("Deserialization failed: Unable to get the number of tokens\n");
+		return NULL;
+	}
+	
+	/* Allocate the symtab; follows process outlined in copy_extended_symtab */
+    symtab = tcc_malloc(sizeof(extended_symtab) + sizeof(void*) * (N_tokens - 1));
+    if (symtab == NULL) {
+		tcc_warning("Deserialization failed: Unable to allocate symtab to hold %d tokens\n", N_tokens);
+		return NULL;
+	}
+	
+	/* deserialize tok_start */
+	if (fread(&(to_return->tok_start), sizeof(int), 1, in_fh) != 1) {
+		tcc_warning("Deserialization failed: Unable to get tok_start\n");
+		free(symtab);
+		return NULL;
+	}
+	
+	return symtab;
+}
+
+LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char * output_filename) {
+    /* Do nothing if we have an empty symtab. */
+    if (NULL == symtab) return;
+	
+    /* Open the file for writing */
+    FILE * out_fh = fopen(output_filename, "wb");
+    if (!out_fh) {
+		tcc_warning("Serialization failed: Unable ot open extended symtab serialization file %s\n",
+			output_filename);
+		return 0;
+	}
+	
+	/* Start the file with two useful integers: the number of tokens and
+	 * the value of tok_start. */
+	if (!serialize_N_tokens_and_tok_start(symtab, out_fh)) goto FAILED;
+	
+	...
+	
+	/* All set! */
+	return 1;
+	
+	FAILED:
+	fclose(out_fh);
+	return 0;
+}
+
+LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_filename) {
+    /* Open the file for writing */
+    FILE * in_fh = fopen(output_filename, "rb");
+    if (!in_fh) {
+		tcc_warning("Deserialization failed: Unable to open extended symtab serialization file %s\n",
+			output_filename);
+		return NULL;
+	}
+	
+	/* Allocate the symtab */
+	extended_symtab * symtab;
+	symtab = deserialize_init_symtab(in_fh);
+	if (symtab == NULL) goto FAIL_SYMTAB;
+	
+	/* Allocate the c_trie. This may some day be serialized and
+	 * deserialized with the rest of the data, but for now keep things
+	 * simple. */
+	symtab->trie = c_trie_new();
+	if (symtab->trie == NULL) {
+		tcc_warning("Deserialization failed: Unable to allocate new c_trie\n");
+		goto FAIL_TRIE;
+	}
+	
+	...
+	
+	/* All set! */
+	return symtab;
+	
+	/* And here are all the ways I might fail and their associated
+	 * cleanup procedures, including fall-through. */
+FAIL_TRIE:
+	free(symtab);
+FAIL_SYMTAB:
+	fclose(in_fh);
+	return NULL;
+}
