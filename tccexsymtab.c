@@ -207,6 +207,83 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 	_c_trie_add_one_more_slot(curr_p, (c_trie*)data, 0);
 }
 
+/****************************************************************************/
+/*                                 ram tree                                 */
+/****************************************************************************/
+
+/* This provides a mechanism for mapping a set of old pointers to a set of
+ * new pointers. Assuming that a collection of data structures are being
+ * copied, this basically provides an interface to say, "What is the new
+ * address for this old address?"
+ * 
+ * The current implementation is pretty basic and can probably be optimized.
+ * Lookup and insertion time is constant, but it uses O(N log(N)) memory for
+ * a lookup table consisting of N pointers. It builds a two-way branching
+ * data structure based on each bit in the pointer address being looked up.
+ * 
+ * As currently implemented, you should create a new ramtree with
+ * ramtree_new and free the memory associated with your ramtree with
+ * ramtree_free. The data is stored in void pointers, so you would say
+ * 
+ *  void * my_ramtree = ram_tree_new();
+ * 
+ */
+
+void * ram_tree_new() {
+	return tcc_mallocz(sizeof(void *) * 2);
+}
+
+/*
+ * Algorithm: We begin at the head of our data structure and go left or
+ * right depending on the bit. Thus the bits map to the *branches*, not
+ * the *nodes*. From the TOP to the leaves, we will traverse N_bits
+ * nodes and follow N_bits - 1 branches. The final node will also
+ * contain a left and a right, but the pointers contained therein will
+ * be the mapped pointers, not another node. So, my while loop should
+ * take N_bits - 1 iterations.
+
+                                      TOP
+                   0                                        1
+        00                  01                   10                  11
+   000       001       010       011        100       101       110       111
+0000 0001 0010 0011 0100 0101 0110 0111  1000 1001 1010 1011 1100 1101 1110 1111
+*/
+
+void ram_tree_add(void * ram_tree, void * old, void * new) {
+	void** rt = (void**) ram_tree;
+	unsigned long long mask = 1ULL << sizeof(void*) * 8 - 1
+	while(mask != 1) {
+		int offset = (mask & (unsigned long long)old) ? 1 : 0;
+		/* Branch does not exist? allocate */
+		if (rt[offset] == NULL) {
+			rt[offset] = tcc_mallocz(sizeof(void*) * 2);
+		}
+		/* Take step into branch */
+		rt = (void**) rt[offset];
+		mask >>= 1;
+	}
+	
+	/* The last layer contains the actual pointers. */
+	int offset = mask & (unsigned long long)old;
+	rt[offset] = new;
+}
+
+
+/* ram_tree_free(void * ram_tree)
+ * Frees memory associated with a ram_tree. Does not do anything with
+ * the leaves.
+ */
+
+void ram_tree_free(void * rt) {
+	void * 
+}
+
+/* ram_tree_lookup takes an old pointer and attempts to find the associated
+ * new pointer. It takes three arguments: a ramtree pointer, a 
+ * looks up the new address for the current 
+
+ram_tree
+
 /******************************************************************************/
 /*                           compiled symbol lookup                           */
 /******************************************************************************/
