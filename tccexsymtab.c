@@ -278,6 +278,96 @@ void ** ram_tree_get_ref(void * ram_tree, void * old) {
 	return (void**) (rt + offset);
 }
 
+/* void ** ram_tree_iterate(void * ram_tree, void ** iter_data)
+ * Iterates through the ram_tree data, returning a reference to new leaf
+ * with each call. The void ** iter_data is a reference to a void pointer
+ * that is used by the iterator to store state between calls. You should
+ * call this function like so:
+ * 
+ *  void * iter_data = NULL;
+ *  do {
+ *      void ** data_ref = ram_tree_iterate(ram_tree, &iter_data);
+ *      ...
+ *  } while (iter_data != NULL);
+ * 
+ * For example, to count the number of entries, you could do this
+ * 
+ *  void * iter_data = NULL;
+ *  int count = 0;
+ *  do {
+ *      count++;
+ *      ram_tree_iterate(ram_tree, &iter_data);
+ *  } while (iter_data != NULL;
+ * 
+ * To free data referenced by all leaf pointers, use this
+ * 
+ *  void * iter_data = NULL;
+ *  void ** ptr_ref;
+ *  do {
+ *      ptr_ref = ram_tree_iterate(ram_tree, &iter_data);
+ *      free(*ptr_ref);
+ *  } while (iter_data != NULL;
+ *
+ * State is allocated on the heap. For the moment, the only way to free
+ * the state information is to iterate through all of the data.
+ */
+
+typedef struct {
+	void ** ptr;
+	int level;
+} rt_iterator_data;
+
+void ** ram_tree_iterate(void * ramtree, void ** p_iter_data) {
+	void ** rt = (void**)ramtree;
+	rt_iterator_data * iter_data = *p_iter_data;
+	
+	/* iter_data always points to the *end* of the list of available
+	 * right branches, or to NULL if it has not been initialized. */
+	if (iter_data == NULL) {
+		iter_data = tcc_malloc(sizeof(rt_iterator_data) * (sizeof(void*) + 2));
+		iter_data[0].ptr = NULL;
+		iter_data[0].level = 0;
+		iter_data[1].ptr = rt;
+		iter_data[1].level = 0;
+		
+		/* have pointer point to the "end" of the list */
+		iter_data++;
+	}
+	
+	int i;
+	void ** init_node = void ** curr_node = iter_data[0].ptr;
+	iter_data--;
+	for (i = iter_data[0].level; i < sizeof(void*); i++) {
+		/* if a left branch exists... */
+		if (curr_node[0] != NULL) {
+			/* ... and we're bypassing a right branch ... */
+			if (curr_node[1] != NULL) {
+				/* ... add the right branch to our list and move the
+				 * list head forward */
+				iter_data++;
+				iter_data[0].ptr = curr_node[1];
+				iter_data[0].level = i + 1;
+			}
+			/* ... and under all circumstances, move to the left branch */
+			curr_node = (void**)curr_node[0];
+		}
+		/* If a left branch does not exist, move to the right branch */
+		else curr_node = (void**)curr_node[1];
+	}
+	
+	/* The last item in our tree will have no more right branches. In
+	 * that case, free the state memory. */
+	if (iter_data[0].ptr == NULL) {
+		tcc_free(iter_data);
+		iter_data = NULL;
+	}
+	
+	/* make sure p_iter_data refers to the end of the list */
+	*p_iter_data = iter_data;
+	
+	return curr_node;
+}
+
 /* ram_tree_free(void * ram_tree)
  * Frees memory associated with a ram_tree. Does not do anything with
  * the leaves. Use ram_tree_iterate to go through the leaves and take
