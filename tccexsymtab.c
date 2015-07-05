@@ -280,18 +280,22 @@ void ** ram_tree_get_ref(void * ram_tree, void * old) {
 
 /* ram_tree_free(void * ram_tree)
  * Frees memory associated with a ram_tree. Does not do anything with
- * the leaves.
+ * the leaves. Use ram_tree_iterate to go through the leaves and take
+ * care of memory allocations stored there.
  */
 
-void ram_tree_free(void * rt) {
-	void * 
+void ram_tree_free(void * ramtree) {
+	void ** rt = (void**)ramtree;
+	_ram_tree_free_level((void**)rt, sizeof(void*));
 }
 
-/* ram_tree_lookup takes an old pointer and attempts to find the associated
- * new pointer. It takes three arguments: a ramtree pointer, a 
- * looks up the new address for the current 
-
-ram_tree
+void _ram_tree_free_level(void ** rt, int level) {
+	if (rt == NULL || level == 0) return;
+	_ram_tree_free_level((void**)rt[0], level - 1);
+	tcc_free(rt[0]);
+	_ram_tree_free_level((void**)rt[1], level - 1);
+	tcc_free(rt[1]);
+}
 
 /******************************************************************************/
 /*                           compiled symbol lookup                           */
