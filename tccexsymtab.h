@@ -45,7 +45,7 @@ c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_
 union ram_tree_node {
 	union ram_tree_node * branches[2];
 	void * leaves[2];
-}
+};
 typedef union ram_tree_node ram_tree;
 ram_tree * ram_tree_new();
 void ** ram_tree_get_ref(ram_tree * rt, void * old);

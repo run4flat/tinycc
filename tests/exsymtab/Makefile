@@ -16,9 +16,9 @@ endif
 
 TCC = $(TOP)/tcc $(TCCFLAGS)
 
+# 02-ram_tree.test \
 TESTS =	\
  01-test-symtab-copy.test \
- 02-ram_tree.test \
  10-symtab-compare-func-decl-and-def.test \
  20-two-contexts-define-share.test \
  25-two-contexts-intertwined-preprocessor-macro.test \
@@ -40,9 +40,9 @@ TESTS =	\
  61-two-contexts-const-globals.test \
  70-symtab-use-check.test
 
+# 02-ram_tree.prove \
 PROVES =	\
  01-test-symtab-copy.prove \
- 02-ram_tree.prove \
  10-symtab-compare-func-decl-and-def.prove \
  20-two-contexts-define-share.prove \
  25-two-contexts-intertwined-preprocessor-macro.prove \

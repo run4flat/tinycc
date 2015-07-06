@@ -260,7 +260,7 @@ ram_tree * ram_tree_new() {
 
 void ** ram_tree_get_ref(ram_tree * rt, void * old) {
 	/* Start with most significant bit */
-	unsigned long long mask = 1ULL << sizeof(void*) * 8 - 1
+	unsigned long long mask = 1ULL << (sizeof(void*) * 8 - 1);
 	while(mask != 1) {
 		int offset = (mask & (unsigned long long)old) ? 1 : 0;
 		/* Branch does not exist? allocate */
@@ -416,10 +416,6 @@ void ** ram_tree_iterate(ram_tree * rt, void ** p_bypassed) {
  * care of memory allocations stored there.
  */
 
-void ram_tree_free(ram_tree * rt) {
-	_ram_tree_free_level(rt, sizeof(void*));
-}
-
 void _ram_tree_free_level(ram_tree * rt, int level) {
 	/* skip if this is null or a leaf */
 	if (rt == NULL || level == 0) return;
@@ -428,6 +424,10 @@ void _ram_tree_free_level(ram_tree * rt, int level) {
 	_ram_tree_free_level(rt->branches[1], level - 1);
 	/* free self */
 	tcc_free(rt);
+}
+
+void ram_tree_free(ram_tree * rt) {
+	_ram_tree_free_level(rt, sizeof(void*));
 }
 
 /******************************************************************************/

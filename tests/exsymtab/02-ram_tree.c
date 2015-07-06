@@ -2,25 +2,24 @@
  * Tests to ensure that the ram_tree works as indicated.
  */
 
-#include "libtcc.h"
 #include "tcc.h"
 #include "tap.h"
 #include <stdlib.h>
 
 void add_some_data(ram_tree * rt) {
     /* Add some data to semi-random slots */
-    void ** data_ref = ram_tree_get_ref(my_rt, (void*)0x0010);
+    void ** data_ref = ram_tree_get_ref(rt, (void*)0x0010);
     *data_ref = (void*) 1;
-    data_ref = ram_tree_get_ref(my_rt, (void*)0x1010);
+    data_ref = ram_tree_get_ref(rt, (void*)0x1010);
     *data_ref = (void*) 2;
-    data_ref = ram_tree_get_ref(my_rt, (void*)0x1100);
+    data_ref = ram_tree_get_ref(rt, (void*)0x1100);
     *data_ref = (void*) 3;
-    data_ref = ram_tree_get_ref(my_rt, (void*)0x1111);
+    data_ref = ram_tree_get_ref(rt, (void*)0x1111);
     *data_ref = (void*) 4;
 }
 
-void check_retrieve(ram_tree rt, int old, int expected, char * message) {
-    void ** data_ref = ram_tree_get_ref(my_rt, (void*)old);
+void check_retrieve(ram_tree * rt, int old, int expected, char * message) {
+    void ** data_ref = ram_tree_get_ref(rt, (void*)old);
     is((int)*data_ref, expected, message);
 }
 
