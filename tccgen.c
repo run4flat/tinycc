@@ -244,11 +244,13 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
         ps = &local_stack;
     else {
 		/* Global symbol stack. This is OK for the local symbol stack, but don't allow
-		 * this for symbols that are in the extended symbol stack. */
-		if (v & SYM_EXTENDED) {
-			tcc_error("Cannot use name '%s' as a global variable, it is already in the "
-				"extended symbol table.", get_tok_str(v, 0));
-		}
+		 * this for symbols that are in the extended symbol stack. There seem to be
+		 * some issues associated with copying *all* TokenSyms, so this needs to be
+		 * ironed out. For now, I'm removing the check. */
+//		if (v & SYM_EXTENDED) {
+//			tcc_error("Cannot use name '%s' as a global variable, it is already in the "
+//				"extended symbol table.", get_tok_str(v, 0));
+//		}
         ps = &global_stack;
     }
     v &= ~SYM_EXTENDED;
