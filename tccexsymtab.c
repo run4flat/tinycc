@@ -229,8 +229,8 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
  * 
  */
 
-void * ram_tree_new() {
-	return tcc_mallocz(sizeof(void *) * 2);
+ram_tree * ram_tree_new() {
+	return tcc_mallocz(sizeof(ram_tree));
 }
 
 /* ram_tree_get_ref: given an old pointer, returns a *reference* to the
@@ -258,24 +258,24 @@ void * ram_tree_new() {
 0000 0001 0010 0011 0100 0101 0110 0111  1000 1001 1010 1011 1100 1101 1110 1111
 */
 
-void ** ram_tree_get_ref(void * ram_tree, void * old) {
-	void** rt = (void**) ram_tree;
+void ** ram_tree_get_ref(ram_tree * rt, void * old) {
+	/* Start with most significant bit */
 	unsigned long long mask = 1ULL << sizeof(void*) * 8 - 1
 	while(mask != 1) {
 		int offset = (mask & (unsigned long long)old) ? 1 : 0;
 		/* Branch does not exist? allocate */
-		if (rt[offset] == NULL) {
-			rt[offset] = tcc_mallocz(sizeof(void*) * 2);
+		if (rt->branches[offset] == NULL) {
+			rt->branches[offset] = tcc_mallocz(sizeof(ram_tree));
 		}
 		/* Take step into branch */
-		rt = (void**) rt[offset];
+		rt = rt->branches[offset];
 		mask >>= 1;
 	}
 	
 	/* The last layer contains the actual pointers. Return a reference
 	 * to them so they can be dereferenced, and possibly modified. */
-	int offset = mask & (unsigned long long)old;
-	return (void**) (rt + offset);
+	int offset = 1 & (unsigned long long)old;
+	return rt->leaves + offset;
 }
 
 /* void ** ram_tree_iterate(void * ram_tree, void ** iter_data)
@@ -313,59 +313,101 @@ void ** ram_tree_get_ref(void * ram_tree, void * old) {
  */
 
 typedef struct {
-	void ** ptr;
+	ram_tree * node;
 	int level;
-} rt_iterator_data;
+} rt_bypassed_data;
 
-void ** ram_tree_iterate(void * ramtree, void ** p_iter_data) {
-	void ** rt = (void**)ramtree;
-	rt_iterator_data * iter_data = *p_iter_data;
+void ** ram_tree_iterate(ram_tree * rt, void ** p_bypassed) {
+	/* dereference the pointer they passed in */
+	rt_bypassed_data * bypassed = *p_bypassed;
 	
-	/* iter_data always points to the *end* of the list of available
-	 * right branches, or to NULL if it has not been initialized. */
-	if (iter_data == NULL) {
-		iter_data = tcc_malloc(sizeof(rt_iterator_data) * (sizeof(void*) + 2));
-		iter_data[0].ptr = NULL;
-		iter_data[0].level = 0;
-		iter_data[1].ptr = rt;
-		iter_data[1].level = 0;
+	/* If bypassed is not initialized, then we allocate memory and
+	 * initialize things so that we start at the top node. */
+	if (bypassed == NULL) {
+		/* Allocate plenty of room, the first element of which is a
+		 * "null" delimiter so we know when there are no more bypassed
+		 * nodes to worry about. (If we have a 32-bit system, we want
+		 * room for 33 rt_bypassed_data structs at our disposal.) */
+		bypassed = tcc_malloc(sizeof(rt_bypassed_data) * (sizeof(void*) + 1));
+		bypassed->node = NULL;
+		bypassed->level = -1; /* doesn't matter */
 		
-		/* have pointer point to the "end" of the list */
-		iter_data++;
+		/* Moving forward, bypassed will always point to the *end* of
+		 * the list of bypassed nodes, making it a lifo. Since the whole
+		 * ram tree is unexplored, add the top node to the list by
+		 * moving to the second slot and adding the appropriate
+		 * information. */
+		bypassed++;
+		bypassed->node = rt;
+		bypassed->level = sizeof(void*) - 1;
 	}
 	
-	int i;
-	void ** init_node = void ** curr_node = iter_data[0].ptr;
-	iter_data--;
-	for (i = iter_data[0].level; i < sizeof(void*); i++) {
-		/* if a left branch exists... */
-		if (curr_node[0] != NULL) {
-			/* ... and we're bypassing a right branch ... */
-			if (curr_node[1] != NULL) {
-				/* ... add the right branch to our list and move the
-				 * list head forward */
-				iter_data++;
-				iter_data[0].ptr = curr_node[1];
-				iter_data[0].level = i + 1;
+	/* The leaves are void*. We will return a reference to one of those */
+	void ** to_return;
+	
+	/* Pop the most recently bypassed node and level off the lifo */
+	int level = bypassed->level;
+	ram_tree * curr_node = bypassed->node;
+	bypassed--;
+	
+	if (level == 0) {
+		/* If the most recent node is at depth zero, then it means that
+		 * we need to return a reference to the node's right leaf. */
+		to_return = curr_node->leaves + 1;
+	}
+	else {
+		/* If we are not dealing with that edge case, then begin heading
+		 * down the ram tree from the given node. */
+		for (; level > 0; level--) {
+			/* if a left branch exists... */
+			if (curr_node->branches[0] != NULL) {
+				/* ... and we're bypassing a right branch ... */
+				if (curr_node->branches[1] != NULL) {
+					/* ... push the bypassed node onto our lifo */
+					bypassed++;
+					bypassed->node = curr_node->branches[1];
+					bypassed->level = level - 1;
+				}
+				/* ... and under all circumstances, move to the left node */
+				curr_node = curr_node->branches[0];
 			}
-			/* ... and under all circumstances, move to the left branch */
-			curr_node = (void**)curr_node[0];
+			/* If a left branch does not exist, move to the right node */
+			else curr_node = curr_node->branches[1];
 		}
-		/* If a left branch does not exist, move to the right branch */
-		else curr_node = (void**)curr_node[1];
+		
+		/* Out here we are sitting on the final node. Again perform the
+		 * left/right leaf dance seen just above, but this time we do it
+		 * to figure out the return leaf. If a left leaf exists... */
+		if (curr_node->leaves[0] != NULL) {
+			/* ... and we also have a right leaf ... */
+			if (curr_node->leaves[1] != NULL) {
+				/* ... then add this node to the bypassed list, with
+				 * depth 0. This will trigger special handling. */
+				bypassed++;
+				bypassed->node = curr_node;
+				bypassed->level = 0;
+			}
+			/* ... and under all circumstances, return a reference to
+			 * the left leaf */
+			to_return = curr_node->leaves;
+		}
+		/* If a left leaf does not exist, return a reference to the
+		 * right leaf. */
+		else to_return = curr_node->leaves + 1;
 	}
 	
-	/* The last item in our tree will have no more right branches. In
-	 * that case, free the state memory. */
-	if (iter_data[0].ptr == NULL) {
-		tcc_free(iter_data);
-		iter_data = NULL;
+	/* The last item in our tree will have no more bypassed nodes, in
+	 * which case the bypassed pointer will be sitting on our null
+	 * element at the head of the lifo. In that case, free the lifo. */
+	if (bypassed->node == NULL) {
+		tcc_free(bypassed);
+		bypassed = NULL;
 	}
 	
-	/* make sure p_iter_data refers to the end of the list */
-	*p_iter_data = iter_data;
+	/* make sure p_bypassed refers to the end of the lifo (or NULL) */
+	*p_bypassed = bypassed;
 	
-	return curr_node;
+	return to_return;
 }
 
 /* ram_tree_free(void * ram_tree)
@@ -374,17 +416,18 @@ void ** ram_tree_iterate(void * ramtree, void ** p_iter_data) {
  * care of memory allocations stored there.
  */
 
-void ram_tree_free(void * ramtree) {
-	void ** rt = (void**)ramtree;
-	_ram_tree_free_level((void**)rt, sizeof(void*));
+void ram_tree_free(ram_tree * rt) {
+	_ram_tree_free_level(rt, sizeof(void*));
 }
 
-void _ram_tree_free_level(void ** rt, int level) {
+void _ram_tree_free_level(ram_tree * rt, int level) {
+	/* skip if this is null or a leaf */
 	if (rt == NULL || level == 0) return;
-	_ram_tree_free_level((void**)rt[0], level - 1);
-	tcc_free(rt[0]);
-	_ram_tree_free_level((void**)rt[1], level - 1);
-	tcc_free(rt[1]);
+	/* free children */
+	_ram_tree_free_level(rt->branches[0], level - 1);
+	_ram_tree_free_level(rt->branches[1], level - 1);
+	/* free self */
+	tcc_free(rt);
 }
 
 /******************************************************************************/

@@ -38,6 +38,20 @@ unsigned char _c_trie_bit_offset_for_char (char c);
 c_trie ** _c_trie_find_child (c_trie * current, char * string);
 c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset);
 
+/****************************************************************************/
+/*                                 ram tree                                 */
+/****************************************************************************/
+
+union ram_tree_node {
+	union ram_tree_node * branches[2];
+	void * leaves[2];
+}
+typedef union ram_tree_node ram_tree;
+ram_tree * ram_tree_new();
+void ** ram_tree_get_ref(ram_tree * rt, void * old);
+void ** ram_tree_iterate(ram_tree * rt, void ** p_bypassed);
+void ram_tree_free(ram_tree * rt);
+
 /******************************************************************************/
 /*                           extended symtab struct                           */
 /******************************************************************************/
