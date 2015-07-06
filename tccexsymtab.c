@@ -550,39 +550,19 @@ int _type_ref_is_not_Sym(Sym * from) {
 	return ((from->type.t & VT_STATIC) && (from->r & VT_SYM));
 }
 
-Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack) {
-	/* We assume that old IS NOT null; this must be checked by the higher-level
-	 * functions that call this one. */
-	
-	/* Determine the offset of the to-be-generated list of symbols and return the
-	 * pointer to that offset. Note that the list will only include non-extended
-	 * symbols, so we do not increment our offset when we encounter one of those. */
-	int offset = 0;
-	while(stack != NULL) {
-		/* Return pointer to the new symbol's location if found */
-		if (stack == old) return new_list + offset;
-		/* Advance to the next symbol (XXX is the extended symbol check necessary???) */
-		if ((stack->v & ~SYM_EXTENDED) == stack->v) offset++;
-		stack = stack->prev;
-	}
-	return NULL;
-}
-
-Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
+Sym * get_new_symtab_pointer (Sym * old, ram_tree * rt) {
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
 	
 	/* Check the global symbol stack. */
-	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, global_stack);
+	void ** Sym_ref = ram_tree_get_ref(rt, old);
+	Sym * to_return = *Sym_ref;
 	if (NULL != to_return) return to_return;
 	
 	/* If we're here, we couldn't find the symbol on the global stack. This
 	 * means it's an anonymous symbol, i.e. in a function declaration. Allocate
-	 * a new Sym and attach it to *our* anonymous stack. */
-	Sym * ll = new_list + offset_of_last - 1;
-	while(ll->prev != NULL) ll = ll->prev;
-	to_return = tcc_mallocz(sizeof(Sym));
-	ll->prev = to_return;
+	 * a new Sym. */
+	to_return = *Sym_ref = tcc_malloc(sizeof(Sym));
 	
 	/* Fill in the values, as appropriate. See notes under the symbol stack
 	 * copying for explanations. I suspect (highly) that this is only used in
@@ -594,24 +574,23 @@ Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 	to_return->type.t = old->type.t;
 	int btype = old->type.t & VT_BTYPE;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-		to_return->type.ref
-			= get_new_symtab_pointer(s, old->type.ref, new_list, offset_of_last);
+		to_return->type.ref = get_new_symtab_pointer(old->type.ref, rt);
 if (old->type.ref == NULL) printf("old->type.ref is null!\n");
 if (to_return->type.ref == NULL) printf("to_return->type.ref is null!\n");
 	}
 	if (btype == VT_FUNC) to_return->c = 0;
 	else to_return->c = old->c;
-	to_return->next
-		= get_new_symtab_pointer(s, old->next, new_list, offset_of_last);
+	to_return->next = get_new_symtab_pointer(old->next, rt);
 	return to_return;
 }
 
-Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last) {
+Sym * get_new_deftab_pointer (Sym * old, ram_tree * rt) {
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
 	
 	/* Otherwise use the non-extended symbol lookup */
-	Sym * to_return = _get_new_sym_or_def_pointer(old, new_list, offset_of_last, define_stack);
+	void ** Sym_ref = ram_tree_get_ref(rt, old);
+	Sym * to_return = *Sym_ref;
 	if (to_return != NULL) return to_return;
 	
 	/* If we're here, we ran into trouble: print out a diagnostic */
@@ -628,8 +607,8 @@ Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offse
 	return NULL;
 }
 
-/* Make a complete copy of the token-symbol table, the symbol stack, and the
- * define stack, though the user only thinks they have the token symbol table. */
+/* Make a complete copy of the TokenSym and Sym tables, using a ram_tree
+ * for the latter. */
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 
     /* Do nothing if we have an empty TCCState. */
@@ -641,10 +620,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     /* Room for the first TokenSym is included in the struct definition, so I
      * need to allocate room for the extended symtab plus N_tokens - 1. */
 /*struct extended_symtab {
-	Sym * sym_list;
-	Sym * sym_last;
-	Sym * def_list;
-	Sym * def_last;
+	ram_tree * sym_rt;
 	c_trie * trie;
 	int tok_start;
 	TokenSym ** tokenSym_last;
@@ -655,61 +631,50 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		+ sizeof(void*) * (N_tokens - 1));
 	to_return->tok_start = tok_start;
 	
-	/* Allocate the trie */
+	/* Allocate the trie and ram_tree */
 	to_return->trie = c_trie_new();
+	ram_tree * rt = to_return->rt = ram_tree_new();
+    
+    void ** Sym_ref;
+    Sym * new_sym;
+    Sym * curr_Sym;
     
     /********* symbol stack *********/
     
-    /* Calculate the number of symbols */
-    Sym * curr_Sym = global_stack;
-    int N_Syms = 0;
-    while(curr_Sym != NULL) {
-    	/* We only track non-extended symbols */
-		if ((curr_Sym->v & ~SYM_EXTENDED) == curr_Sym->v) N_Syms++;
-		/* Step to the next symbol in the list */
-		curr_Sym = curr_Sym->prev;
+    /* All Syms are stored in the leaves of the ram_tree and are
+     * accessible by their old address, or via ram tree iteration. Begin
+     * by allocating memory for all Syms that are currently on the
+     * global stack. This way, if I *can't* later on locate a Sym with
+     * get_new_symtab_pointer, I can be sure it is an anonymous Sym. */
+    for (curr_Sym = global_stack; curr_Sym != NULL; curr_Sym = curr_Sym->prev) {
+		Sym_ref = ram_tree_get_ref(rt, curr_Sym);
+		*Sym_ref = tcc_malloc(sizeof(Sym));
 	}
-    /* In addition to the sym list just counted, we need two more. We need a
-     * sym that is all zeros (which we put as the last item), and we need a
-     * sym that serves as the head of our anonymous symbol stack. The anonymous
-     * symbol stack will be located at offset N_Syms - 1, so we have to
-     * increment N_Syms by one.
-     * working here - is this reasoning correct? */
-    N_Syms++;
-    Sym * sym_list = to_return->sym_list = tcc_malloc(sizeof(Sym) * (N_Syms + 1));
-    to_return->sym_last = sym_list + N_Syms;
     
-	/* Zero out last sym */
-    sym_list[N_Syms-1].v = sym_list[N_Syms].v = 0;
-    sym_list[N_Syms-1].asm_label = sym_list[N_Syms].asm_label = NULL;
-    sym_list[N_Syms-1].r = sym_list[N_Syms].r = 0;
-    sym_list[N_Syms-1].c = sym_list[N_Syms].c = 0;
-    sym_list[N_Syms-1].type.t = sym_list[N_Syms].type.t = 0;
-    sym_list[N_Syms-1].type.ref = sym_list[N_Syms].type.ref = NULL;
-    sym_list[N_Syms-1].next = sym_list[N_Syms].next = NULL;
-    sym_list[N_Syms-1].prev = sym_list[N_Syms].prev = NULL;
-    sym_list[N_Syms-1].prev_tok = sym_list[N_Syms].prev_tok = NULL;
-    
-    /* Copy the Sym list */
-    for (curr_Sym = global_stack, i = 0; i < N_Syms-1; curr_Sym = curr_Sym->prev) {
+    /* Copy the contents of the Sym stack */
+    for (curr_Sym = global_stack; curr_Sym != NULL; curr_Sym = curr_Sym->prev) {
 		/* See tcc.h around line 425 for descriptions of some of the fields.
 		 * See also tccgen.c line 5987 to see what needs to happen for function
 		 * declarations to work properly (and, in turn, line 446 for how to
 		 * push a forward reference). */
 		
+		/* Get a pointer to the (already allocated) new Sym */
+		Sym_ref = ram_tree_get_ref(rt, curr_Sym);
+		new_sym = *Sym_ref;
+		
 		/* Copy the v value (token id). This will not be copied later, so keep
 		 * things simple for now and simply strip out the extended flag. */
-		sym_list[i].v = curr_Sym->v & ~SYM_EXTENDED;
+		new_sym->v = curr_Sym->v & ~SYM_EXTENDED;
 		 
 		/* Copy the assembler label */
 		if (curr_Sym->asm_label != NULL) {
 			int asm_label_len = strlen(curr_Sym->asm_label) + 1;
-			sym_list[i].asm_label = tcc_malloc(asm_label_len);
-			memcpy(sym_list[i].asm_label, curr_Sym->asm_label,
+			new_sym->asm_label = tcc_malloc(asm_label_len);
+			memcpy(new_sym->asm_label, curr_Sym->asm_label,
 				asm_label_len);
 		}
 		else {
-			sym_list[i].asm_label = NULL;
+			new_sym->asm_label = NULL;
 		}
 		
 		/* associated register. For variables, I believe that the low bits
@@ -720,7 +685,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * FUNC_CALL field. It matters little; copying the whole long is easy
 		 * and it seems that everything works fine when it is the same for
 		 * consuming contexts as for the original compilation context. */
-		sym_list[i].r = curr_Sym->r;
+		new_sym->r = curr_Sym->r;
 		
 		/* Set the type. Judging by the constants in tcc.h and code that
 		 * uses this field, I'm pretty sure that the low bits in the .t field
@@ -728,29 +693,29 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * indicate storage details, such as VT_EXTERN. Since that is not
 		 * something that can be extended at runtime, I should be able to copy
 		 * the value as-is and add an extern flag for variables and functions. */
-		sym_list[i].type.t = curr_Sym->type.t;
+		new_sym->type.t = curr_Sym->type.t;
 		/* After compilation, functions and global variables point to hard
 		 * locations in memory. Consuming contexts should think of these as
 		 * having external storage, which is reflected in the VT_EXTERN bit of
 		 * the type.t field. */
 		int btype = curr_Sym->type.t & VT_BTYPE;
 		if (btype == VT_FUNC
-			|| sym_list[i].r & (VT_SYM | VT_LVAL | VT_CONST) /* global variables ?? */
-		) sym_list[i].type.t |= VT_EXTERN;
+			|| new_sym->r & (VT_SYM | VT_LVAL | VT_CONST) /* global variables ?? */
+		) new_sym->type.t |= VT_EXTERN;
 		
 		/* The type.ref field contains something useful only if the basic type
 		 * is a pointer, struct, or function. See code from tccgen's
 		 * compare_types for details. */
 		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-			if (_type_ref_is_not_Sym(sym_list + i)) {
+			if (_type_ref_is_not_Sym(new_sym)) {
 				/* If we have a static symbol, copy its pointer directly, since
 				 * after relocation it is no longer a Sym pointer at all! */
-				sym_list[i].type.ref = curr_Sym->type.ref;
+				new_sym->type.ref = curr_Sym->type.ref;
 			}
 			else {
 				/* Otherwise it's safe: get a new Sym for it. */
-				sym_list[i].type.ref
-					= get_new_symtab_pointer(s, curr_Sym->type.ref, sym_list, N_Syms);
+				new_sym->type.ref
+					= get_new_symtab_pointer(curr_Sym->type.ref, rt);
 			}
 		}
 		
@@ -764,105 +729,92 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * and global variables, so I'm going with that. This almost certainly
 		 * needs to be more nuanced. */
 		if (btype == VT_FUNC
-			|| sym_list[i].r & (VT_SYM | VT_LVAL | VT_CONST)
-		) sym_list[i].c = 0;
-		else sym_list[i].c = curr_Sym->c;
+			|| new_sym->r & (VT_SYM | VT_LVAL | VT_CONST)
+		) new_sym->c = 0;
+		else new_sym->c = curr_Sym->c;
 		
 		/* Copy the next symbol field. Labels and gotos are tracked in a
 		 * separate stack, so for these Symbols we focus on next, not
 		 * jnext. The next field (I seem to recall) is used in storing
 		 * argument lists, so it needs to be copied for function
 		 * types. I believe it can be copied anonymously. */
-		sym_list[i].next
-			= get_new_symtab_pointer(s, curr_Sym->next, sym_list, N_Syms);
+		new_sym->next = get_new_symtab_pointer(curr_Sym->next, rt);
 		
 		/* These are only needed for symbol table pushing/popping, so I
 		 * should be able to safely set them to null. */
-		sym_list[i].prev = NULL;
-		sym_list[i].prev_tok = NULL;
-		
-		/* Move on to the next symbol. */
-		i++;
+		new_sym->prev = NULL;
+		new_sym->prev_tok = NULL;
 	}
     
     /********* define stack *********/
     
-    /* Calculate the number of defines */
-    Sym * curr_Def = define_stack;
-    int N_Defs = 0;
-    while(curr_Def != define_start) {
-		curr_Def = curr_Def->prev;
-		N_Defs++;
+    /* As with the symbol stack, allocate memory in the ram_tree for all
+     * define Syms on the define stack. This way, I can be confident
+     * that an unfound lookup is actually a bad thing. */
+    Sym * curr_Def;
+    for (curr_Def = define_stack; curr_Def != define_start; curr_Def = curr_Def->prev) {
+		Sym_ref = ram_tree_get_ref(rt, curr_Def);
+		*Sym_ref = tcc_malloc(sizeof(Sym));
 	}
-    /* Allocate the Def list */
-    Sym * def_list = to_return->def_list = tcc_malloc(sizeof(Sym) * (N_Defs + 1));
-    to_return->def_last = def_list + N_Defs;
-    
-	/* Zero out last sym */
-    def_list[N_Defs].v = 0;
-    def_list[N_Defs].asm_label = NULL;
-    def_list[N_Defs].r = 0;
-    def_list[N_Defs].d = NULL;
-    def_list[N_Defs].type.t = 0;
-    def_list[N_Defs].type.ref = NULL;
-    def_list[N_Defs].next = NULL;
-    def_list[N_Defs].prev = NULL;
-    def_list[N_Defs].prev_tok = NULL;
     
     /* Copy the define list */
-    for (curr_Def = define_stack, i = 0; i < N_Defs; i++, curr_Def = curr_Def->prev) {
+    for (curr_Def = define_stack; curr_Def != define_start; curr_Def = curr_Def->prev) {
 		/* See above for descriptions of some of the fields. */
 		 
+		/* Get a pointer to the (already allocated) new Sym */
+		Sym_ref = ram_tree_get_ref(rt, curr_Def);
+		new_sym = *Sym_ref;
+		
 		/* Convert the symbol's token index. */
-		def_list[i].v = curr_Def->v & ~SYM_EXTENDED;
+		new_sym->v = curr_Def->v & ~SYM_EXTENDED;
 		
 		/* assembler label should be null for preprocessor stuff */
 		if (curr_Def->asm_label != NULL) {
 			tcc_warning("Unexpected assembler label for macro symbol");
 		}
-		def_list[i].asm_label = NULL;
+		new_sym->asm_label = NULL;
 		
 		/* As far as I can tell, the 'r' field is not used by
 		 * preprocessor macros. Just copy it. */
-		def_list[i].r = curr_Def->r;
+		new_sym->r = curr_Def->r;
 		
 		/* Copy the tokenstream if it exists */
 		if (curr_Def->d != NULL) {
 			int * str = curr_Def->d;
 			int len = tokenstream_len(str);
-			def_list[i].d = tcc_malloc(sizeof(int) * len);
+			new_sym->d = tcc_malloc(sizeof(int) * len);
 			/* The token ids used in the original compiling context are in the
 			 * same order as the final extended symbol table, so I can just copy
 			 * the token stream verbatim! */
-			memcpy(def_list[i].d, curr_Def->d, sizeof(int) * len);
+			memcpy(new_sym->d, curr_Def->d, sizeof(int) * len);
 		}
 		else {
-			def_list[i].d = NULL;
+			new_sym->d = NULL;
 		}
 		
 		/* Set the type. define_push and parse_define indicate that this
 		 * will be either MACRO_OBJ or MACRO_FUNC. */
-		def_list[i].type.t = curr_Def->type.t;
+		new_sym->type.t = curr_Def->type.t;
 		/* Macro types should be null; issue a warning if this is not
 		 * the case, just so we're aware. */
 		if (curr_Def->type.ref != NULL) {
 			tcc_warning("Unexpected type ref for macro symbol");
 		}
-		def_list[i].type.ref = NULL;
+		new_sym->type.ref = NULL;
 		
 		/* Copy the macro arguments. All macro arguments are placed
 		 * on the define stack, according to the sym_push2 in
 		 * parse_define from tccpp.c. We only need to update this Sym's
 		 * next; *it's* next will be updated when it comes up in this
 		 * loop. */
-		def_list[i].next
-			= get_new_deftab_pointer(s, curr_Def->next, def_list, N_Defs);
+		new_sym->next
+			= get_new_deftab_pointer(curr_Def->next, rt);
 		
 		/* These are only needed for symbol table pushing/popping and
 		 * label identification. Since these Sym objects will do no
 		 * such things, I should be able to safely set them to null. */
-		def_list[i].prev = NULL;
-		def_list[i].prev_tok = NULL;
+		new_sym->prev = NULL;
+		new_sym->prev_tok = NULL;
 	}
     
     /* Set the tail pointer, which points to the first address past the
@@ -881,12 +833,12 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		/* Follow the code from tok_alloc_new in tccpp.c */
 		tok_sym->tok = tok_copy->tok;
 		tok_sym->sym_define
-			= get_new_deftab_pointer(s, tok_copy->sym_define, def_list, N_Defs);
+			= get_new_deftab_pointer(tok_copy->sym_define, rt);
 		tok_sym->sym_label = NULL; /* Not copying labels */
 		tok_sym->sym_struct
-			= get_new_symtab_pointer(s, tok_copy->sym_struct, sym_list, N_Syms);
+			= get_new_symtab_pointer(tok_copy->sym_struct, rt);
 		tok_sym->sym_identifier
-			= get_new_symtab_pointer(s, tok_copy->sym_identifier, sym_list, N_Syms);
+			= get_new_symtab_pointer(tok_copy->sym_identifier, rt);
 		tok_sym->len = tok_copy->len;
 		tok_sym->hash_next = NULL;
 		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
@@ -904,34 +856,21 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
  * description of the structure of the allocated memory, see the copy
  * function above. */
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
-	Sym * sym_to_delete = symtab->sym_list;
-	Sym * last = symtab->sym_last;
 	
-	/* clear out the anonymous symbol stack */
-	Sym * curr_sym = (last - 1)->prev;
-	Sym * prev_sym;
-	while(curr_sym != NULL) {
-		prev_sym = curr_sym->prev;
-		tcc_free(curr_sym);
-		curr_sym = prev_sym;
-	}
+	/* Iterate through all Syms in the ram tree */
+    void * iterator_data = NULL;
+    do {
+		/* Get the Sym pointer */
+		void ** data_ref = ram_tree_iterate(symtab->rt, &iterator_data);
+		Sym * to_delete = (Sym *)*data_ref;
+		/* Clear the assembler label */
+		tcc_free(to_delete->asm_label);
+		/* Clear the symbol itself */
+		tcc_free(to_delete);
+	} while (iterator_data != NULL);
 	
-	/* clear out the symbol list */
-	while(sym_to_delete < last) {
-		tcc_free(sym_to_delete->asm_label);
-		sym_to_delete++;
-	}
-	tcc_free(symtab->sym_list);
-	
-	/* clear out the define list */
-	sym_to_delete = symtab->def_list;
-	last = symtab->def_last;
-	while(sym_to_delete < last) {
-		/* free the token stream */
-		tcc_free(sym_to_delete->d);
-		sym_to_delete++;
-	}
-	tcc_free(symtab->def_list);
+	/* clean up the ram_tree itself */
+	ram_tree_free(symtab->rt);
 	
 	/* Clear out the trie */
 	c_trie_free(symtab->trie);

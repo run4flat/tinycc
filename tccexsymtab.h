@@ -57,10 +57,7 @@ void ram_tree_free(ram_tree * rt);
 /******************************************************************************/
 
 typedef struct extended_symtab {
-	Sym * sym_list;
-	Sym * sym_last;
-	Sym * def_list;
-	Sym * def_last;
+	ram_tree * rt;
 	c_trie * trie;
 	int tok_start;
 	TokenSym ** tokenSym_last;
@@ -85,10 +82,8 @@ void copy_extended_symbols_to_exsymtab(TCCState *state);
 /* tcc_set_extended_symtab_callbacks is in libtcc.h */
 /* tcc_save_extended_symtab is in libtcc.h */
 
-int _sym_is_all_zeros(Sym * to_check);
-Sym * _get_new_sym_or_def_pointer (Sym * old, Sym * new_list, int offset_of_last, Sym * stack);
-Sym * get_new_symtab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last);
-Sym * get_new_deftab_pointer (TCCState * s, Sym * old, Sym * new_list, int offset_of_last);
+Sym * get_new_symtab_pointer (Sym * old, ram_tree * rt);
+Sym * get_new_deftab_pointer (Sym * old, ram_tree * rt);
 int tokenstream_len (int * stream);
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start);
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab);
