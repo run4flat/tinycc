@@ -18,6 +18,7 @@ TCC = $(TOP)/tcc $(TCCFLAGS)
 
 TESTS =	\
  01-test-symtab-copy.test \
+ 02-ram_tree.test \
  10-symtab-compare-func-decl-and-def.test \
  20-two-contexts-define-share.test \
  25-two-contexts-intertwined-preprocessor-macro.test \
@@ -41,6 +42,7 @@ TESTS =	\
 
 PROVES =	\
  01-test-symtab-copy.prove \
+ 02-ram_tree.prove \
  10-symtab-compare-func-decl-and-def.prove \
  20-two-contexts-define-share.prove \
  25-two-contexts-intertwined-preprocessor-macro.prove \
@@ -90,6 +92,6 @@ all test: $(TESTS)
 
 prove: $(PROVES)
 
-curr-test:  60-two-contexts-globals.test
-curr-prove:  60-two-contexts-globals.prove
-curr-dbg:  60-two-contexts-globals.dbg
+curr-test: 02-ram_tree.test
+curr-prove:  02-ram_tree.prove
+curr-dbg:  02-ram_tree.dbg
