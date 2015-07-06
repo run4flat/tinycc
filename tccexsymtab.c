@@ -752,13 +752,19 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
      * define Syms on the define stack. This way, I can be confident
      * that an unfound lookup is actually a bad thing. */
     Sym * curr_Def;
-    for (curr_Def = define_stack; curr_Def != define_start; curr_Def = curr_Def->prev) {
+    /* XXX this should only run to define_start!!!!!! But if it doesn't
+     * then we end up with a bunch of unkown define Syms. This seems
+     * to arise because I am (at the moment) copying *all* TokenSyms
+     * at the moment. :-( */
+    for (curr_Def = define_stack; curr_Def != NULL; curr_Def = curr_Def->prev) {
 		Sym_ref = ram_tree_get_ref(rt, curr_Def);
 		*Sym_ref = tcc_malloc(sizeof(Sym));
 	}
+	for (; curr_Def != NULL; curr_Def = curr_Def->prev) {
+	}
     
     /* Copy the define list */
-    for (curr_Def = define_stack; curr_Def != define_start; curr_Def = curr_Def->prev) {
+    for (curr_Def = define_stack; curr_Def != NULL; curr_Def = curr_Def->prev) {
 		/* See above for descriptions of some of the fields. */
 		 
 		/* Get a pointer to the (already allocated) new Sym */
