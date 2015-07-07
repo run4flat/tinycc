@@ -220,12 +220,15 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
  * Lookup and insertion time is constant, but it uses O(N log(N)) memory for
  * a lookup table consisting of N pointers. It builds a two-way branching
  * data structure based on each bit in the pointer address being looked up.
+ * To improve, I can probably use a hash table. For a discussion of good
+ * hashing functions for pointers, see this:
+ * http://stackoverflow.com/questions/20953390/what-is-the-fastest-hash-function-for-pointers
  * 
  * As currently implemented, you should create a new ramtree with
  * ramtree_new and free the memory associated with your ramtree with
- * ramtree_free. The data is stored in void pointers, so you would say
+ * ramtree_free. The data is stored in ram_tree pointers, so you would say
  * 
- *  void * my_ramtree = ram_tree_new();
+ *  ram_tree * my_ramtree = ram_tree_new();
  * 
  */
 
