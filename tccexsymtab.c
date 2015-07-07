@@ -1297,7 +1297,7 @@ LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * nam
 
 /* Write the total number of tokens that live on the end of this exsymtab, as
  * well as tok_start. */
-int exsymtab_serialize_N_tokens_and_tok_start(extended_symtab * symtab, FILE * out_fh) {
+int exsymtab_serialize_init(extended_symtab * symtab, FILE * out_fh) {
 	int to_write[2];
 	to_write[0] = symtab->tokenSym_last - symtab->tokenSym_list; /* N_tokens */
 	to_write[1] = symtab->tok_start;
@@ -1318,8 +1318,10 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 		return NULL;
 	}
 	
-	/* Allocate the symtab; follows process outlined in copy_extended_symtab */
-    symtab = tcc_malloc(sizeof(extended_symtab) + sizeof(void*) * (N_tokens - 1));
+	/* Allocate the symtab. I use mallocz so that it is full of NULLs.
+	 * This way, if deserialization fails durinig a later state, I can
+	 * simply invoke the symtab's delete and be done. */
+    symtab = tcc_mallocz(sizeof(extended_symtab) + sizeof(void*) * (N_tokens - 1));
     if (symtab == NULL) {
 		tcc_warning("Deserialization failed: Unable to allocate symtab to hold %d tokens\n", N_tokens);
 		return NULL;
@@ -1328,7 +1330,7 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 	/* deserialize tok_start */
 	if (fread(&(to_return->tok_start), sizeof(int), 1, in_fh) != 1) {
 		tcc_warning("Deserialization failed: Unable to get tok_start\n");
-		free(symtab);
+		tcc_free(symtab);
 		return NULL;
 	}
 	
@@ -1695,6 +1697,8 @@ int exsymtab_deserialize_sym(FILE * in_fh, Sym * sym_list, int i) {
 	return 1;
 }
 
+/**** Serialize/deserialize the full set of Syms ****/
+
 ram_tree * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh) {
 	/* Count the number of Syms in the ram_tree and build a new one to
 	 * map current addresses to new offsets. Offsets begin counting at
@@ -1753,25 +1757,145 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh) {
 	
 	/* Allocate the sym_list array. */
 	symtab->sym_list = tcc_malloc(sizeof(Sym) * N_Syms);
+	symtab->N_syms = N_syms;
 	if (symtab->sym_list == NULL) {
 		tcc_warning("Deserialization failed: Unable to allocate array to hold %d Syms"
 			N_syms);
 		return 0;
 	}
 	
-	/* Load the Sym data, converting pointer offsets to addresses. */
+	/* Deserialize each Sym. */
 	for (int i = 0; i < N_syms; i++) {
-		if (deserialize_sym(in_fh, symtab->sym_list, i) == 0) {
-			/* failed, deallocate the array and return failure */
-			for(; i >= 0; i--) {
-				tcc_free(symtab->sym_list[i].asm_label);
-			}
-			tcc_free(symtab->sym_list);
-			symtab->sym_list = NULL;
-			return 0;
-		}
+		if (!deserialize_sym(in_fh, symtab->sym_list, i)) return 0;
 	}
 	
+	return 1;
+}
+
+/**** Serialize/deserialize a single TokenSym ****/
+
+int exsymtab_serialize_tokensyms(TokenSym ** ts_list, int i, FILE * out_fh,
+	ram_tree * offset_rt)
+{
+	TokenSym * ts = ts_list[i];
+	/* start with the token name length so that deserialization can
+	 * allocate the needed memory. */
+	if (fwrite(&ts->len, sizeof(int), 1, out_fh) != 1) {
+		tcc_warning("Serialization failed: Unable to write name length "
+			"for TokenSym number %d", i);
+		return 0;
+	}
+	
+	/* Serialize the token id */
+	if (fwrite(&ts->tok, sizeof(ts->tok), 1, out_fh) != 1) {
+		tcc_warning("Serialization failed: Unable to write token id "
+			"for TokenSym number %d", i);
+		return 0;
+	}
+	
+	/* Serialize the Sym pointer offsets */
+	void * offset_list[3];
+	void ** offset_ref = ram_tree_get_ref(offset_rt, ts->sym_define);
+	offset_list[0] = *offset_ref;
+	offset_ref = ram_tree_get_ref(offset_rt, ts->sym_struct);
+	offset_list[1] = *offset_ref;
+	offset_ref = ram_tree_get_ref(offset_rt, ts->sym_identifier);
+	offset_list[2] = *offset_ref;
+	
+	if (fwrite(offset_list, sizeof(void*), 3, out_fh) != 3) {
+		tcc_warning("Serialization failed: Unable to write Sym pointer "
+			"offsets for TokenSym number %d", i);
+		return 0;
+	}
+	
+	/* Serialize the name */
+	if (fwrite(ts->str, sizeof(char), ts->len, out_fh) != ts->len) {
+		tcc_warning("Serialization failed: Unable to write label name "
+			"for TokenSym number %d", i);
+		return 0;
+	}
+	
+	/* Success! */
+	return 1;
+}
+
+TokenSym * exsymtab_deserialize_tokensym(extended_symtab * symtab,
+	TokenSym ** ts_list, int curr_tok, FILE * in_fh)
+{
+	/* Get the full tokensym length */
+	int ts_len;
+	if (fread(&ts_len, sizeof(int), 1, in_fh) != 1) {
+		tcc_warning("Deserialization failed: Unable to get name length "
+			"for TokenSym number %d", curr_tok);
+		return 0;
+	}
+	/* Allocate it */
+	TokenSym * curr_ts = ts_list[curr_tok] = tcc_mallocz(ts_len + sizeof(TokenSym));
+	if (curr_ts == NULL) {
+		tcc_warning("Deserialization failed: Unable to allocate %d bytes "
+			"for TokenSym number %d", ts_len + sizeof(TokenSym), curr_tok);
+		return 0;
+	}
+	
+	/* Read the token id */
+	if (fread(&curr_ts->tok, sizeof(int), 1, in_fh) != 1) {
+		tcc_warning("Deserialization failed: Unable to get token id for "
+			"for TokenSym number %d", curr_tok);
+		return 0;
+	}
+	
+	/* Get the three pointer offsets */
+	void * offset_list[3];
+	if (fread(offset_list, sizeof(void*), 3, in_fh) != 3) {
+		tcc_warning("Deserialization failed: Unable to get Sym pointer "
+			"offsets for TokenSym number %d", curr_tok);
+		return 0;
+	}
+	int i;
+	for (i = 0; i < 3; i++)
+		if(offset_list[i] != NULL) offset_list[i] += symtab->sym_list;
+	curr_ts->sym_define = offset_list[0];
+	curr_ts->sym_struct = offset_list[1];
+	curr_ts->sym_identifier = offset_list[2];
+	
+	/* read in the name */
+	if (fread(curr_ts->name, sizeof(char), ts_len, in_fh) != ts_len) {
+		tcc_warning("Deserialization failed: Unable to read name for "
+			"TokenSym number %d", curr_tok);
+		return 0;
+	}
+	curr_ts->str[ts_len] = '\0';
+	
+	/* Add this to the trie */
+	c_trie_add_data(symtab->trie, curr_ts->str, curr_ts);
+	
+	/* Success! */
+	return 1;
+}
+
+/**** Serialize/deserialize the full set of TokenSyms ****/
+
+int exsymtab_serialize_tokensyms(extended_symtab * symtab, FILE * out_fh,
+	ram_tree * offset_rt)
+{
+	TokenSym ** curr_ts;
+	for (curr_ts = symtab->tokenSym_list; curr_ts < symtab->tokenSym_last;
+		curr_ts++)
+	{
+		if (!exsymtab_serialize_tokensym(*curr_ts, out_fh, offset_rt))
+			return 0;
+	}
+	return 1;
+}
+
+int exsymtab_deserialize_tokensyms(extended_symtab * symtab, FILE * in_fh) {
+	TokenSym ** curr_ts
+	for (curr_ts = symtab->tokenSym_list; curr_ts < symtab->tokenSym_last;
+		curr_ts++)
+	{
+		*curr_ts = exsymtab_deserialize_tokensym(symtab, out_fh);
+		if (*curr_ts == NULL) return 0;
+	}
 	return 1;
 }
 
@@ -1789,13 +1913,18 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
 	
 	/* Start the file with two useful integers: the number of tokens and
 	 * the value of tok_start. */
-	if (!exsymtab_serialize_init(symtab, out_fh)) goto FAILED;
+	if (!exsymtab_serialize_init(symtab, out_fh)) goto FAIL;
 	
 	/* Serialize the Syms */
 	ram_tree * offset_rt = exsymtab_serialize_syms(symtab, out_fh);
-	if (offset_rt == NULL) goto FAILED;
+	if (offset_rt == NULL) goto FAIL;
 	
-	...
+	/* Serialize the TokenSyms */
+	if (!exsymtab_serialize_tokensyms(symtab, out_fh, offset_rt)) {
+		ram_tree_free(offset_rt);
+		goto FAIL;
+	}
+	ram_tree_free(offset_rt);
 	
 	/* All set! */
 	return 1;
@@ -1817,7 +1946,7 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
 	/* Allocate the symtab */
 	extended_symtab * symtab;
 	symtab = exsymtab_deserialize_init(in_fh);
-	if (symtab == NULL) goto FAIL_SYMTAB;
+	if (symtab == NULL) goto FAIL;
 	
 	/* Allocate the c_trie. This may some day be serialized and
 	 * deserialized with the rest of the data, but for now keep things
@@ -1825,22 +1954,21 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
 	symtab->trie = c_trie_new();
 	if (symtab->trie == NULL) {
 		tcc_warning("Deserialization failed: Unable to allocate new c_trie\n");
-		goto FAIL_TRIE;
+		goto FAIL;
 	}
 	
-	/* load the Syms */
-	if (exsymtab_deserialize_syms(symtab, in_fh) == 0) goto FAIL_TRIE;
-	
-	...
+	/* load the Syms and TokenSyms */
+	if (!exsymtab_deserialize_syms(symtab, in_fh)) goto FAIL;
+	if (!exsymtab_deserialize_tokensyms(symtab, in_fh)) goto FAIL;
 	
 	/* All set! */
 	return symtab;
 	
-	/* And here are all the ways I might fail and their associated
-	 * cleanup procedures, including fall-through. */
-FAIL_TRIE:
-	free(symtab);
-FAIL_SYMTAB:
+	/* If it fails, clean up the symtab. Note that the symtab deletion
+	 * works even when its structure is only partially built. */
+
+FAIL:
+	tcc_delete_extended_symbol_table(symtab);
 	fclose(in_fh);
 	return NULL;
 }
