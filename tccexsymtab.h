@@ -121,3 +121,5 @@ int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab);
 /*****************************************************************************/
 
 /* tcc_set_extended_symbol is in libtcc.h; this assumes that the token exists in the trie */
+/* tcc_deserialize_extended_symtab declared in libtcc.h */
+/* tcc_serialize_extended_symtab declared in libtcc.h */
