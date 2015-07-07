@@ -38,7 +38,8 @@ TESTS =	\
  51-many-consuming-contexts-with-constants-early-delete.test \
  60-two-contexts-globals.test \
  61-two-contexts-const-globals.test \
- 70-symtab-use-check.test
+ 70-symtab-use-check.test \
+ 80-cache-defines.test
 
 # 02-ram_tree.prove 
 PROVES =	\
@@ -62,7 +63,8 @@ PROVES =	\
  51-many-consuming-contexts-with-constants-early-delete.prove \
  60-two-contexts-globals.prove \
  61-two-contexts-const-globals.prove \
- 70-symtab-use-check.prove
+ 70-symtab-use-check.prove \
+ 80-cache-defines.prove
 
 # some tests do not pass on all platforms, remove them for now
 #ifeq ($(TARGETOS),Darwin)
