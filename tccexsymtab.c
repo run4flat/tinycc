@@ -65,6 +65,7 @@ unsigned char _c_trie_popcount (unsigned long long v) {
 
 /* Recursively free all children, then free self */
 void c_trie_free(c_trie * curr) {
+	if (curr == NULL) return;
 	unsigned char N_children = _c_trie_popcount(curr->filled_bits);
 	unsigned char i = curr->filled_bits & C_TRIE_HAS_DATA;
 	for (; i < N_children; i++) c_trie_free(curr->children[i]);
@@ -867,6 +868,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
  * description of the structure of the allocated memory, see the copy
  * function above. */
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
+	if (symtab == NULL) return;
 	
 	/* Iterate through all Syms in the ram tree */
     void * iterator_data = NULL;
