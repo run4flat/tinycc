@@ -2160,3 +2160,19 @@ problem is now with C::Blocks, not tcc. So that's all for now on this end...
 Note to self: only mark tokens as extended if they have a non-null identifier Sym.
 
 Note: might be able to streamline external linkage of functions. See test 45.
+
+
+July 7, 2015
+============
+
+I have implemented a ram_tree data structure, revised my implementation
+to use it rather than the slower lists of the past, implemented caching,
+and fixed some weird bugs related to being unable to find define Syms.
+However, as I finally get around to testing the caching, I get segfaults
+that seem to be related to define Syms having odd token streams. To get
+this odd behavior, just run test 80. It's a little clearer when run
+under debug mode:
+
+ $ make 80-cache-defines.dbg
+ ...
+ (gdb) run
