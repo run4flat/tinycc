@@ -57,9 +57,13 @@ void ram_tree_free(ram_tree * rt);
 /******************************************************************************/
 
 typedef struct extended_symtab {
-	ram_tree * rt;
+	union {
+		ram_tree * rt;
+		Sym * sym_list;
+	};
 	c_trie * trie;
 	int tok_start;
+	int N_syms; /* zero for Sym collections stored in ram_tree */
 	TokenSym ** tokenSym_last;
 	TokenSym * tokenSym_list [1];
 } extended_symtab;
