@@ -139,6 +139,10 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 	void * data
 );
 
+/*** For symbol table caching ***/
+LIBTCCAPI extended_symtab_p tcc_deserialize_extended_symtab(const char * input_filename);
+LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab_p symtab, const char * output_filename);
+
 /* Testing function, not really for general use */
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, char * name);
 LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
