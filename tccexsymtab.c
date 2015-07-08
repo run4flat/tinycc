@@ -1900,6 +1900,7 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok,
 		return 0;
 	}
 	curr_ts->str[ts_len] = '\0';
+	curr_ts->len = ts_len;
 	
 	/* Add this to the trie */
 	c_trie_add_data(symtab->trie, curr_ts->str, curr_ts);
