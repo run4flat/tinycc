@@ -39,7 +39,10 @@ TESTS =	\
  60-two-contexts-globals.test \
  61-two-contexts-const-globals.test \
  70-symtab-use-check.test \
- 80-cache-defines.test
+ 80-cache-defines.test \
+ 81-cache-struct.test \
+ 82-cache-func-decl.test \
+ 83-cache-func-decl-with-args.test
 
 # 02-ram_tree.prove 
 PROVES =	\
@@ -64,7 +67,10 @@ PROVES =	\
  60-two-contexts-globals.prove \
  61-two-contexts-const-globals.prove \
  70-symtab-use-check.prove \
- 80-cache-defines.prove
+ 80-cache-defines.prove \
+ 81-cache-struct.prove \
+ 82-cache-func-decl.prove \
+ 83-cache-func-decl-with-args.prove
 
 # some tests do not pass on all platforms, remove them for now
 #ifeq ($(TARGETOS),Darwin)
