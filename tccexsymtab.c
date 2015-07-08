@@ -1531,7 +1531,7 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i) {
 	curr_sym->d = tcc_malloc(sizeof(int) * ts_len);
 	if (curr_sym->d == NULL) {
 		printf("Deserialization failed: Unable to allocate %d bytes "
-			"for token stream for Sym number %d\n", sizeof(int) * ts_len, i);
+			"for token stream for Sym number %d\n", (int)(sizeof(int) * ts_len), i);
 		return 0;
 	}
 	
@@ -1883,7 +1883,7 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok,
 		= tcc_mallocz(ts_len + sizeof(TokenSym));
 	if (curr_ts == NULL) {
 		printf("Deserialization failed: Unable to allocate %d bytes "
-			"for TokenSym number %d\n", ts_len + sizeof(TokenSym), curr_tok);
+			"for TokenSym number %d\n", (int)(ts_len + sizeof(TokenSym)), curr_tok);
 		return 0;
 	}
 	
