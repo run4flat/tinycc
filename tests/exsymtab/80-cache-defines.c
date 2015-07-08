@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 	TCCState *s_one = tcc_new();
 	setup_and_relocate_second_state(s_one, second_one_code);
 	int (*second_one_ptr)() = tcc_get_symbol(s_one, "second_one");
-	if (second_one_ptr == NULL) return 1;
+	if (second_one_ptr == NULL) goto FAIL;
 	is_i(second_one_ptr(), 1, "second_one call works");
 	
 	/* ---- Check code string that depends on the 'MAX' macro ---- */
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
 	TCCState *s_max = tcc_new();
 	setup_and_relocate_second_state(s_max, second_max_code);
 	int (*second_max_ptr)() = tcc_get_symbol(s_max, "second_max");
-	if (second_max_ptr == NULL) return 1;
+	if (second_max_ptr == NULL) goto FAIL;
 	is_i(second_max_ptr(10, 8), 10, "second_max call works for max in first slot");
 	is_i(second_max_ptr(120, 245), 245, "second_max call works for max in second slot");
 	
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
 	TCCState *s_swap = tcc_new();
 	setup_and_relocate_second_state(s_swap, second_swap_code);
 	int (*second_swap_ptr)(int, int) = tcc_get_symbol(s_swap, "second_swap");
-	if (second_swap_ptr == NULL) return 1;
+	if (second_swap_ptr == NULL) goto FAIL;
 	is_i(second_swap_ptr(5, 3), 3, "first slot of 'swap_int' macro passes");
 	is_i(second_swap_ptr(3, 5), 5, "second slot of 'swap_int' macro passes");
 	
@@ -94,9 +94,14 @@ int main(int argc, char **argv) {
 	tcc_delete(s_one);
 	tcc_delete(s_max);
 	tcc_delete(s_swap);
+	remove("defines.cache");
 	pass("cleanup");
 	
 	done_testing();
 	
 	return 0;
+	
+FAIL:
+	remove("defines.cache");
+	return 1;
 }
