@@ -873,9 +873,6 @@ void exsymtab_free_sym (Sym * to_delete, int is_def) {
 		/* otherwise, clear the assembler label */
 		tcc_free(to_delete->asm_label);
 	}
-	
-	/* Clear the symbol itself */
-	tcc_free(to_delete);
 }
 
 /* Frees memory associated with a copied extended symbol table. For a
@@ -894,6 +891,8 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 			do {
 				void ** data_ref = ram_tree_iterate(symtab->sym_rt, &iterator_data);
 				exsymtab_free_sym((Sym *)*data_ref, 0);
+				/* Clear the symbol itself */
+				tcc_free(*data_ref);
 			} while (iterator_data != NULL);
 			
 			/* clean up the ram_tree itself */
@@ -918,6 +917,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 			do {
 				void ** data_ref = ram_tree_iterate(symtab->def_rt, &iterator_data);
 				exsymtab_free_sym((Sym *)*data_ref, 1);
+				tcc_free(*data_ref);
 			} while (iterator_data != NULL);
 			ram_tree_free(symtab->def_rt);
 		}
