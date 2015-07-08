@@ -1941,11 +1941,11 @@ PUB_FUNC int tcc_parse_args(TCCState *s, int argc, char **argv)
             s->deps_outfile = tcc_strdup(optarg);
             break;
         case TCC_OPTION_serialize_symtab:
-            s->symtab_serialize_outfile = tcc_strdup(optarg);
+            s->symtab_serialize_outfile = tcc_strdup(optarg + 1);
             s->exsymtab = (extended_symtab*)1;
             break;
         case TCC_OPTION_dump_identifier_names:
-            s->dump_identifier_names_outfile = tcc_strdup(optarg);
+            s->dump_identifier_names_outfile = tcc_strdup(optarg + 1);
             s->exsymtab = (extended_symtab*)1;
             break;
         case TCC_OPTION_dumpversion:
