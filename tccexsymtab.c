@@ -1341,7 +1341,7 @@ int exsymtab_serialize_init(extended_symtab * symtab, FILE * out_fh) {
 	if (fwrite(to_write, sizeof(int), 2, out_fh) == 2) return 1;
 	
 	/* Failed to serialize; write a message and return failure */
-	tcc_warning("Serialization failed: Unable to serialize the number of tokens and tok_start\n");
+	printf("Serialization failed: Unable to serialize the number of tokens and tok_start\n");
 	return 0;
 }
 
@@ -1351,7 +1351,7 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 	int N_tokens;
 	extended_symtab * symtab;
 	if (fread(&N_tokens, sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get the number of tokens\n");
+		printf("Deserialization failed: Unable to get the number of tokens\n");
 		return NULL;
 	}
 	
@@ -1360,14 +1360,14 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 	 * simply invoke the symtab's delete and be done. */
     symtab = tcc_mallocz(sizeof(extended_symtab) + sizeof(void*) * (N_tokens - 1));
     if (symtab == NULL) {
-		tcc_warning("Deserialization failed: Unable to allocate symtab to hold %d tokens\n", N_tokens);
+		printf("Deserialization failed: Unable to allocate symtab to hold %d tokens\n", N_tokens);
 		return NULL;
 	}
 	symtab->tokenSym_last = symtab->tokenSym_list + N_tokens;
 	
 	/* deserialize tok_start */
 	if (fread(&(symtab->tok_start), sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get tok_start\n");
+		printf("Deserialization failed: Unable to get tok_start\n");
 		tcc_free(symtab);
 		return NULL;
 	}
@@ -1379,8 +1379,8 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 
 int exsymtab_serialize_v(FILE * out_fh, Sym * curr_sym) {
 	if (fwrite(&curr_sym->v, sizeof(int), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write Sym's token "
-			"id (v) of %d", curr_sym->v);
+		printf("Serialization failed: Unable to write Sym's token "
+			"id (v) of %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1389,8 +1389,8 @@ int exsymtab_serialize_v(FILE * out_fh, Sym * curr_sym) {
 int exsymtab_deserialize_v(FILE * in_fh, Sym * curr_sym, int i) {
 	/* Read v */
 	if (fread(&(curr_sym->v), sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get token id for "
-			"Sym number %d", i);
+		printf("Deserialization failed: Unable to get token id for "
+			"Sym number %d\n", i);
 		return 0;
 	}
 	return 1;
@@ -1400,8 +1400,8 @@ int exsymtab_deserialize_v(FILE * in_fh, Sym * curr_sym, int i) {
 
 int exsymtab_serialize_r(FILE * out_fh, Sym * curr_sym) {
 	if (fwrite(&curr_sym->r, sizeof(curr_sym->r), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write "
-			"associated register for Sym %d", curr_sym->v);
+		printf("Serialization failed: Unable to write "
+			"associated register for Sym %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1409,8 +1409,8 @@ int exsymtab_serialize_r(FILE * out_fh, Sym * curr_sym) {
 
 int exsymtab_deserialize_r(FILE * in_fh, Sym * curr_sym, int i) {
 	if (fread(&(curr_sym->r), sizeof(curr_sym->r), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to read associated "
-			"register for Sym number %d", i);
+		printf("Deserialization failed: Unable to read associated "
+			"register for Sym number %d\n", i);
 		return 0;
 	}
 	return 1;
@@ -1420,8 +1420,8 @@ int exsymtab_deserialize_r(FILE * in_fh, Sym * curr_sym, int i) {
 
 int exsymtab_serialize_type_t(FILE * out_fh, Sym * curr_sym) {
 	if (fwrite(&curr_sym->type.t, sizeof(curr_sym->type.t), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write type.t for "
-			"Sym %d", curr_sym->v);
+		printf("Serialization failed: Unable to write type.t for "
+			"Sym %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1429,8 +1429,8 @@ int exsymtab_serialize_type_t(FILE * out_fh, Sym * curr_sym) {
 
 int exsymtab_deserialize_type_t(FILE * in_fh, Sym * curr_sym, int i) {
 	if (fread(&(curr_sym->type.t), sizeof(curr_sym->type.t), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to read type.t for "
-			"Sym number %d", i);
+		printf("Deserialization failed: Unable to read type.t for "
+			"Sym number %d\n", i);
 		return 0;
 	}
 	return 1;
@@ -1449,8 +1449,8 @@ int exsymtab_serialize_next(FILE * out_fh, Sym * curr_sym, ram_tree * offset_rt)
 	
 	/* Perform the write operation */
 	if (fwrite(&to_write, sizeof(void *), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write 'next' pointer "
-			"for Sym %d", curr_sym->v);
+		printf("Serialization failed: Unable to write 'next' pointer "
+			"for Sym %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1462,8 +1462,8 @@ int exsymtab_deserialize_next(FILE * in_fh, Sym * sym_list, int i) {
 	
 	/* read the offset */
 	if (fread(&offset, sizeof(void*), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to read 'next' pointer "
-			"for Sym number %d", i);
+		printf("Deserialization failed: Unable to read 'next' pointer "
+			"for Sym number %d\n", i);
 		return 0;
 	}
 	
@@ -1480,8 +1480,8 @@ int exsymtab_serialize_token_stream(FILE * out_fh, Sym * curr_sym) {
 	int ts_len = 0;
 	if (curr_sym->d != NULL) ts_len = tokenstream_len(curr_sym->d);
 	if (fwrite(&ts_len, sizeof(int), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write token stream "
-			"length for Sym %d", curr_sym->v);
+		printf("Serialization failed: Unable to write token stream "
+			"length for Sym %d\n", curr_sym->v);
 		return 0;
 	}
 	/* If nothing to write, we're done: return success */
@@ -1493,8 +1493,8 @@ int exsymtab_serialize_token_stream(FILE * out_fh, Sym * curr_sym) {
 		return 1;
 	
 	/* failed */
-	tcc_warning("Serialization failed: Unable to write token stream "
-		"for Sym %d", curr_sym->v);
+	printf("Serialization failed: Unable to write token stream "
+		"for Sym %d\n", curr_sym->v);
 	return 0;
 }
 
@@ -1502,8 +1502,8 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i) {
 	/* get the length of the token stream */
 	int ts_len;
 	if (fread(&ts_len, sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to read token stream "
-			"length for Sym number %d", i);
+		printf("Deserialization failed: Unable to read token stream "
+			"length for Sym number %d\n", i);
 		return 0;
 	}
 	/* If no length, just set d to NULL and return success */
@@ -1515,15 +1515,15 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i) {
 	/* Allocate memory for the token stream */
 	curr_sym->d = tcc_malloc(sizeof(int) * ts_len);
 	if (curr_sym->d == NULL) {
-		tcc_warning("Deserialization failed: Unable to allocate %d bytes "
-			"for token stream for Sym number %d", sizeof(int) * ts_len, i);
+		printf("Deserialization failed: Unable to allocate %d bytes "
+			"for token stream for Sym number %d\n", sizeof(int) * ts_len, i);
 		return 0;
 	}
 	
 	/* Read in the token stream */
 	if (fread(curr_sym->d, sizeof(int), ts_len, in_fh) != ts_len) {
-		tcc_warning("Deserialization failed: Unable to read %d integers "
-			"for token stream for Sym number %d", ts_len, i);
+		printf("Deserialization failed: Unable to read %d integers "
+			"for token stream for Sym number %d\n", ts_len, i);
 		return 0;
 	}
 	
@@ -1550,8 +1550,8 @@ int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_tree * offset
 
 	/* Perform the write operation */
 	if (fwrite(&to_write, sizeof(void *), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write type.ref for "
-			"Sym %d", curr_sym->v);
+		printf("Serialization failed: Unable to write type.ref for "
+			"Sym %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1564,8 +1564,8 @@ int exsymtab_deserialize_type_ref(FILE * in_fh, Sym * sym_list, int i) {
 	Sym * curr_sym = sym_list + i;
 	uintptr_t offset;
 	if (fread(&offset, sizeof(void*), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to read type.ref for "
-			"Sym number %d", i);
+		printf("Deserialization failed: Unable to read type.ref for "
+			"Sym number %d\n", i);
 		return 0;
 	}
 	/* Set offset */
@@ -1578,8 +1578,8 @@ int exsymtab_deserialize_type_ref(FILE * in_fh, Sym * sym_list, int i) {
 
 int exsymtab_serialize_c(FILE * out_fh, Sym * curr_sym) {
 	if (fwrite(&curr_sym->c, sizeof(curr_sym->c), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write "
-			"field c for Sym %d", curr_sym->v);
+		printf("Serialization failed: Unable to write "
+			"field c for Sym %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1587,8 +1587,8 @@ int exsymtab_serialize_c(FILE * out_fh, Sym * curr_sym) {
 
 int exsymtab_deserialize_c(FILE * in_fh, Sym * curr_sym, int i) {
 	if (fread(&(curr_sym->c), sizeof(curr_sym->c), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to read field c "
-			"for Sym number %d", i);
+		printf("Deserialization failed: Unable to read field c "
+			"for Sym number %d\n", i);
 		return 0;
 	}
 	return 1;
@@ -1603,21 +1603,21 @@ int exsymtab_serialize_asm_label(FILE * out_fh, Sym * curr_sym) {
 		if (fwrite(&asm_label_len, sizeof(int), 1, out_fh) == 1)
 			return 1; /* success! */
 		/* failure, indicate as much */
-		tcc_warning("Serialization failed: Unable to write assembler "
-			"label length of zero for token %x", curr_sym->v);
+		printf("Serialization failed: Unable to write assembler "
+			"label length of zero for token %d\n", curr_sym->v);
 		return 0;
 	}
 	
 	/* we have a label. Write out its length */
 	int asm_label_len = strlen(curr_sym->asm_label);
 	if (fwrite(&asm_label_len, sizeof(int), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write assembler "
-			"label length for token %d", curr_sym->v);
+		printf("Serialization failed: Unable to write assembler "
+			"label length for token %d\n", curr_sym->v);
 		return 0;
 	}
 	if (fwrite(curr_sym->asm_label, sizeof(char), asm_label_len, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write assembler "
-			"label for token %d", curr_sym->v);
+		printf("Serialization failed: Unable to write assembler "
+			"label for token %d\n", curr_sym->v);
 		return 0;
 	}
 	return 1;
@@ -1626,7 +1626,7 @@ int exsymtab_serialize_asm_label(FILE * out_fh, Sym * curr_sym) {
 int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i) {
 	int asm_label_length;
 	if (fread(&asm_label_length, sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get assembler label length for Sym number %d",
+		printf("Deserialization failed: Unable to get assembler label length for Sym number %d\n",
 			i);
 		return 0;
 	}
@@ -1638,14 +1638,14 @@ int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i) {
 	/* Allocate memory for the assembler label length */
 	curr_sym->asm_label = tcc_malloc(asm_label_length);
 	if (curr_sym->asm_label == NULL) {
-		tcc_warning("Deserialization failed: Unable to allocate "
-			"memory for assembler label for Sym number %d", i);
+		printf("Deserialization failed: Unable to allocate "
+			"memory for assembler label for Sym number %d\n", i);
 		return 0;
 	}
 	/* Read it in */
 	if (fread(curr_sym->asm_label, 1, asm_label_length, in_fh) != asm_label_length) {
-		tcc_warning("Deserialization failed: Unable to read "
-			"assembler label for Sym number %d", i);
+		printf("Deserialization failed: Unable to read "
+			"assembler label for Sym number %d\n", i);
 		tcc_free(curr_sym->asm_label);
 		return 0;
 	}
@@ -1739,7 +1739,7 @@ ram_tree * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 	 * have a mapping from current address to serialized offset. */
 	int N_syms_i = N_syms;
 	if (fwrite(&N_syms_i, sizeof(int), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write number of%s Syms",
+		printf("Serialization failed: Unable to write number of%s Syms\n",
 			is_def ? " define" : "");
 		goto FAIL;
 	}
@@ -1773,14 +1773,14 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh,
 	/* Get the number of syms in sym_list */
 	int N_syms;
 	if (fread(&N_syms, sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get number of Syms");
+		printf("Deserialization failed: Unable to get number of Syms\n");
 		return 0;
 	}
 	/* Allocate the sym_list array. */
 	Sym * new_list = tcc_mallocz(sizeof(Sym) * N_syms);
 	if (new_list == NULL) {
-		tcc_warning("Deserialization failed: Unable to allocate array to "
-			"hold %d Syms", N_syms);
+		printf("Deserialization failed: Unable to allocate array to "
+			"hold %d Syms\n", N_syms);
 		return 0;
 	}
 	
@@ -1815,15 +1815,15 @@ int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
 	/* start with the token name length so that deserialization can
 	 * allocate the needed memory. */
 	if (fwrite(&ts->len, sizeof(int), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write name length "
-			"for TokenSym number %d", i);
+		printf("Serialization failed: Unable to write name length "
+			"for TokenSym number %d\n", i);
 		return 0;
 	}
 	
 	/* Serialize the token id */
 	if (fwrite(&ts->tok, sizeof(ts->tok), 1, out_fh) != 1) {
-		tcc_warning("Serialization failed: Unable to write token id "
-			"for TokenSym number %d", i);
+		printf("Serialization failed: Unable to write token id "
+			"for TokenSym number %d\n", i);
 		return 0;
 	}
 	
@@ -1837,15 +1837,15 @@ int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
 	offset_list[2] = *offset_ref;
 	
 	if (fwrite(offset_list, sizeof(void*), 3, out_fh) != 3) {
-		tcc_warning("Serialization failed: Unable to write Sym pointer "
-			"offsets for TokenSym number %d", i);
+		printf("Serialization failed: Unable to write Sym pointer "
+			"offsets for TokenSym number %d\n", i);
 		return 0;
 	}
 	
 	/* Serialize the name */
 	if (fwrite(ts->str, sizeof(char), ts->len, out_fh) != ts->len) {
-		tcc_warning("Serialization failed: Unable to write label name "
-			"for TokenSym number %d", i);
+		printf("Serialization failed: Unable to write label name "
+			"for TokenSym number %d\n", i);
 		return 0;
 	}
 	
@@ -1859,31 +1859,31 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok,
 	/* Get the full tokensym length */
 	int ts_len;
 	if (fread(&ts_len, sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get name length "
-			"for TokenSym number %d", curr_tok);
+		printf("Deserialization failed: Unable to get name length "
+			"for TokenSym number %d\n", curr_tok);
 		return 0;
 	}
 	/* Allocate it */
 	TokenSym * curr_ts = symtab->tokenSym_list[curr_tok]
 		= tcc_mallocz(ts_len + sizeof(TokenSym));
 	if (curr_ts == NULL) {
-		tcc_warning("Deserialization failed: Unable to allocate %d bytes "
-			"for TokenSym number %d", ts_len + sizeof(TokenSym), curr_tok);
+		printf("Deserialization failed: Unable to allocate %d bytes "
+			"for TokenSym number %d\n", ts_len + sizeof(TokenSym), curr_tok);
 		return 0;
 	}
 	
 	/* Read the token id */
 	if (fread(&curr_ts->tok, sizeof(int), 1, in_fh) != 1) {
-		tcc_warning("Deserialization failed: Unable to get token id for "
-			"for TokenSym number %d", curr_tok);
+		printf("Deserialization failed: Unable to get token id for "
+			"for TokenSym number %d\n", curr_tok);
 		return 0;
 	}
 	
 	/* Get the three pointer offsets */
 	uintptr_t offset_list[3];
 	if (fread(offset_list, sizeof(void*), 3, in_fh) != 3) {
-		tcc_warning("Deserialization failed: Unable to get Sym pointer "
-			"offsets for TokenSym number %d", curr_tok);
+		printf("Deserialization failed: Unable to get Sym pointer "
+			"offsets for TokenSym number %d\n", curr_tok);
 		return 0;
 	}
 	if (offset_list[0] != 0)
@@ -1895,8 +1895,8 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok,
 	
 	/* read in the name */
 	if (fread(curr_ts->str, sizeof(char), ts_len, in_fh) != ts_len) {
-		tcc_warning("Deserialization failed: Unable to read name for "
-			"TokenSym number %d", curr_tok);
+		printf("Deserialization failed: Unable to read name for "
+			"TokenSym number %d\n", curr_tok);
 		return 0;
 	}
 	curr_ts->str[ts_len] = '\0';
@@ -1939,7 +1939,7 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
     /* Open the file for writing */
     FILE * out_fh = fopen(output_filename, "wb");
     if (!out_fh) {
-		tcc_warning("Serialization failed: Unable ot open extended symtab serialization file %s\n",
+		printf("Serialization failed: Unable ot open extended symtab serialization file %s\n",
 			output_filename);
 		return 0;
 	}
@@ -1976,7 +1976,7 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
     /* Open the file for writing */
     FILE * in_fh = fopen(input_filename, "rb");
     if (!in_fh) {
-		tcc_warning("Deserialization failed: Unable to open extended symtab serialization file %s\n",
+		printf("Deserialization failed: Unable to open extended symtab serialization file %s\n",
 			input_filename);
 		return NULL;
 	}
@@ -1991,7 +1991,7 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
 	 * simple. */
 	symtab->trie = c_trie_new();
 	if (symtab->trie == NULL) {
-		tcc_warning("Deserialization failed: Unable to allocate new c_trie\n");
+		printf("Deserialization failed: Unable to allocate new c_trie\n");
 		goto FAIL;
 	}
 	
