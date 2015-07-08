@@ -2114,6 +2114,7 @@ TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, extended_symta
 			char symbol_name[1024];
 			strncpy(symbol_name, orig_symtab_ts->str,
 				orig_symtab_ts->len < 1024 ? orig_symtab_ts->len : 1024);
+			symbol_name[1023] = '\0';
 			tcc_warning("Internal inconsistency: could not find extended symbol table entry for %s; defaulting to previous value",
 				symbol_name);
 			
