@@ -702,6 +702,8 @@ struct TCCState {
     extended_symtab_sym_used_callback symtab_sym_used_callback;
     extended_symtab_prep_callback symtab_prep_callback;
     void * symtab_callback_data;
+    char * symtab_serialize_outfile; /* option -serialize-symtab */
+    char * dump_identifier_names_outfile; /* option -dump-identifier-names */
 };
 
 /* The current value can be: */

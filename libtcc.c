@@ -812,6 +812,14 @@ static int tcc_compile(TCCState *s1)
     /* Make an extended copy of the symbol table, if requested */
     if (s1->nb_errors == 0 && s1->exsymtab == (extended_symtab*)1) {
 		copy_extended_symtab(s1, define_start, tok_start);
+		/* Output the symbol table to a cache if requested */
+		if (s1->symtab_serialize_outfile) {
+			tcc_serialize_extended_symtab(s1->exsymtab, s1->symtab_serialize_outfile);
+		}
+		/* Output the symbol names */
+		if (s1->dump_identifier_names_outfile) {
+			tcc_dump_identifier_names(s1->exsymtab, s1->dump_identifier_names_outfile);
+		}
 	}
 
     /* reset define stack, but leave -Dsymbols (may be incorrect if
@@ -1061,6 +1069,9 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->symtab_sym_used_callback = NULL;
     s->symtab_prep_callback = NULL;
     s->symtab_callback_data = NULL;
+    s->symtab_serialize_outfile = NULL;
+    s->dump_identifier_names_outfile = NULL;
+    
     return s;
 }
 
@@ -1073,6 +1084,9 @@ LIBTCCAPI void tcc_delete(TCCState *s1)
     /* Clean up the extended symbol table if it was never copied. */
     if (s1->exsymtab > (extended_symtab*)1)
 		tcc_delete_extended_symbol_table(s1->exsymtab);
+	/* free file paths related to caching */
+	tcc_free(s1->symtab_serialize_outfile);
+	tcc_free(s1->dump_identifier_names_outfile);
     
     /* free all sections */
     for(i = 1; i < s1->nb_sections; i++)
@@ -1688,6 +1702,8 @@ enum {
     TCC_OPTION_MF,
     TCC_OPTION_x,
     TCC_OPTION_dumpversion,
+    TCC_OPTION_dump_identifier_names,
+    TCC_OPTION_serialize_symtab,
 };
 
 #define TCC_OPTION_HAS_ARG 0x0001
@@ -1740,6 +1756,8 @@ static const TCCOption tcc_options[] = {
     { "MF", TCC_OPTION_MF, TCC_OPTION_HAS_ARG },
     { "x", TCC_OPTION_x, TCC_OPTION_HAS_ARG },
     { "dumpversion", TCC_OPTION_dumpversion, 0},
+    { "dump-identifier-names", TCC_OPTION_dump_identifier_names, TCC_OPTION_HAS_ARG },
+    { "serialize-symtab", TCC_OPTION_serialize_symtab, TCC_OPTION_HAS_ARG },
     { NULL, 0, 0 },
 };
 
@@ -1921,6 +1939,14 @@ PUB_FUNC int tcc_parse_args(TCCState *s, int argc, char **argv)
             break;
         case TCC_OPTION_MF:
             s->deps_outfile = tcc_strdup(optarg);
+            break;
+        case TCC_OPTION_serialize_symtab:
+            s->symtab_serialize_outfile = tcc_strdup(optarg);
+            s->exsymtab = (extended_symtab*)1;
+            break;
+        case TCC_OPTION_dump_identifier_names:
+            s->dump_identifier_names_outfile = tcc_strdup(optarg);
+            s->exsymtab = (extended_symtab*)1;
             break;
         case TCC_OPTION_dumpversion:
             printf ("%s\n", TCC_VERSION);

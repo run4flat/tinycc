@@ -456,6 +456,21 @@ void dump_sym_names(TCCState *state) {
 	}
 }
 
+void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile) {
+	int i;
+	FILE * out_fh = fopen(outfile, "w");
+	
+	/* report error? I think a lack of file will probably be sufficient */
+	if (!out_fh) return;
+	
+	for (i = 0; symtab->tokenSym_list + i < symtab->tokenSym_last; i++) {
+		TokenSym * ts = symtab->tokenSym_list[i];
+		if (ts->sym_identifier) fprintf(out_fh, "%s\n", ts->str);
+	}
+	
+	fclose(out_fh);
+}
+
 /* tcc_get_next_extended_symbol_name: a simple mechanism for getting the names
  * of all of the global symbols known to the extended symbol table. */
 char * tcc_get_next_extended_symbol_name(extended_symtab * symtab, int * poffset) {

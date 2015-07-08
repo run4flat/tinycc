@@ -337,7 +337,10 @@ int main(int argc, char **argv)
         } else if (s->output_type == TCC_OUTPUT_PREPROCESS) {
              if (s->outfile)
                 fclose(s->ppfp);
-        } else {
+        } else if (!s->outfile && (s->symtab_serialize_outfile || s->dump_identifier_names_outfile)) {
+            /* do nothing */
+        }
+        else {
             if (!s->outfile)
                 s->outfile = default_outputfile(s, first_file);
             ret = !!tcc_output_file(s, s->outfile);

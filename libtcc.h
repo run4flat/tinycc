@@ -120,6 +120,11 @@ LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab_p symtab, const char * 
 LIBTCCAPI int tcc_set_extended_symbol(extended_symtab_p symtab, const char * name, void * pointer);
 
 /*** For using a symbol table in a dependent compilation unit ***/
+/* Adds details for TokenSyms whose token ids are added to *all* compilation
+ * contexts, tokens like "push" and "str". NOTE: This function acts on
+ * the currently compiling table of identifiers by modifying table_ident
+ * directly. Only use this after you have initialized a compiler state!!!! */
+LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
 /* Callback function signature for lookup-by-name:
  * TokenSym_p my_callback(char * name, int len, void * data, extended_symtab_p* containing_symtab) */
 typedef TokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name,
@@ -142,10 +147,10 @@ LIBTCCAPI void tcc_set_extended_symtab_callbacks (
 /*** For symbol table caching ***/
 LIBTCCAPI extended_symtab_p tcc_deserialize_extended_symtab(const char * input_filename);
 LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab_p symtab, const char * output_filename);
+LIBTCCAPI void tcc_dump_identifier_names(extended_symtab_p symtab, char * outfile);
 
-/* Testing function, not really for general use */
+/* Testing functions, not really for general use */
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, char * name);
-LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
 LIBTCCAPI char* tcc_get_next_extended_symbol_name(extended_symtab_p symtab, int * poffset);
 
 #ifndef SYM_EXTENDED
