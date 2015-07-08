@@ -1917,7 +1917,7 @@ int exsymtab_serialize_tokensyms(extended_symtab * symtab, FILE * out_fh,
 	int N_ts = symtab->tokenSym_last - symtab->tokenSym_list;
 	for (i = 0; i < N_ts; i++) {
 		if (!exsymtab_serialize_tokensym(symtab->tokenSym_list, i, out_fh,
-			def_offset_rt, sym_offset_rt)
+			sym_offset_rt, def_offset_rt)
 		) return 0;
 	}
 	return 1;
