@@ -1363,6 +1363,7 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 		tcc_warning("Deserialization failed: Unable to allocate symtab to hold %d tokens\n", N_tokens);
 		return NULL;
 	}
+	symtab->tokenSym_last = symtab->tokenSym_list + N_tokens;
 	
 	/* deserialize tok_start */
 	if (fread(&(symtab->tok_start), sizeof(int), 1, in_fh) != 1) {
