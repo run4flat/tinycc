@@ -25,6 +25,13 @@ char second_max_code[] =
 char second_swap_code[] =
 "int second_swap(int l, int r) { swap_int(l, r); return l; } \n";
 
+enum {
+	TS_TEST_GET_TOK,
+	TS_TEST_HAS_DEFINE,
+	TS_TEST_HAS_STRUCT,
+	TS_TEST_HAS_IDENTIFIER
+};
+
 int main(int argc, char **argv) {
 	
 	/* ---- Compile and cache the first code string ---- */
@@ -41,40 +48,19 @@ int main(int argc, char **argv) {
 	tcc_delete_extended_symbol_table(my_symtab);
 	my_symtab = NULL;
 	pass("Define code string compiled and cached fine");
-    
-#if 0
-    int def_code_size = tcc_relocate(s1, 0);
-    void * code = malloc(def_code_size);
-    if (code == NULL) return 1;
-	if (tcc_relocate(s1, code) == -1) return 1;
-	pass("First code string compiled and relocated fine");
-	extended_symtab_p my_symtab;
-	setup_and_compile_s1(my_symtab, first_code);
 	
+	/* ---- Load the symtab from the cached file ---- */
 	
-	/* ---- Load the first code's cached symbol table ---- */
-	
+	my_symtab = tcc_deserialize_extended_symtab("defines.cache");
+	ok(my_symtab != NULL, "Deserialization returned non-null symtab pointer");
+	ok(tcc_extended_symtab_test(my_symtab, TS_TEST_HAS_DEFINE, "one"),
+		"token 'one' has define symbol");
+	ok(tcc_extended_symtab_test(my_symtab, TS_TEST_HAS_DEFINE, "MAX"),
+		"token 'MAX' has define symbol");
+	ok(tcc_extended_symtab_test(my_symtab, TS_TEST_HAS_DEFINE, "swap_int"),
+		"token 'swap_int' has define symbol");
 	
 	SETUP_SECOND_CALLBACK_DATA();
-	
-	/* ---- Run sanity tests for first code string ---- */
-	
-	/* test 'one' macro */
-	int (*first_one_ptr)() = tcc_get_symbol(s1, "first_one");
-	if (first_one_ptr == NULL) return 1;
-	is_i(first_one_ptr(), 1, "sanity check on 'one' macro passes");
-	
-	/* test 'MAX' macro */
-	int (*first_max_ptr)() = tcc_get_symbol(s1, "first_max");
-	if (first_max_ptr == NULL) return 1;
-	is_i(first_max_ptr(5, 3), 5, "sanity check on first slot of 'MAX' macro passes");
-	is_i(first_max_ptr(3, 5), 5, "sanity check on second slot of 'MAX' macro passes");
-	
-	/* test 'swap_int' macro */
-	int (*first_swap_ptr)() = tcc_get_symbol(s1, "first_swap");
-	if (first_swap_ptr == NULL) return 1;
-	is_i(first_swap_ptr(5, 3), 3, "sanity check on first slot of 'swap_int' macro passes");
-	is_i(first_swap_ptr(3, 5), 5, "sanity check on second slot of 'swap_int' macro passes");
 	
 	/* ---- Check code string that depends on the 'one' macro ---- */
 	
@@ -105,13 +91,11 @@ int main(int argc, char **argv) {
 	/* ---- clean up the memory ---- */
 	
 	tcc_delete_extended_symbol_table(my_symtab);
-	tcc_delete(s1);
 	tcc_delete(s_one);
 	tcc_delete(s_max);
 	tcc_delete(s_swap);
 	pass("cleanup");
 	
-#endif
 	done_testing();
 	
 	return 0;
