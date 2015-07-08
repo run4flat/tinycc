@@ -1543,7 +1543,7 @@ int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_tree * offset
 		}
 		else {
 			/* write the offset */
-			void ** p_offset = ram_tree_get_ref(offset_rt, curr_sym);
+			void ** p_offset = ram_tree_get_ref(offset_rt, curr_sym->type.ref);
 			to_write = *p_offset;
 		}
 	}
@@ -1570,7 +1570,7 @@ int exsymtab_deserialize_type_ref(FILE * in_fh, Sym * sym_list, int i) {
 	}
 	/* Set offset */
 	if (offset == 0) curr_sym->type.ref = NULL;
-	else curr_sym->type.ref = sym_list + offset - 1;
+	else curr_sym->type.ref = sym_list + offset - 1; /* Note off-by-one */
 	return 1;
 }
 
