@@ -343,7 +343,7 @@ void ** ram_tree_iterate(ram_tree * rt, void ** p_bypassed) {
 		 * information. */
 		bypassed++;
 		bypassed->node = rt;
-		bypassed->level = sizeof(void*) - 1;
+		bypassed->level = sizeof(void*) * 8 - 1;
 	}
 	
 	/* The leaves are void*. We will return a reference to one of those */
