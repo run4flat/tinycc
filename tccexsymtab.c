@@ -1962,6 +1962,7 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
 	/* All set! */
 	ram_tree_free(sym_offset_rt);
 	ram_tree_free(def_offset_rt);
+	fclose(out_fh);
 	return 1;
 	
 FAIL_RT:
