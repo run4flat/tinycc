@@ -498,6 +498,13 @@ void dump_sym_names(TCCState *state) {
 	}
 }
 
+char * type_lookup_table[16] = {
+	"int", "char", "short", "void",
+	"pointer", "enum", "func", "struct",
+	"float", "double", "long double", "bool",
+	"long long", "long", "qlong", "qfloat"
+};
+
 void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile) {
 	int i;
 	FILE * out_fh = fopen(outfile, "w");
@@ -507,7 +514,14 @@ void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile) {
 	
 	for (i = 0; symtab->tokenSym_list + i < symtab->tokenSym_last; i++) {
 		TokenSym * ts = symtab->tokenSym_list[i];
-		if (ts->sym_identifier) fprintf(out_fh, "%s\n", ts->str);
+		if (!ts->sym_identifier) continue;
+		Sym * curr_sym = ts->sym_identifier;
+		
+		/* Screen this identifier: is it really something we should set? */
+		int btype = curr_sym->type.t & VT_BTYPE;
+		fprintf(out_fh, "%s %s%s\n", ts->str,
+			curr_sym->r & VT_CONST ? "const " : "",
+			type_lookup_table[btype]);
 	}
 	
 	fclose(out_fh);
