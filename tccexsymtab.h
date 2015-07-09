@@ -39,18 +39,26 @@ c_trie ** _c_trie_find_child (c_trie * current, char * string);
 c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset);
 
 /****************************************************************************/
-/*                                 ram tree                                 */
+/*                                 ram hash                                 */
 /****************************************************************************/
 
-union ram_tree_node {
-	union ram_tree_node * branches[2];
-	void * leaves[2];
+struct ram_hash_linked_list {
+	struct ram_hash_linked_list * next;
+	void * key;
+	void * value;
 };
-typedef union ram_tree_node ram_tree;
-ram_tree * ram_tree_new();
-void ** ram_tree_get_ref(ram_tree * rt, void * old);
-void ** ram_tree_iterate(ram_tree * rt, void ** p_bypassed);
-void ram_tree_free(ram_tree * rt);
+typedef struct ram_hash_linked_list ram_hash_linked_list;
+
+typedef struct {
+	unsigned int N;
+	unsigned int log_buckets;
+	ram_hash_linked_list * buckets;
+} ram_hash;
+
+ram_hash * ram_hash_new();
+void ** ram_hash_get_ref(ram_hash * rh, void * old);
+void ** ram_hash_iterate(ram_hash * rh, void ** p_bypassed);
+void ram_hash_free(ram_hash * rh);
 
 /******************************************************************************/
 /*                           extended symtab struct                           */
@@ -58,17 +66,17 @@ void ram_tree_free(ram_tree * rt);
 
 typedef struct extended_symtab {
 	union {
-		ram_tree * sym_rt;
+		ram_hash * sym_rh;
 		Sym * sym_list;
 	};
 	union {
-		ram_tree * def_rt;
+		ram_hash * def_rh;
 		Sym * def_list;
 	};
 	c_trie * trie;
 	int tok_start;
-	int N_syms; /* zero for Sym collections stored in ram_tree */
-	int N_defs; /* zero for Sym collections stored in ram_tree */
+	int N_syms; /* zero for Sym collections stored in ram_hash */
+	int N_defs; /* zero for Sym collections stored in ram_hash */
 	TokenSym ** tokenSym_last;
 	TokenSym * tokenSym_list [1];
 } extended_symtab;
@@ -91,8 +99,8 @@ void copy_extended_symbols_to_exsymtab(TCCState *state);
 /* tcc_set_extended_symtab_callbacks is in libtcc.h */
 /* tcc_save_extended_symtab is in libtcc.h */
 
-Sym * get_new_symtab_pointer (Sym * old, ram_tree * rt);
-Sym * get_new_deftab_pointer (Sym * old, ram_tree * rt);
+Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh);
+Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh);
 int tokenstream_len (int * stream);
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start);
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab);

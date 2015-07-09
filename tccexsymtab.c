@@ -209,7 +209,7 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 }
 
 /****************************************************************************/
-/*                                 ram tree                                 */
+/*                                 ram hash                                 */
 /****************************************************************************/
 
 /* This provides a mechanism for mapping a set of old pointers to a set of
@@ -217,80 +217,168 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
  * copied, this basically provides an interface to say, "What is the new
  * address for this old address?"
  * 
- * The current implementation is pretty basic and can probably be optimized.
- * Lookup and insertion time is constant, but it uses O(N log(N)) memory for
- * a lookup table consisting of N pointers. It builds a two-way branching
- * data structure based on each bit in the pointer address being looked up.
- * To improve, I can probably use a hash table. For a discussion of good
- * hashing functions for pointers, see this:
+ * The current hashing function is pretty basic, taken from this discussion:
  * http://stackoverflow.com/questions/20953390/what-is-the-fastest-hash-function-for-pointers
+ * However, it performs pretty well. With perl.h, the maximum bucket depth
+ * is 6, and on average each bucket has about 1.3 entries.
  * 
- * As currently implemented, you should create a new ramtree with
- * ramtree_new and free the memory associated with your ramtree with
- * ramtree_free. The data is stored in ram_tree pointers, so you would say
+ * As currently implemented, you should create a new ram_hash with
+ * ram_hash_new and free the memory associated with your ram_hash with
+ * ram_hash_free:
  * 
- *  ram_tree * my_ramtree = ram_tree_new();
+ *  ram_hash * my_ram_hash = ram_hash_new();
  * 
  */
 
-ram_tree * ram_tree_new() {
-	return tcc_mallocz(sizeof(ram_tree));
+ram_hash * ram_hash_new() {
+	ram_hash * to_return = tcc_mallocz(sizeof(ram_hash));
+	to_return->log_buckets = 0;
+	to_return->buckets = tcc_mallocz(sizeof(ram_hash_linked_list));
+	return to_return;
 }
 
-/* ram_tree_get_ref: given an old pointer, returns a *reference* to the
- * new pointer, building out intermediate tree branches as necessary.
- * The reason this returns a reference to the pointer rather than the
- * pointer itself is so that you can work with the result as an lvalue.
+
+/* ram_hash_find: internal function. Returns the ram_hash_linked_list
+ * element for a given pointer, if the pointer is already in the hash. */
+ram_hash_linked_list* ram_hash_find(ram_hash * rh, void * old) {
+	uintptr_t hashed = (uintptr_t)old;
+	/* mask out bits we don't want */
+	hashed <<= sizeof(void*)*8 - 5 - rh->log_buckets;
+	hashed >>= sizeof(void*)*8 - rh->log_buckets;
+	/* find the associated bucket */
+	ram_hash_linked_list * to_return = rh->buckets + hashed;
+	while(to_return) {
+		if (to_return->key == old) return to_return;
+		to_return = to_return->next;
+	}
+	return NULL;
+}
+
+
+/* ram_hash_get: Internal function. Returns the ram_hash_linked_list
+ * element for the given key, creating if necessary. This does not
+ * check if the hash has to be rehashed, which is why it is internal
+ * only. */
+ram_hash_linked_list * ram_hash_get(ram_hash * rh, void * key) {
+	uintptr_t hashed = (uintptr_t)key;
+	/* mask out bits we don't want */
+	hashed <<= sizeof(void*)*8 - 5 - rh->log_buckets;
+	hashed >>= sizeof(void*)*8 - rh->log_buckets;
+	/* find the associated bucket */
+	ram_hash_linked_list * curr_el = rh->buckets + hashed;
+	if (curr_el->key == NULL || curr_el->key == key) {
+		curr_el->key = key;
+		return curr_el;
+	}
+	while(curr_el->next != NULL) {
+		curr_el = curr_el->next;
+		if (curr_el->key == key) {
+			return curr_el;
+		}
+	}
+	/* out here, curr_el->next is null, so allocate a new element */
+	curr_el->next = tcc_mallocz(sizeof(ram_hash_linked_list));
+	curr_el->next->key = key;
+	return curr_el->next;
+}
+
+/* ram_hash_rehash: internal function. Given a ram_hash, increments the
+ * number of log_buckets and rehashes the contents. */
+void ram_hash_rehash(ram_hash * rh) {
+	/* back up old-bucket data */
+	int old_N_buckets = 1 << rh->log_buckets;
+	ram_hash_linked_list * old_buckets = rh->buckets;
+	
+	/* Allocate new buckets */
+	rh->log_buckets++;
+	int N_buckets = 1 << rh->log_buckets;
+	rh->buckets
+		= tcc_mallocz(N_buckets * sizeof(ram_hash_linked_list));
+	
+	/* Add everything */
+	int i;
+	for (i = 0; i < old_N_buckets; i++) {
+		ram_hash_linked_list * bucket_head = old_buckets + i;
+		/* add the head, or move on if empty */
+		if (bucket_head->key == NULL) continue;
+		ram_hash_get(rh, bucket_head->key)->value = bucket_head->value;
+		/* move on if there are no non-head elements */
+		if (bucket_head->next == NULL) continue;
+		/* process non-head elements */
+		ram_hash_linked_list * curr = bucket_head->next;
+		ram_hash_linked_list * next;
+		do {
+			next = curr->next;
+			ram_hash_get(rh, curr->key)->value = curr->value;
+			tcc_free(curr);
+			curr = next;
+		} while(curr != NULL);
+	}
+	tcc_free(old_buckets);
+}
+
+/* ram_hash_get_ref: returns a *reference* to the data slot for the
+ * given a pointer address that you want mapped, creating the slot if
+ * necessary. The reason this returns a reference to the pointer rather
+ * than the pointer itself is so that you can work with the result as an
+ * lvalue.
  * 
- *  void ** p_data = ram_tree_get_ref(my_ram_tree, old_ptr);
+ *  void ** p_data = ram_hash_get_ref(my_ram_hash, old_ptr);
  *  if (*p_data == NULL) {
  *      *p_data = create_new_data();
  *  }
- * 
- * Algorithm: We begin at the head of our data structure and go left or
- * right depending on the bit. Thus the bits map to the *branches*, not
- * the *nodes*. From the TOP to the leaves, we will traverse N_bits
- * nodes and follow N_bits - 1 branches. The final node will also
- * contain a left and a right, but the pointers contained therein will
- * be the mapped pointers, not another node. So, my while loop should
- * take N_bits - 1 iterations.
-
-                                      TOP
-                   0                                        1
-        00                  01                   10                  11
-   000       001       010       011        100       101       110       111
-0000 0001 0010 0011 0100 0101 0110 0111  1000 1001 1010 1011 1100 1101 1110 1111
 */
 
-void ** ram_tree_get_ref(ram_tree * rt, void * old) {
-	/* Start with most significant bit */
-	unsigned long long mask = 1ULL << (sizeof(void*) * 8 - 1);
-	while(mask != 1) {
-		int offset = (mask & (unsigned long long)old) ? 1 : 0;
-		/* Branch does not exist? allocate */
-		if (rt->branches[offset] == NULL) {
-			rt->branches[offset] = tcc_mallocz(sizeof(ram_tree));
-		}
-		/* Take step into branch */
-		rt = rt->branches[offset];
-		mask >>= 1;
-	}
+void ** ram_hash_get_ref(ram_hash * rh, void * old) {
+	/* Does it already exist? */
+	ram_hash_linked_list * container = ram_hash_find(rh, old);
+	if (container != NULL) return &(container->value);
 	
-	/* The last layer contains the actual pointers. Return a reference
-	 * to them so they can be dereferenced, and possibly modified. */
-	int offset = 1 & (unsigned long long)old;
-	return rt->leaves + offset;
+	/* No. Rehash if the buckets are full */
+	if ((rh->N) >> rh->log_buckets) ram_hash_rehash(rh);
+	rh->N++;
+	
+	/* Add the element and return the result */
+	container = ram_hash_get(rh, old);
+	return &(container->value);
 }
 
-/* void ** ram_tree_iterate(void * ram_tree, void ** iter_data)
- * Iterates through the ram_tree data, returning a reference to new leaf
+/* ram_hash_describe: semi-internal, describes hash table statistics */
+void ram_hash_describe(ram_hash * rh) {
+	int N_buckets = 1 << rh->log_buckets;
+	printf("Ram tree has %d buckets for %d elements\n", N_buckets, rh->N);
+	int N_filled = 0;
+	int max_occupancy = 0;
+	int i;
+	for (i = 0; i < N_buckets; i++) if(rh->buckets[i].key != NULL) {
+		N_filled++;
+		ram_hash_linked_list * curr = rh->buckets + i;
+		int this_occupancy = 1;
+		while(curr->next != NULL) {
+			this_occupancy++;
+			curr = curr->next;
+		}
+		if (max_occupancy < this_occupancy) max_occupancy = this_occupancy;
+	}
+	printf("%d buckets are filled, with an average occupancy of %f\n",
+		N_filled, (float)rh->N / (float)N_filled);
+	printf("Maximum occupancy is %d\n", max_occupancy);
+}
+
+/* ram_hash_count: returns the number of elements in the hash table */
+int ram_hash_count(ram_hash * rh) {
+	return rh->N;
+}
+
+/* void ** ram_hash_iterate(void * ram_hash, void ** iter_data)
+ * Iterates through the ram_hash data, returning a reference to new leaf
  * with each call. The void ** iter_data is a reference to a void pointer
  * that is used by the iterator to store state between calls. You should
  * call this function like so:
  * 
  *  void * iter_data = NULL;
  *  do {
- *      void ** data_ref = ram_tree_iterate(ram_tree, &iter_data);
+ *      void ** data_ref = ram_hash_iterate(ram_hash, &iter_data);
  *      ...
  *  } while (iter_data != NULL);
  * 
@@ -300,7 +388,7 @@ void ** ram_tree_get_ref(ram_tree * rt, void * old) {
  *  int count = 0;
  *  do {
  *      count++;
- *      ram_tree_iterate(ram_tree, &iter_data);
+ *      ram_hash_iterate(ram_hash, &iter_data);
  *  } while (iter_data != NULL;
  * 
  * To free data referenced by all leaf pointers, use this
@@ -308,7 +396,7 @@ void ** ram_tree_get_ref(ram_tree * rt, void * old) {
  *  void * iter_data = NULL;
  *  void ** ptr_ref;
  *  do {
- *      ptr_ref = ram_tree_iterate(ram_tree, &iter_data);
+ *      ptr_ref = ram_hash_iterate(ram_hash, &iter_data);
  *      free(*ptr_ref);
  *  } while (iter_data != NULL;
  *
@@ -316,122 +404,76 @@ void ** ram_tree_get_ref(ram_tree * rt, void * old) {
  * the state information is to iterate through all of the data.
  */
 
+/* points to the *next* element, or is set to null */
 typedef struct {
-	ram_tree * node;
-	int level;
-} rt_bypassed_data;
+	int bucket;
+	ram_hash_linked_list * next;
+} rt_next_data;
 
-void ** ram_tree_iterate(ram_tree * rt, void ** p_bypassed) {
+void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data) {
+	if (rh == NULL) return NULL;
+	
 	/* dereference the pointer they passed in */
-	rt_bypassed_data * bypassed = *p_bypassed;
+	rt_next_data * next_data = *p_next_data;
+	int i;
 	
-	/* If bypassed is not initialized, then we allocate memory and
-	 * initialize things so that we start at the top node. */
-	if (bypassed == NULL) {
-		/* Allocate plenty of room, the first element of which is a
-		 * "null" delimiter so we know when there are no more bypassed
-		 * nodes to worry about. (If we have a 32-bit system, we want
-		 * room for 33 rt_bypassed_data structs at our disposal.) */
-		bypassed = tcc_malloc(sizeof(rt_bypassed_data) * (sizeof(void*) + 1));
-		bypassed->node = NULL;
-		bypassed->level = -1; /* doesn't matter */
-		
-		/* Moving forward, bypassed will always point to the *end* of
-		 * the list of bypassed nodes, making it a lifo. Since the whole
-		 * ram tree is unexplored, add the top node to the list by
-		 * moving to the second slot and adding the appropriate
-		 * information. */
-		bypassed++;
-		bypassed->node = rt;
-		bypassed->level = sizeof(void*) * 8 - 1;
-	}
-	
-	/* The leaves are void*. We will return a reference to one of those */
-	void ** to_return;
-	
-	/* Pop the most recently bypassed node and level off the lifo */
-	int level = bypassed->level;
-	ram_tree * curr_node = bypassed->node;
-	bypassed--;
-	
-	if (level == 0) {
-		/* If the most recent node is at depth zero, then it means that
-		 * we need to return a reference to the node's right leaf. */
-		to_return = curr_node->leaves + 1;
-	}
-	else {
-		/* If we are not dealing with that edge case, then begin heading
-		 * down the ram tree from the given node. */
-		for (; level > 0; level--) {
-			/* if a left branch exists... */
-			if (curr_node->branches[0] != NULL) {
-				/* ... and we're bypassing a right branch ... */
-				if (curr_node->branches[1] != NULL) {
-					/* ... push the bypassed node onto our lifo */
-					bypassed++;
-					bypassed->node = curr_node->branches[1];
-					bypassed->level = level - 1;
-				}
-				/* ... and under all circumstances, move to the left node */
-				curr_node = curr_node->branches[0];
+	/* If the next data is not initialized, then we allocate memory
+	 * and point it to the first element. */
+	int N_buckets = 1 << rh->log_buckets;
+	if (next_data == NULL) {
+		next_data = tcc_mallocz(sizeof(rt_next_data));
+		*p_next_data = next_data;
+		for (i = 0; i < N_buckets; i++) {
+			if (rh->buckets[i].key != NULL) {
+				next_data->bucket = i;
+				next_data->next = rh->buckets + i;
+				break;
 			}
-			/* If a left branch does not exist, move to the right node */
-			else curr_node = curr_node->branches[1];
 		}
-		
-		/* Out here we are sitting on the final node. Again perform the
-		 * left/right leaf dance seen just above, but this time we do it
-		 * to figure out the return leaf. If a left leaf exists... */
-		if (curr_node->leaves[0] != NULL) {
-			/* ... and we also have a right leaf ... */
-			if (curr_node->leaves[1] != NULL) {
-				/* ... then add this node to the bypassed list, with
-				 * depth 0. This will trigger special handling. */
-				bypassed++;
-				bypassed->node = curr_node;
-				bypassed->level = 0;
-			}
-			/* ... and under all circumstances, return a reference to
-			 * the left leaf */
-			to_return = curr_node->leaves;
-		}
-		/* If a left leaf does not exist, return a reference to the
-		 * right leaf. */
-		else to_return = curr_node->leaves + 1;
 	}
 	
-	/* The last item in our tree will have no more bypassed nodes, in
-	 * which case the bypassed pointer will be sitting on our null
-	 * element at the head of the lifo. In that case, free the lifo. */
-	if (bypassed->node == NULL) {
-		tcc_free(bypassed);
-		bypassed = NULL;
+	/* hold on to the address to return */
+	void ** to_return = &(next_data->next->value);
+	
+	/* move next_data forward */
+	if (next_data->next->next != NULL) {
+		next_data->next = next_data->next->next;
+		return to_return;
 	}
 	
-	/* make sure p_bypassed refers to the end of the lifo (or NULL) */
-	*p_bypassed = bypassed;
+	for (i = next_data->bucket + 1; i < N_buckets; i++) {
+		if (rh->buckets[i].key != NULL) {
+			next_data->bucket = i;
+			next_data->next = rh->buckets + i;
+			return to_return;
+		}
+	}
 	
+	/* out here means we need to free the next_data */
+	tcc_free(next_data);
+	*p_next_data = NULL;
 	return to_return;
 }
 
-/* ram_tree_free(void * ram_tree)
- * Frees memory associated with a ram_tree. Does not do anything with
- * the leaves. Use ram_tree_iterate to go through the leaves and take
+/* ram_hash_free(void * ram_hash)
+ * Frees memory associated with a ram_hash. Does not do anything with
+ * the leaves. Use ram_hash_iterate to go through the leaves and take
  * care of memory allocations stored there.
  */
 
-void _ram_tree_free_level(ram_tree * rt, int level) {
-	/* skip if this is null or a leaf */
-	if (rt == NULL || level == 0) return;
-	/* free children */
-	_ram_tree_free_level(rt->branches[0], level - 1);
-	_ram_tree_free_level(rt->branches[1], level - 1);
-	/* free self */
-	tcc_free(rt);
-}
-
-void ram_tree_free(ram_tree * rt) {
-	_ram_tree_free_level(rt, sizeof(void*));
+void ram_hash_free(ram_hash * rh) {
+	if (rh == NULL) return;
+	int i;
+	int N_buckets = 1 << rh->log_buckets;
+	for (i = 0; i < N_buckets; i++) {
+		if (rh->buckets[i].next == NULL) continue;
+		ram_hash_linked_list * curr = rh->buckets[i].next;
+		do {
+			ram_hash_linked_list * next = curr->next;
+			tcc_free(curr);
+			curr = next;
+		} while(curr != NULL);
+	}
 }
 
 /******************************************************************************/
@@ -569,12 +611,12 @@ int _type_ref_is_not_Sym(Sym * from) {
 	return ((from->type.t & VT_STATIC) && (from->r & VT_SYM));
 }
 
-Sym * get_new_symtab_pointer (Sym * old, ram_tree * rt) {
+Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh) {
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
 	
 	/* Check the global symbol stack. */
-	void ** Sym_ref = ram_tree_get_ref(rt, old);
+	void ** Sym_ref = ram_hash_get_ref(rh, old);
 	Sym * to_return = *Sym_ref;
 	if (NULL != to_return) return to_return;
 	
@@ -593,22 +635,22 @@ Sym * get_new_symtab_pointer (Sym * old, ram_tree * rt) {
 	to_return->type.t = old->type.t;
 	int btype = old->type.t & VT_BTYPE;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-		to_return->type.ref = get_new_symtab_pointer(old->type.ref, rt);
+		to_return->type.ref = get_new_symtab_pointer(old->type.ref, rh);
 if (old->type.ref == NULL) printf("old->type.ref is null!\n");
 if (to_return->type.ref == NULL) printf("to_return->type.ref is null!\n");
 	}
 	if (btype == VT_FUNC) to_return->c = 0;
 	else to_return->c = old->c;
-	to_return->next = get_new_symtab_pointer(old->next, rt);
+	to_return->next = get_new_symtab_pointer(old->next, rh);
 	return to_return;
 }
 
-Sym * get_new_deftab_pointer (Sym * old, ram_tree * rt) {
+Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh) {
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
 	
 	/* Otherwise use the non-extended symbol lookup */
-	void ** Sym_ref = ram_tree_get_ref(rt, old);
+	void ** Sym_ref = ram_hash_get_ref(rh, old);
 	Sym * to_return = *Sym_ref;
 	if (to_return != NULL) return to_return;
 	
@@ -626,7 +668,7 @@ Sym * get_new_deftab_pointer (Sym * old, ram_tree * rt) {
 	return NULL;
 }
 
-/* Make a complete copy of the TokenSym and Sym tables, using a ram_tree
+/* Make a complete copy of the TokenSym and Sym tables, using a ram_hash
  * for the latter. */
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 
@@ -639,7 +681,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     /* Room for the first TokenSym is included in the struct definition, so I
      * need to allocate room for the extended symtab plus N_tokens - 1. */
 /*struct extended_symtab {
-	ram_tree * sym_rt;
+	ram_hash * sym_rh;
 	c_trie * trie;
 	int tok_start;
 	TokenSym ** tokenSym_last;
@@ -650,10 +692,10 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		+ sizeof(void*) * (N_tokens - 1));
 	to_return->tok_start = tok_start;
 	
-	/* Allocate the trie and ram_trees */
+	/* Allocate the trie and ram_hashs */
 	to_return->trie = c_trie_new();
-	ram_tree * sym_rt = to_return->sym_rt = ram_tree_new();
-	ram_tree * def_rt = to_return->def_rt = ram_tree_new();
+	ram_hash * sym_rh = to_return->sym_rh = ram_hash_new();
+	ram_hash * def_rh = to_return->def_rh = ram_hash_new();
 	to_return->N_syms = 0;
 	to_return->N_defs = 0;
     
@@ -663,13 +705,13 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     
     /********* symbol stack *********/
     
-    /* All Syms are stored in the leaves of the ram_tree and are
+    /* All Syms are stored in the leaves of the ram_hash and are
      * accessible by their old address, or via ram tree iteration. Begin
      * by allocating memory for all Syms that are currently on the
      * global stack. This way, if I *can't* later on locate a Sym with
      * get_new_symtab_pointer, I can be sure it is an anonymous Sym. */
     for (curr_Sym = global_stack; curr_Sym != NULL; curr_Sym = curr_Sym->prev) {
-		Sym_ref = ram_tree_get_ref(sym_rt, curr_Sym);
+		Sym_ref = ram_hash_get_ref(sym_rh, curr_Sym);
 		*Sym_ref = tcc_malloc(sizeof(Sym));
 	}
     
@@ -681,7 +723,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * push a forward reference). */
 		
 		/* Get a pointer to the (already allocated) new Sym */
-		Sym_ref = ram_tree_get_ref(sym_rt, curr_Sym);
+		Sym_ref = ram_hash_get_ref(sym_rh, curr_Sym);
 		new_sym = *Sym_ref;
 		
 		/* Copy the v value (token id). This will not be copied later, so keep
@@ -737,7 +779,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 			else {
 				/* Otherwise it's safe: get a new Sym for it. */
 				new_sym->type.ref
-					= get_new_symtab_pointer(curr_Sym->type.ref, sym_rt);
+					= get_new_symtab_pointer(curr_Sym->type.ref, sym_rh);
 			}
 		}
 		
@@ -760,7 +802,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * jnext. The next field (I seem to recall) is used in storing
 		 * argument lists, so it needs to be copied for function
 		 * types. I believe it can be copied anonymously. */
-		new_sym->next = get_new_symtab_pointer(curr_Sym->next, sym_rt);
+		new_sym->next = get_new_symtab_pointer(curr_Sym->next, sym_rh);
 		
 		/* These are only needed for symbol table pushing/popping, so I
 		 * should be able to safely set them to null. */
@@ -770,7 +812,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     
     /********* define stack *********/
     
-    /* As with the symbol stack, allocate memory in the ram_tree for all
+    /* As with the symbol stack, allocate memory in the ram_hash for all
      * define Syms on the define stack. This way, I can be confident
      * that an unfound lookup is actually a bad thing. */
     Sym * curr_Def;
@@ -779,7 +821,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
      * to arise because I am (at the moment) copying *all* TokenSyms
      * at the moment. :-( */
     for (curr_Def = define_stack; curr_Def != NULL; curr_Def = curr_Def->prev) {
-		Sym_ref = ram_tree_get_ref(def_rt, curr_Def);
+		Sym_ref = ram_hash_get_ref(def_rh, curr_Def);
 		*Sym_ref = tcc_malloc(sizeof(Sym));
 	}
     
@@ -788,7 +830,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		/* See above for descriptions of some of the fields. */
 		 
 		/* Get a pointer to the (already allocated) new Sym */
-		Sym_ref = ram_tree_get_ref(def_rt, curr_Def);
+		Sym_ref = ram_hash_get_ref(def_rh, curr_Def);
 		new_sym = *Sym_ref;
 		
 		/* Convert the symbol's token index. */
@@ -834,7 +876,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * next; *it's* next will be updated when it comes up in this
 		 * loop. */
 		new_sym->next
-			= get_new_deftab_pointer(curr_Def->next, def_rt);
+			= get_new_deftab_pointer(curr_Def->next, def_rh);
 		
 		/* These are only needed for symbol table pushing/popping and
 		 * label identification. Since these Sym objects will do no
@@ -859,12 +901,12 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		/* Follow the code from tok_alloc_new in tccpp.c */
 		tok_sym->tok = tok_copy->tok;
 		tok_sym->sym_define
-			= get_new_deftab_pointer(tok_copy->sym_define, def_rt);
+			= get_new_deftab_pointer(tok_copy->sym_define, def_rh);
 		tok_sym->sym_label = NULL; /* Not copying labels */
 		tok_sym->sym_struct
-			= get_new_symtab_pointer(tok_copy->sym_struct, sym_rt);
+			= get_new_symtab_pointer(tok_copy->sym_struct, sym_rh);
 		tok_sym->sym_identifier
-			= get_new_symtab_pointer(tok_copy->sym_identifier, sym_rt);
+			= get_new_symtab_pointer(tok_copy->sym_identifier, sym_rh);
 		tok_sym->len = tok_copy->len;
 		tok_sym->hash_next = NULL;
 		memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
@@ -898,20 +940,20 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 	
 	if (symtab->sym_list != NULL) {
 		/* Sym memory handling depends on storage type. If N_syms is
-		 * zero, then its stored via a ram_tree. */
+		 * zero, then its stored via a ram_hash. */
 		if (symtab->N_syms == 0) {
 			
 			/* Iterate through all Syms in the ram tree */
 			void * iterator_data = NULL;
 			do {
-				void ** data_ref = ram_tree_iterate(symtab->sym_rt, &iterator_data);
+				void ** data_ref = ram_hash_iterate(symtab->sym_rh, &iterator_data);
 				exsymtab_free_sym((Sym *)*data_ref, 0);
 				/* Clear the symbol itself */
 				tcc_free(*data_ref);
 			} while (iterator_data != NULL);
 			
-			/* clean up the ram_tree itself */
-			ram_tree_free(symtab->sym_rt);
+			/* clean up the ram_hash itself */
+			ram_hash_free(symtab->sym_rh);
 		}
 		else {
 			
@@ -930,11 +972,11 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 		if (symtab->N_defs == 0) {
 			void * iterator_data = NULL;
 			do {
-				void ** data_ref = ram_tree_iterate(symtab->def_rt, &iterator_data);
+				void ** data_ref = ram_hash_iterate(symtab->def_rh, &iterator_data);
 				exsymtab_free_sym((Sym *)*data_ref, 1);
 				tcc_free(*data_ref);
 			} while (iterator_data != NULL);
-			ram_tree_free(symtab->def_rt);
+			ram_hash_free(symtab->def_rh);
 		}
 		else {
 			int i;
@@ -1453,12 +1495,12 @@ int exsymtab_deserialize_type_t(FILE * in_fh, Sym * curr_sym, int i) {
 
 /**** next ****/
 
-int exsymtab_serialize_next(FILE * out_fh, Sym * curr_sym, ram_tree * offset_rt) {
+int exsymtab_serialize_next(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt) {
 	/* Default to serializing NULL */
 	void * to_write = NULL;
 	if (curr_sym->next != NULL) {
 		/* compute the pointer offset if we have a non-null "next" field */
-		void ** p_offset = ram_tree_get_ref(offset_rt, curr_sym->next);
+		void ** p_offset = ram_hash_get_ref(offset_rt, curr_sym->next);
 		to_write = *p_offset;
 	}
 	
@@ -1547,7 +1589,7 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i) {
 
 /**** type.ref ****/
 
-int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_tree * offset_rt) {
+int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt) {
 	/* For details, see notes under copy_extended_symtab */
 	int btype = curr_sym->type.t & VT_BTYPE;
 	void * to_write;
@@ -1558,7 +1600,7 @@ int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_tree * offset
 		}
 		else {
 			/* write the offset */
-			void ** p_offset = ram_tree_get_ref(offset_rt, curr_sym->type.ref);
+			void ** p_offset = ram_hash_get_ref(offset_rt, curr_sym->type.ref);
 			to_write = *p_offset;
 		}
 	}
@@ -1671,7 +1713,7 @@ int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i) {
 
 /**** Serialize/deserialize a full Sym ****/
 
-int exsymtab_serialize_sym(FILE * out_fh, Sym * curr_sym, ram_tree * offset_rt) {
+int exsymtab_serialize_sym(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt) {
 	if (!exsymtab_serialize_v(out_fh, curr_sym)) return 0;
 	if (!exsymtab_serialize_r(out_fh, curr_sym)) return 0;
 	if (!exsymtab_serialize_type_t(out_fh, curr_sym)) return 0;
@@ -1700,7 +1742,7 @@ int exsymtab_deserialize_sym(FILE * in_fh, Sym * sym_list, int i) {
 
 /**** Serialize/deserialize a full Def ****/
 
-int exsymtab_serialize_def(FILE * out_fh, Sym * curr_sym, ram_tree * offset_rt) {
+int exsymtab_serialize_def(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt) {
 	if (!exsymtab_serialize_v(out_fh, curr_sym)) return 0;
 	if (!exsymtab_serialize_r(out_fh, curr_sym)) return 0;
 	if (!exsymtab_serialize_type_t(out_fh, curr_sym)) return 0;
@@ -1726,27 +1768,27 @@ int exsymtab_deserialize_def(FILE * in_fh, Sym * sym_list, int i) {
 
 /**** Serialize/deserialize the full set of syms or defs ****/
 
-ram_tree * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
+ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 	int is_def)
 {
-	/* Count the number of elements in the define ram_tree and build a
+	/* Count the number of elements in the define ram_hash and build a
 	 * new one to map current addresses to new offsets. Offsets begin
 	 * counting at 1, not zero. */
-	ram_tree * offset_rt = ram_tree_new();
-	ram_tree * original_rt = symtab->sym_rt;
-	if (is_def) original_rt = symtab->def_rt;
+	ram_hash * offset_rt = ram_hash_new();
+	ram_hash * original_rt = symtab->sym_rh;
+	if (is_def) original_rt = symtab->def_rh;
 	uintptr_t N_syms = 0;
 	/* Iterate through all Syms in the ram tree */
 	void * iterator_data = NULL;
 	do {
 		N_syms++;
 		/* Get the Sym pointer */
-		void ** old_ref = ram_tree_iterate(original_rt, &iterator_data);
+		void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
 		Sym * to_count = (Sym *)*old_ref;
 		/* Get and set the data slot for the mapping. Note that I do
 		 * not allocate any memory for this, I merely treat the void*
 		 * as an integer via uintptr_t. */
-		void ** new_ref = ram_tree_get_ref(offset_rt, to_count);
+		void ** new_ref = ram_hash_get_ref(offset_rt, to_count);
 		*new_ref = (void*)N_syms; /* note 1-offset, not 0-offset */
 	} while (iterator_data != NULL);
 	
@@ -1760,11 +1802,11 @@ ram_tree * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 	}
 	
 	/* Write out the contents of each Sym in the order set by the original
-	 * ram_tree iterator. */
+	 * ram_hash iterator. */
 	iterator_data = NULL;
 	do {
 		/* Get the Sym pointer */
-		void ** old_ref = ram_tree_iterate(original_rt, &iterator_data);
+		void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
 		Sym * to_serialize = (Sym *)*old_ref;
 		/* Call the appropriate serialization function */
 		int result = is_def ? exsymtab_serialize_def(out_fh, to_serialize, offset_rt)
@@ -1773,12 +1815,12 @@ ram_tree * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 		if (result == 0) goto FAIL;
 	} while (iterator_data != NULL);
 	
-	/* All done, return the offset ram_tree */
+	/* All done, return the offset ram_hash */
 	return offset_rt;
 	
 	/* In case of failure, clean up the offset ram tree */
 FAIL:
-	ram_tree_free(offset_rt);
+	ram_hash_free(offset_rt);
 	return NULL;
 }
 
@@ -1824,7 +1866,7 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh,
 /**** Serialize/deserialize a single TokenSym ****/
 
 int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
-	ram_tree * sym_offset_rt, ram_tree * def_offset_rt)
+	ram_hash * sym_offset_rt, ram_hash * def_offset_rt)
 {
 	TokenSym * ts = ts_list[i];
 	/* start with the token name length so that deserialization can
@@ -1844,11 +1886,11 @@ int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
 	
 	/* Serialize the Sym pointer offsets */
 	void * offset_list[3];
-	void ** offset_ref = ram_tree_get_ref(def_offset_rt, ts->sym_define);
+	void ** offset_ref = ram_hash_get_ref(def_offset_rt, ts->sym_define);
 	offset_list[0] = *offset_ref;
-	offset_ref = ram_tree_get_ref(sym_offset_rt, ts->sym_struct);
+	offset_ref = ram_hash_get_ref(sym_offset_rt, ts->sym_struct);
 	offset_list[1] = *offset_ref;
-	offset_ref = ram_tree_get_ref(sym_offset_rt, ts->sym_identifier);
+	offset_ref = ram_hash_get_ref(sym_offset_rt, ts->sym_identifier);
 	offset_list[2] = *offset_ref;
 	
 	if (fwrite(offset_list, sizeof(void*), 3, out_fh) != 3) {
@@ -1927,7 +1969,7 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok,
 /**** Serialize/deserialize the full set of TokenSyms ****/
 
 int exsymtab_serialize_tokensyms(extended_symtab * symtab, FILE * out_fh,
-	ram_tree * sym_offset_rt, ram_tree * def_offset_rt)
+	ram_hash * sym_offset_rt, ram_hash * def_offset_rt)
 {
 	int i;
 	int N_ts = symtab->tokenSym_last - symtab->tokenSym_list;
@@ -1965,9 +2007,9 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
 	if (!exsymtab_serialize_init(symtab, out_fh)) goto FAIL;
 	
 	/* Serialize the syms and defs */
-	ram_tree * sym_offset_rt = exsymtab_serialize_syms(symtab, out_fh, 0);
+	ram_hash * sym_offset_rt = exsymtab_serialize_syms(symtab, out_fh, 0);
 	if (sym_offset_rt == NULL) goto FAIL;
-	ram_tree * def_offset_rt = exsymtab_serialize_syms(symtab, out_fh, 1);
+	ram_hash * def_offset_rt = exsymtab_serialize_syms(symtab, out_fh, 1);
 	if (def_offset_rt == NULL) goto FAIL_RT;
 	
 	/* Serialize the TokenSyms */
@@ -1976,14 +2018,14 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
 	) goto FAIL_RT;
 	
 	/* All set! */
-	ram_tree_free(sym_offset_rt);
-	ram_tree_free(def_offset_rt);
+	ram_hash_free(sym_offset_rt);
+	ram_hash_free(def_offset_rt);
 	fclose(out_fh);
 	return 1;
 	
 FAIL_RT:
-	ram_tree_free(sym_offset_rt);
-	ram_tree_free(def_offset_rt);
+	ram_hash_free(sym_offset_rt);
+	ram_hash_free(def_offset_rt);
 FAIL:
 	fclose(out_fh);
 	return 0;
