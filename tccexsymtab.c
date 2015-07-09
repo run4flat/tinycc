@@ -1381,10 +1381,10 @@ Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok) {
  *    switch statement that delegates to type-specific code.
  */
 
-LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * name, void * pointer) {
+LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * name, const void * pointer) {
 	TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
 	if (ts == NULL) return 0; /* failed */
-	ts->hash_next = pointer;
+	ts->hash_next = (void*)pointer;
 	/* XXX working here - update sym's type.t as well??? */
 	return 1; /* succeeded */
 }
