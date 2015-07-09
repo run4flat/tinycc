@@ -1672,7 +1672,7 @@ int exsymtab_serialize_asm_label(FILE * out_fh, Sym * curr_sym) {
 			"label length for token %d\n", curr_sym->v);
 		return 0;
 	}
-	if (fwrite(curr_sym->asm_label, sizeof(char), asm_label_len, out_fh) != 1) {
+	if (fwrite(curr_sym->asm_label, sizeof(char), asm_label_len, out_fh) != asm_label_len) {
 		printf("Serialization failed: Unable to write assembler "
 			"label for token %d\n", curr_sym->v);
 		return 0;
