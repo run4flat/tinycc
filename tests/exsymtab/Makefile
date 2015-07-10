@@ -45,7 +45,8 @@ TESTS =	\
  80-cache-defines.test \
  81-cache-struct.test \
  82-cache-func-decl.test \
- 83-cache-func-decl-with-args.test
+ 83-cache-func-decl-with-args.test \
+ 84-cache-func-decl-with-pointer-args.test
 
 # 02-ram_tree.prove 
 PROVES =	\
@@ -76,7 +77,8 @@ PROVES =	\
  80-cache-defines.prove \
  81-cache-struct.prove \
  82-cache-func-decl.prove \
- 83-cache-func-decl-with-args.prove
+ 83-cache-func-decl-with-args.prove \
+ 84-cache-func-decl-with-pointer-args.prove
 
 # some tests do not pass on all platforms, remove them for now
 #ifeq ($(TARGETOS),Darwin)
