@@ -2176,3 +2176,31 @@ under debug mode:
  $ make 80-cache-defines.dbg
  ...
  (gdb) run
+
+
+July 10, 2015
+=============
+
+Things are going quite well, and appear to be focusing in on the corner
+cases. I have two (new) failing tests at the moment, 62 and 63. One works
+with static integers and the other works with enum members (which are
+also static integers in tcc). Both tests fail, but for different
+reason. Test 62 (static ints) fails saying 
+
+ tcc: error: undefined symbol '<static-var-name>'
+
+This error is issued by tccelf during the linking stage, and similar
+problems were resolved in the past by setting the VT_EXTERN flag on the
+type.t field. However, the Syms for these variables should pass those
+tests, and so should already be marked with VT_EXTERN.
+
+Test 63 (enums) fails compiles but has the wrong values for the enum
+constants. Oddly enough, DIAG statements tell me that
+tcc_get_extended_symbol was unable to find each of the enum symbol
+names, so they would not have been added by tcc_add_symbol; this was not
+a problem with test 62.
+
+It is not yet clear to me how to handle all of this. It may be correct
+for static variable to not live outside their compilaton context---I
+would be fine if that's what the C standard wants---but I feel that
+enums really need to be available.

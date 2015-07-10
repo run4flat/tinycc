@@ -3,9 +3,8 @@
  */
 
 /* uncomment to enable diagnostic output */
-//	#define DIAG(...) diag(__VA_ARGS__)
+	#define DIAG(...) diag(__VA_ARGS__)
 
-#define INCLUDE_MALLOC
 #include "test_setup.h"
 
 char first_code[] =
