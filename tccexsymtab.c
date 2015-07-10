@@ -517,11 +517,17 @@ void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile) {
 		if (!ts->sym_identifier) continue;
 		Sym * curr_sym = ts->sym_identifier;
 		
-		/* Screen this identifier: is it really something we should set? */
+		/* ignore typedefs; these are handled entirely by the compiler */
+		if (curr_sym->type.t & VT_TYPEDEF) continue;
+		
+		/* name */
+		fprintf(out_fh, "%s ", ts->str);
+		/* qualifiers */
+		if (curr_sym->type.t & VT_STATIC) fprintf(out_fh, "static ");
+		if (curr_sym->type.t & VT_CONSTANT) fprintf(out_fh, "constant ");
+		/* type */
 		int btype = curr_sym->type.t & VT_BTYPE;
-		fprintf(out_fh, "%s %s%s\n", ts->str,
-			curr_sym->r & VT_CONST ? "const " : "",
-			type_lookup_table[btype]);
+		fprintf(out_fh, "%s\n", type_lookup_table[btype]);
 	}
 	
 	fclose(out_fh);
