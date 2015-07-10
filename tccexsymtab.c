@@ -517,13 +517,12 @@ void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile) {
 		if (!ts->sym_identifier) continue;
 		Sym * curr_sym = ts->sym_identifier;
 		
-		/* ignore typedefs; these are handled entirely by the compiler */
-		if (curr_sym->type.t & VT_TYPEDEF) continue;
+		/* only indicate the things that have external linkage */
+		if ((curr_sym->type.t & (VT_EXTERN | VT_STATIC)) != VT_EXTERN) continue;
 		
 		/* name */
 		fprintf(out_fh, "%s ", ts->str);
 		/* qualifiers */
-		if (curr_sym->type.t & VT_STATIC) fprintf(out_fh, "static ");
 		if (curr_sym->type.t & VT_CONSTANT) fprintf(out_fh, "constant ");
 		/* type */
 		int btype = curr_sym->type.t & VT_BTYPE;

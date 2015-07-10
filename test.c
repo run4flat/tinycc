@@ -13,6 +13,7 @@ struct {
 } thing;
 static int blah;
 int cabinet;
+const int ruler = 12;
 
 typedef int my_type;
 
