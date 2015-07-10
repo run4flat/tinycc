@@ -225,10 +225,13 @@ ST_INLN Sym *sym_find(int v)
         ts->tok &= ~SYM_EXTENDED;
         
         /* XXX If we don't have the callback function... throw error? */
-        if (tcc_state->symtab_sym_used_callback != NULL)
+        if ((ts->sym_identifier->type.t & VT_EXTERN) 
+            && (tcc_state->symtab_sym_used_callback != NULL))
+        {
             /* Call the function, passing the symbol name. */
             tcc_state->symtab_sym_used_callback(ts->str, ts->len,
                 tcc_state->symtab_callback_data);
+        }
     }
 
     return table_ident[v]->sym_identifier;
