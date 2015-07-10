@@ -642,8 +642,10 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh) {
 	
 	/* If we're here, we couldn't find the symbol on the global stack. This
 	 * means it's an anonymous symbol, i.e. in a function declaration. Allocate
-	 * a new Sym. */
+	 * a new Sym and add it to our hash table so it gets properly serialized
+	 * and/or cleaned up when we're done. */
 	to_return = *Sym_ref = tcc_malloc(sizeof(Sym));
+	*Sym_ref = to_return;
 	
 	/* Fill in the values, as appropriate. See notes under the symbol stack
 	 * copying for explanations. I suspect (highly) that this is only used in
