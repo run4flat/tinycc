@@ -3,9 +3,17 @@
  */
 
 /* uncomment to enable diagnostic output */
-	#define DIAG(...) diag(__VA_ARGS__)
+//	#define DIAG(...) diag(__VA_ARGS__)
 
 #include "test_setup.h"
+#include <string.h>
+
+/* Create a custom error handler that merely tracks that the correct
+ * error was thrown. */
+int error_thrown;
+void my_error_func (void * data, const char * msg ) {
+	if (strstr(msg, "undefined symbol 'test_var'")) error_thrown++;
+}
 
 char first_code[] =
 "static unsigned int test_var = 42;\n"
@@ -36,19 +44,24 @@ int main(int argc, char **argv) {
 	unsigned int (*first_get)() = tcc_get_symbol(s1, "get_test_var");
 	is_i(first_get(), 42, "first_set/first_get work");
 	
-	/* ---- Compile code string that depends on the function and global variable ---- */
+	/* ---- Check for errors during dependent compilation ---- */
 	
 	TCCState *s2 = tcc_new();
-	setup_and_compile_second_state(s2, second_code);
-	relocate_second_state(s2);
+	if (!s2) return 1;
+	if (argc == 2 && !memcmp(argv[1], "lib_path=",9))
+		tcc_set_lib_path(s2, argv[1]+9);
+	else
+		tcc_set_lib_path(s2, "../..");
+	tcc_set_output_type(s2, TCC_OUTPUT_MEMORY);
+	tcc_set_error_func(s2, my_error_func, my_error_func);
+	callback_data.second_context = s2;
+	tcc_set_extended_symtab_callbacks(s2, &lookup_by_name,
+		&sym_used, &prep_table, &callback_data);
+	tcc_compile_string(s2, second_code);
+	tcc_relocate(s2, TCC_RELOCATE_AUTO);
 	
-	/* ---- Check indirect getter and setter ---- */
-	unsigned int (*indirect_get)() = tcc_get_symbol(s2, "indirect_get");
-	is_i(indirect_get(), 42, "indirect_get seems to work");
-	
-	/* ---- Check direct getter and setter ---- */
-	unsigned int (*direct_get)() = tcc_get_symbol(s2, "direct_get");
-	is_i(direct_get(), 42, "direct_get seems to work");
+	/* See if the error was thrown */
+	is_i(error_thrown, 1, "Static global variables do not bleed scope");
 	
 	/* ---- clean up the memory ---- */
 	

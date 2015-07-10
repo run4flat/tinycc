@@ -2204,3 +2204,16 @@ It is not yet clear to me how to handle all of this. It may be correct
 for static variable to not live outside their compilaton context---I
 would be fine if that's what the C standard wants---but I feel that
 enums really need to be available.
+
+---
+
+Further investigations led me to modify a few checks in the c field
+copying during the exsymtab copy process. This allows enum declarations
+to work as expected, and prevents static globals from bleeding across
+compilation units. However, there is some funny business in which the
+the sym_used_callback gets fired, even after screening for the VT_EXTERN
+flag. I am confused since I didn't think that enums had the VT_EXTERN
+flag set in their type.t. I can work around this by telling callback
+functions to silently ignore when they cannot find an associated Sym,
+but that seems odd. I should somehow be able to screen against this
+before invoking the callback.
