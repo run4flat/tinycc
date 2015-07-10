@@ -28,6 +28,7 @@ TESTS =	\
  32-two-contexts-struct-self-reference.test \
  33-two-contexts-struct-reserved-tokens.test \
  35-two-contexts-vtable-share.test \
+ 36-two-contexts-typedef-share.test \
  40-two-contexts-func-decl-share.test \
  42-three-contexts-func-share.test \
  45-two-contexts-func-share.test \
@@ -38,6 +39,8 @@ TESTS =	\
  51-many-consuming-contexts-with-constants-early-delete.test \
  60-two-contexts-globals.test \
  61-two-contexts-const-globals.test \
+ 62-two-contexts-static-globals.test \
+ 63-two-contexts-enum.test \
  70-symtab-use-check.test \
  80-cache-defines.test \
  81-cache-struct.test \
@@ -56,6 +59,7 @@ PROVES =	\
  32-two-contexts-struct-self-reference.prove \
  33-two-contexts-struct-reserved-tokens.prove \
  35-two-contexts-vtable-share.prove \
+ 36-two-contexts-typedef-share.prove \
  40-two-contexts-func-decl-share.prove \
  42-three-contexts-func-share.prove \
  45-two-contexts-func-share.prove \
@@ -66,6 +70,8 @@ PROVES =	\
  51-many-consuming-contexts-with-constants-early-delete.prove \
  60-two-contexts-globals.prove \
  61-two-contexts-const-globals.prove \
+ 62-two-contexts-static-globals.prove \
+ 63-two-contexts-enum.prove \
  70-symtab-use-check.prove \
  80-cache-defines.prove \
  81-cache-struct.prove \
