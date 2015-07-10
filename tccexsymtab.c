@@ -785,9 +785,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * having external storage, which is reflected in the VT_EXTERN bit of
 		 * the type.t field. */
 		int btype = curr_Sym->type.t & VT_BTYPE;
-		if (btype == VT_FUNC
-			|| new_sym->r & (VT_SYM | VT_LVAL | VT_CONST) /* global variables ?? */
-		) new_sym->type.t |= VT_EXTERN;
+		if (btype == VT_FUNC || new_sym->r & (VT_SYM | VT_LVAL))
+			new_sym->type.t |= VT_EXTERN;
 		
 		/* The type.ref field contains something useful only if the basic type
 		 * is a pointer, struct, or function. See code from tccgen's
@@ -814,9 +813,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * However, it seems to work if I simply set it to zero for functions
 		 * and global variables, so I'm going with that. This almost certainly
 		 * needs to be more nuanced. */
-		if (btype == VT_FUNC
-			|| new_sym->r & (VT_SYM | VT_LVAL | VT_CONST)
-		) new_sym->c = 0;
+		if (btype == VT_FUNC || new_sym->r & (VT_SYM | VT_LVAL)) new_sym->c = 0;
 		else new_sym->c = curr_Sym->c;
 		
 		/* Copy the next symbol field. Labels and gotos are tracked in a
