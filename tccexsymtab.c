@@ -519,6 +519,7 @@ void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile) {
 		
 		/* only indicate the things that have external linkage */
 		if ((curr_sym->type.t & (VT_EXTERN | VT_STATIC)) != VT_EXTERN) continue;
+		if (curr_sym->type.t & VT_TYPEDEF) continue;
 		
 		/* name */
 		fprintf(out_fh, "%s ", ts->str);

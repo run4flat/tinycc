@@ -1,5 +1,7 @@
 /* compile with tcc test.c -dump-identifier-names=names.txt */
 
+#include <stdio.h>
+
 enum {
 	first,
 	second,
@@ -19,4 +21,5 @@ typedef int my_type;
 
 void main() {
 	int i;
+	printf("Value is %d\n", i);
 }
