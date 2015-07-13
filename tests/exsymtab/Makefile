@@ -31,7 +31,6 @@ TESTS =	\
  36-two-contexts-typedef-share.test \
  40-two-contexts-func-decl-share.test \
  42-three-contexts-func-share.test \
- 45-two-contexts-func-share.test \
  47-many-consuming-contexts-func-share.test \
  48-many-consuming-contexts-delete.test \
  49-many-consuming-contexts-early-delete.test \
@@ -63,7 +62,6 @@ PROVES =	\
  36-two-contexts-typedef-share.prove \
  40-two-contexts-func-decl-share.prove \
  42-three-contexts-func-share.prove \
- 45-two-contexts-func-share.prove \
  47-many-consuming-contexts-func-share.prove \
  48-many-consuming-contexts-delete.prove \
  49-many-consuming-contexts-early-delete.prove \
