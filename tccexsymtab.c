@@ -237,16 +237,24 @@ ram_hash * ram_hash_new() {
 	return to_return;
 }
 
-
-/* ram_hash_find: internal function. Returns the ram_hash_linked_list
- * element for a given pointer, if the pointer is already in the hash. */
-ram_hash_linked_list* ram_hash_find(ram_hash * rh, void * old) {
+/* ram_hash_hash_ptr: internal function. Returns the bucket offset
+ * for a given pointer, i.e. it hashes the pointer value. */
+uintptr_t ram_hash_hash_ptr(ram_hash * rh, void * old) {
+	if (rh->log_buckets == 0) return 0;
+	
 	uintptr_t hashed = (uintptr_t)old;
 	/* mask out bits we don't want */
 	hashed <<= sizeof(void*)*8 - 5 - rh->log_buckets;
 	hashed >>= sizeof(void*)*8 - rh->log_buckets;
+	return hashed;
+}
+
+/* ram_hash_find: internal function. Returns the ram_hash_linked_list
+ * element for a given pointer, if the pointer is already in the hash. */
+ram_hash_linked_list* ram_hash_find(ram_hash * rh, void * old) {
 	/* find the associated bucket */
-	ram_hash_linked_list * to_return = rh->buckets + hashed;
+	ram_hash_linked_list * to_return
+		= rh->buckets + ram_hash_hash_ptr(rh, old);
 	while(to_return) {
 		if (to_return->key == old) return to_return;
 		to_return = to_return->next;
@@ -260,12 +268,9 @@ ram_hash_linked_list* ram_hash_find(ram_hash * rh, void * old) {
  * check if the hash has to be rehashed, which is why it is internal
  * only. */
 ram_hash_linked_list * ram_hash_get(ram_hash * rh, void * key) {
-	uintptr_t hashed = (uintptr_t)key;
-	/* mask out bits we don't want */
-	hashed <<= sizeof(void*)*8 - 5 - rh->log_buckets;
-	hashed >>= sizeof(void*)*8 - rh->log_buckets;
 	/* find the associated bucket */
-	ram_hash_linked_list * curr_el = rh->buckets + hashed;
+	ram_hash_linked_list * curr_el
+		= rh->buckets + ram_hash_hash_ptr(rh, key);
 	if (curr_el->key == NULL || curr_el->key == key) {
 		curr_el->key = key;
 		return curr_el;
