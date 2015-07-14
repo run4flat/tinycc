@@ -630,12 +630,6 @@ LIBTCCAPI void tcc_save_extended_symtab(TCCState * s) {
 	if (s->exsymtab == NULL) s->exsymtab = (extended_symtab*)1;
 }
 
-/* A test that indicates that the next field of this Sym is not a Sym, and must
- * be copied verbatim. */
-int _type_ref_is_not_Sym(Sym * from) {
-	return ((from->type.t & VT_STATIC) && (from->r & VT_SYM));
-}
-
 Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh) {
 	/* Handle the null case up-front */
 	if (old == NULL) return NULL;
@@ -797,16 +791,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		 * is a pointer, struct, or function. See code from tccgen's
 		 * compare_types for details. */
 		if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-			if (_type_ref_is_not_Sym(new_sym)) {
-				/* If we have a static symbol, copy its pointer directly, since
-				 * after relocation it is no longer a Sym pointer at all! */
-				new_sym->type.ref = curr_Sym->type.ref;
-			}
-			else {
-				/* Otherwise it's safe: get a new Sym for it. */
-				new_sym->type.ref
-					= get_new_symtab_pointer(curr_Sym->type.ref, sym_rh);
-			}
+			new_sym->type.ref
+				= get_new_symtab_pointer(curr_Sym->type.ref, sym_rh);
 		}
 		
 		/* Copy the c field, the "associated number." For functions, this is
@@ -1274,12 +1260,8 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 	int btype = from->type.t & VT_BTYPE; \
 	to_type.t = from->type.t; \
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) { \
-		/* Copy pointers that are non-Sym pointers directly */ \
-		if (_type_ref_is_not_Sym(from)) { \
-			to_type.ref = from->type.ref; \
-		} \
 		/* Get the from->type.ref's token and look for it here */ \
-		else if (from->type.ref->v & SYM_FIRST_ANOM) { \
+		if (from->type.ref->v & SYM_FIRST_ANOM) { \
 			/* Anonymous symbol; just copy it. */ \
 			to_type.ref = copy_extended_sym(symtab, from->type.ref, \
 				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD))); \
@@ -1618,15 +1600,9 @@ int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_hash * offset
 	int btype = curr_sym->type.t & VT_BTYPE;
 	void * to_write;
 	if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
-		if (_type_ref_is_not_Sym(curr_sym)) {
-			/* We have a static symbol; just write null */
-			to_write = NULL;
-		}
-		else {
-			/* write the offset */
-			void ** p_offset = ram_hash_get_ref(offset_rt, curr_sym->type.ref);
-			to_write = *p_offset;
-		}
+		/* write the offset */
+		void ** p_offset = ram_hash_get_ref(offset_rt, curr_sym->type.ref);
+		to_write = *p_offset;
 	}
 
 	/* Perform the write operation */
