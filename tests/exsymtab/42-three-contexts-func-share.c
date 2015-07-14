@@ -58,6 +58,8 @@ int main(int argc, char **argv) {
 	
 	TCCState *s2 = tcc_new();
 	setup_and_compile_second_state(s2, second_code);
+	/* fib was not defined in shared compiler context, so we must add
+	 * it manually. */
 	tcc_add_symbol(s2, "fib", fib_def);
 	relocate_second_state(s2);
 	

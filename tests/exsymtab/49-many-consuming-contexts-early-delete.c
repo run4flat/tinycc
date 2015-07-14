@@ -66,7 +66,6 @@ int main(int argc, char **argv) {
 	SETUP_SECOND_CALLBACK_DATA();
 	TCCState *s_first = tcc_new();
 	setup_and_compile_second_state(s_first, first_code);
-	tcc_add_symbol(s_first, "fib", fib_from_def);
 	relocate_second_state(s_first);
 	
 	/* ---- Check the functionality ---- */
@@ -85,7 +84,6 @@ int main(int argc, char **argv) {
 	
 	TCCState *s_second = tcc_new();
 	setup_and_compile_second_state(s_second, second_code);
-	tcc_add_symbol(s_second, "fib", fib_from_def);
 	relocate_second_state(s_second);
 	
 	/* ---- Check the functionality ---- */
