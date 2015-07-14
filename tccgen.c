@@ -282,7 +282,7 @@ ST_FUNC Sym *global_identifier_push(int v, int t, int c)
     s = sym_push2(&global_stack, v, t, c);
     /* don't record anonymous symbol */
     if ((v & ~SYM_EXTENDED) < SYM_FIRST_ANOM) {
-        ps = &table_ident[v - TOK_IDENT]->sym_identifier;
+        ps = &table_ident[(v & ~SYM_EXTENDED) - TOK_IDENT]->sym_identifier;
         /* modify the top most local identifier, so that
            sym_identifier will point to 's' when popped */
         while (*ps != NULL)
