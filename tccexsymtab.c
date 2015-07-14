@@ -786,6 +786,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		int btype = curr_Sym->type.t & VT_BTYPE;
 		if (btype == VT_FUNC || new_sym->r & (VT_SYM | VT_LVAL))
 			new_sym->type.t |= VT_EXTERN;
+		/* Remove static indicator from functions */
+		if ((btype == VT_FUNC) && (curr_Sym->type.t & VT_STATIC))
+			new_sym->type.t &= ~VT_STATIC;
 		
 		/* The type.ref field contains something useful only if the basic type
 		 * is a pointer, struct, or function. See code from tccgen's
