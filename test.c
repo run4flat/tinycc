@@ -21,5 +21,9 @@ typedef int my_type;
 
 void main() {
 	int i;
-	printf("Value is %d\n", i);
+	i = 5;
+	if(__builtin_expect(i, 5))
+		printf("Value is %d\n", i);
+	else
+		printf("Weird!\n");
 }
