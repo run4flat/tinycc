@@ -232,21 +232,17 @@ void c_trie_add_data (c_trie * head, char * string, void * data) {
 
 ram_hash * ram_hash_new() {
 	ram_hash * to_return = tcc_mallocz(sizeof(ram_hash));
-	to_return->log_buckets = 0;
-	to_return->buckets = tcc_mallocz(sizeof(ram_hash_linked_list));
+	to_return->N_buckets = 4;
+	to_return->buckets = tcc_mallocz(4*sizeof(ram_hash_linked_list));
 	return to_return;
 }
 
 /* ram_hash_hash_ptr: internal function. Returns the bucket offset
  * for a given pointer, i.e. it hashes the pointer value. */
 uintptr_t ram_hash_hash_ptr(ram_hash * rh, void * old) {
-	if (rh->log_buckets == 0) return 0;
-	
 	uintptr_t hashed = (uintptr_t)old;
-	/* mask out bits we don't want */
-	hashed <<= sizeof(void*)*8 - 5 - rh->log_buckets;
-	hashed >>= sizeof(void*)*8 - rh->log_buckets;
-	return hashed;
+	/* shift and mask out bits we don't want */
+	return (hashed >> 5) & (rh->N_buckets - 1);
 }
 
 /* ram_hash_find: internal function. Returns the ram_hash_linked_list
@@ -291,14 +287,13 @@ ram_hash_linked_list * ram_hash_get(ram_hash * rh, void * key) {
  * number of log_buckets and rehashes the contents. */
 void ram_hash_rehash(ram_hash * rh) {
 	/* back up old-bucket data */
-	int old_N_buckets = 1 << rh->log_buckets;
+	int old_N_buckets = rh->N_buckets;
 	ram_hash_linked_list * old_buckets = rh->buckets;
 	
 	/* Allocate new buckets */
-	rh->log_buckets++;
-	int N_buckets = 1 << rh->log_buckets;
+	rh->N_buckets <<= 1;
 	rh->buckets
-		= tcc_mallocz(N_buckets * sizeof(ram_hash_linked_list));
+		= tcc_mallocz(rh->N_buckets * sizeof(ram_hash_linked_list));
 	
 	/* Add everything */
 	int i;
@@ -340,7 +335,7 @@ void ** ram_hash_get_ref(ram_hash * rh, void * old) {
 	if (container != NULL) return &(container->value);
 	
 	/* No. Rehash if the buckets are full */
-	if ((rh->N) >> rh->log_buckets) ram_hash_rehash(rh);
+	if (rh->N == rh->N_buckets - 1) ram_hash_rehash(rh);
 	rh->N++;
 	
 	/* Add the element and return the result */
@@ -350,12 +345,11 @@ void ** ram_hash_get_ref(ram_hash * rh, void * old) {
 
 /* ram_hash_describe: semi-internal, describes hash table statistics */
 void ram_hash_describe(ram_hash * rh) {
-	int N_buckets = 1 << rh->log_buckets;
-	printf("Ram tree has %d buckets for %d elements\n", N_buckets, rh->N);
+	printf("Ram tree has %d buckets for %d elements\n", rh->N_buckets, rh->N);
 	int N_filled = 0;
 	int max_occupancy = 0;
 	int i;
-	for (i = 0; i < N_buckets; i++) if(rh->buckets[i].key != NULL) {
+	for (i = 0; i < rh->N_buckets; i++) if(rh->buckets[i].key != NULL) {
 		N_filled++;
 		ram_hash_linked_list * curr = rh->buckets + i;
 		int this_occupancy = 1;
@@ -424,11 +418,10 @@ void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data) {
 	
 	/* If the next data is not initialized, then we allocate memory
 	 * and point it to the first element. */
-	int N_buckets = 1 << rh->log_buckets;
 	if (next_data == NULL) {
 		next_data = tcc_mallocz(sizeof(rt_next_data));
 		*p_next_data = next_data;
-		for (i = 0; i < N_buckets; i++) {
+		for (i = 0; i < rh->N_buckets; i++) {
 			if (rh->buckets[i].key != NULL) {
 				next_data->bucket = i;
 				next_data->next = rh->buckets + i;
@@ -446,7 +439,7 @@ void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data) {
 		return to_return;
 	}
 	
-	for (i = next_data->bucket + 1; i < N_buckets; i++) {
+	for (i = next_data->bucket + 1; i < rh->N_buckets; i++) {
 		if (rh->buckets[i].key != NULL) {
 			next_data->bucket = i;
 			next_data->next = rh->buckets + i;
@@ -469,8 +462,7 @@ void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data) {
 void ram_hash_free(ram_hash * rh) {
 	if (rh == NULL) return;
 	int i;
-	int N_buckets = 1 << rh->log_buckets;
-	for (i = 0; i < N_buckets; i++) {
+	for (i = 0; i < rh->N_buckets; i++) {
 		if (rh->buckets[i].next == NULL) continue;
 		ram_hash_linked_list * curr = rh->buckets[i].next;
 		do {

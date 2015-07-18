@@ -51,7 +51,7 @@ typedef struct ram_hash_linked_list ram_hash_linked_list;
 
 typedef struct {
 	unsigned int N;
-	unsigned int log_buckets;
+	unsigned int N_buckets;
 	ram_hash_linked_list * buckets;
 } ram_hash;
 
