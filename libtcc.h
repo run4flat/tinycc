@@ -150,7 +150,7 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab_p symtab, const char
 LIBTCCAPI void tcc_dump_identifier_names(extended_symtab_p symtab, char * outfile);
 
 /* Testing functions, not really for general use */
-LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, char * name);
+LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, const char * name);
 LIBTCCAPI char* tcc_get_next_extended_symbol_name(extended_symtab_p symtab, int * poffset);
 
 #ifndef SYM_EXTENDED

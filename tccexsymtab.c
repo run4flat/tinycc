@@ -19,193 +19,111 @@
 #include "tcc.h"
 
 /*****************************************************************************/
-/*                              compressed trie                              */
+/*                            exsymtab_token_hash                            */
 /*****************************************************************************/
 
-/* Define the compressed trie used for extended table lookups. For an excellent
- * paper on the topic, see http://lampwww.epfl.ch/papers/triesearches.pdf.gz
- * This is a slightly simplified implementation of the array mapped trie. If
- * benchmarks warrant it, I may rewrite this in terms of an array compacted trie. */
+/* algorithm djb2 from http://www.cse.yorku.ca/~oz/hash.html */
+unsigned long _token_hash_hash_string(token_string_hash * tsh, const char *str)
+{
+	unsigned long hash = 5381;
+	int c;
 
-/* How many slots? in 0-9, A-Z, a-z, and _, we have 10 + 26 + 26 + 1 = 63. That
- * fits nicely into an unsigned long long, leaving one extra bit that I can use
- * to indicate the presence of data in this node. The mapping of characters to
- * bits/slots is given in _c_trie_bit_offset_for_char. */
+	while ((c = *str++))
+		hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
-/* Returns a c_trie with a single allocated child. This should serve as the head
- * of the data structure. It does not store any data itself. The single child is
- * actually the first node in the trie. */
-c_trie * c_trie_new() {
-	c_trie * new_trie = tcc_malloc(sizeof(c_trie));
-	/* The head of the trie is in this node's first node slot: */
-	new_trie->filled_bits = 2;
-	new_trie->children[0] = tcc_mallocz(sizeof(c_trie));
-	return new_trie;
+	return hash & (tsh->N_buckets - 1);
 }
 
-/* See http://stackoverflow.com/questions/109023/how-to-count-the-number-of-set-bits-in-a-32-bit-integer
- * with the explanation that begins, "I think the fastest way-without using
- * lookup tables and popcount-is the following..."  At some point, if
- * performance merits it, I can use preprocessor hacks to substitute optimzied
- * versions of this calculation. See http://danluu.com/assembly-intrinsics/. In
- * all likelihood, cache misses will be the bigger bottleneck for this,
- * switching to the array compacted trie would be the best course for speedups. */
-unsigned char _c_trie_popcount (unsigned long long v) {
-	/* put count of each 2 bits into those 2 bits */
-	v = v - ((v >> 1) & 0x5555555555555555ULL);
-	/* put count of each 4 bits into those 4 bits */
-	v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
-	/* put count of each 8 bits into those 8 bits */
-	v = (v & 0x707070707070707ULL) + ((v >> 4) & 0x707070707070707ULL);
-	/* sum up those bits */
-	return ((v + ((v >> 8) & 0xF000F000F000FULL)) * 0x1000100010001ULL) >> 48;
+token_string_hash * token_string_hash_new() {
+	/* Allocate enough room for the hash's internal data, and four
+	 * buckets (which means three extra buckets) */
+	token_string_hash * to_return = tcc_mallocz(sizeof(token_string_hash));
+	to_return->buckets = tcc_mallocz(4 * sizeof(void*));
+	to_return->N_buckets = 4;
+	return to_return;
 }
 
-#define C_TRIE_HAS_DATA 1
-
-/* Recursively free all children, then free self */
-void c_trie_free(c_trie * curr) {
-	if (curr == NULL) return;
-	unsigned char N_children = _c_trie_popcount(curr->filled_bits);
-	unsigned char i = curr->filled_bits & C_TRIE_HAS_DATA;
-	for (; i < N_children; i++) c_trie_free(curr->children[i]);
-	tcc_free(curr);
-}
-
-/* Find the bit offset. This requires some algebra in order to fit the allowable
- * ASCII characters into just 64 bits. Since most characters in the trie are
- * going to be lowercase, I handle their calculation first. Most C programming
- * uses_underscores_rather_thanCamelCase, so I place the underscore before
- * capitals for a tiny speed boost. I then handle uppercase, and last of all
- * digits.
- * 
- * Note that the very first bit indicates that "the first element is data", and
- * is internally notated with a '$' character, though I think the character is
- * never used in the codebase.
- * 
- * Finally, note that this assumes that it is given good input. It does not
- * check for invalid characters, and could potentially give bad slots,
- * most likely for characters beyond 'Z' and before 'A', i.e. square brackets. */
-unsigned char _c_trie_bit_offset_for_char (char c) {
-	if (c == '$') return 0; /* data slot */
-	if (c >= 'a') return c - 'a' + 1;
-	if (c == '_') return 27;
-	if (c >= 'A') return c - 'A' + 28;
-	return c - '0' + 54;
-}
-
-/* Find the slot where this character lives and return a pointer to the child. A
- * null pointer means we couldn't find it. */
-c_trie ** _c_trie_find_child (c_trie * current, char * string) {
-	unsigned char bit_offset = _c_trie_bit_offset_for_char(*string);
+/* token_string_hash_find: internal function. Returns a reference
+ * (pointer) to the address of the linked list element associated with
+ * the given name. It may be that the element does not exist, in which
+ * case dereferencing will yeild a null pointer. The memory location
+ * itself is guaranteed to exist, so you can allocate new memory and
+ * store a new value if so desired. */
+token_string_hash_linked_list** _token_string_hash_get_ll_ref(
+	token_string_hash * tsh, const char * name
+) {
+	/* find the associated bucket */
+	token_string_hash_linked_list ** to_return
+		= tsh->buckets + _token_hash_hash_string(tsh, name);
 	
-	/* Figure out which bit will be occupied next. Split across two lines so
-	 * that the bit shift is not accidentally truncated. */
-	unsigned long long curr_bit = 1;
-	curr_bit <<= bit_offset;
-	
-	/* See if it is in our set of buckets */
-	if ((current->filled_bits & curr_bit) == 0) return NULL;
-	
-	/* Find the compressed offset of the child associated with this character
-	 * and return it. */
-	unsigned long long mask_to_popcount = 0xFFFFFFFFFFFFFFFFULL >> (64 - bit_offset);
-	return &(current->children[_c_trie_popcount(current->filled_bits & mask_to_popcount)]);
-}
-
-void * c_trie_get_data (c_trie * head, char * string) {
-	/* This is called with the head node, so we must go to the first child in
-	 * order to begin the actual search. */
-	c_trie ** child_p = head->children;
-	
-	/* Get the child pointer for each character in the string. */
-	while(*string > 0) {
-		child_p = _c_trie_find_child(*child_p, string++);
-		if (child_p == NULL) return NULL;
+	/* Check the names of all elements in the bucket until we find it */
+	while(*to_return) {
+		if (strcmp((*to_return)->name, name) == 0) return to_return;
+		to_return = &((*to_return)->next);
 	}
-	/* At this point we have found the node that supposedly contains our data.
-	 * If the data bit is set, then return the pointer in the data slot. */
-	if ((*child_p)->filled_bits & C_TRIE_HAS_DATA) return (void*) (*child_p)->children[0];
-	return NULL;
+	return to_return;
 }
 
-/* Allocates one more slot, if necessary, and copies data into it. */
-c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset) {
-	/* Figure out which bit will be occupied next. Split across two lines so
-	 * that the bit shift is not accidentally truncated. */
-	unsigned long long new_bit = 1;
-	new_bit <<= slot_offset;
-	
-	/* c_trie objects are always allocated with room for at least one. If this
-	 * reports zero room, it has room and the data can simply be added. */
-	if ((*curr_p)->filled_bits == 0) {
-		(*curr_p)->filled_bits = new_bit;
-		(*curr_p)->children[0] = to_add;
-		return &((*curr_p)->children[0]);
-	}
-	
-	/* Otherwise, we need to allocate new space and copy over the previous
-	 * children. */
-	c_trie * old = *curr_p;
-	unsigned char N_children = _c_trie_popcount(old->filled_bits);
-	c_trie * new = tcc_mallocz(sizeof(c_trie) + N_children * sizeof(c_trie*));
-	N_children++;
-	
-	/* Set the new filled bits */
-	new->filled_bits = old->filled_bits | new_bit;
-	
-	/* Copy old children located in slots that come before the new one. */
-	unsigned char N_before = _c_trie_popcount(old->filled_bits
-		& (0xFFFFFFFFFFFFFFFFULL >> (64 - slot_offset))
-	);
-	if (slot_offset == 0) N_before = 0; /* corner case for data slot */
-	unsigned char i;
-	for(i = 0; i < N_before; i++) new->children[i] = old->children[i];
-	
-	/* Copy the new child and remaining children. */
-	new->children[i] = to_add;
-	for(i++; i < N_children; i++) new->children[i] = old->children[i-1];
-	
-	tcc_free(old); /* free old node */
-	*curr_p = new; /* update parent's list to point to the new node */
-	
-	/* Return address of the newly allocated slot */
-	return &(new->children[N_before]);
-}
-
-void c_trie_add_data (c_trie * head, char * string, void * data) {
-	/* This is called with the head node, so we must go to the first child in
-	 * order to begin the actual search. */
-	c_trie ** curr_p = head->children;
-	c_trie ** child_p;
-	
-	while(*string > 0) {
-		child_p = _c_trie_find_child(*curr_p, string);
-		if (child_p == NULL) {
-			/* No child for this character, so create a new child. Always
-			 * allocate room for one slot: it'll eventually be filled with the
-			 * data pointer or with the next character. See _c_trie_add_one_more_slot
-			 * for details. */
-			c_trie * new_child = tcc_mallocz(sizeof(c_trie));
-			
-			/* Create a new slot in the current node and add the new child to it. */
-			child_p = _c_trie_add_one_more_slot(curr_p, new_child,
-				_c_trie_bit_offset_for_char(*string));
+void _token_string_hash_extend(token_string_hash * tsh) {
+	int n;
+	/* Back up the old buckets */
+	token_string_hash_linked_list ** old_buckets = tsh->buckets;
+	int old_N_buckets = tsh->N_buckets;
+	/* Extend the new buckets by a factor of 2 */
+	tsh->N_buckets <<= 1;
+	tsh->buckets = tcc_mallocz(tsh->N_buckets * sizeof(void*));
+	/* rehash the data */
+	for (n = 0; n < old_N_buckets; n++) {
+		token_string_hash_linked_list * curr_ll = old_buckets[n];
+		while(curr_ll != NULL) {
+			/* Make the new slot point to this linked list object */
+			*(_token_string_hash_get_ll_ref(tsh, curr_ll->name)) = curr_ll;
+			/* Make sure the old "next" is cleared, since it probably
+			 * won't be in this bucket after rehashing. */
+			token_string_hash_linked_list * tmp = curr_ll->next;
+			curr_ll->next = NULL;
+			/* On to the old "next" */
+			curr_ll = tmp;
 		}
-		
-		/* next character, advance through the trie */
-		string++;
-		curr_p = child_p;
 	}
 	
-	/* Handle the case where the data slot is already used */
-	if ((*curr_p)->filled_bits & 1) {
-		tcc_warning("Attempting to add data to ctrie node that already has data!\n");
-		return;
-	}
+	tcc_free(old_buckets);
+}
+
+/* Returns a reference to the data slot of the token string hash entry
+ * for the given name, creating the hash entry if necessary. */
+void ** token_string_hash_get_ref(token_string_hash * tsh, const char * name) {
+	token_string_hash_linked_list** ll_slot = _token_string_hash_get_ll_ref(tsh, name);
+	token_string_hash_linked_list* return_container = *ll_slot;
 	
-	/* Finally, add the new data to the "data" slot. */
-	_c_trie_add_one_more_slot(curr_p, (c_trie*)data, 0);
+	/* create a new entry if necessary */
+	if (return_container == NULL) {
+		return_container = tcc_mallocz(sizeof(token_string_hash_linked_list) + strlen(name));
+		strcpy(return_container->name, name);
+		*ll_slot = return_container;
+		/* Rehash if too big; note rehashing does not invalidate return_container */
+		if (++tsh->N > tsh->N_buckets) _token_string_hash_extend(tsh);
+	}
+	return &(return_container->data);
+}
+
+/* string_string_hash_count: returns the number of elements in the hash table */
+int token_string_hash_count(token_string_hash * tsh) {
+	return tsh->N;
+}
+
+void token_string_hash_free(token_string_hash * tsh) {
+	if (tsh == NULL) return;
+	int n;
+	for (n = 0; n < tsh->N_buckets; n++) {
+		token_string_hash_linked_list * curr_ll = tsh->buckets[n];
+		while(curr_ll != NULL) {
+			token_string_hash_linked_list * tmp = curr_ll->next;
+			tcc_free(curr_ll);
+			curr_ll = tmp;
+		}
+	}
+	tcc_free(tsh);
 }
 
 /****************************************************************************/
@@ -294,7 +212,6 @@ void ram_hash_rehash(ram_hash * rh) {
 	rh->N_buckets <<= 1;
 	rh->buckets
 		= tcc_mallocz(rh->N_buckets * sizeof(ram_hash_linked_list));
-	
 	/* Add everything */
 	int i;
 	for (i = 0; i < old_N_buckets; i++) {
@@ -589,7 +506,7 @@ LIBTCCAPI extended_symtab * tcc_get_extended_symbol_table(TCCState * s) {
 
 LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name) {
 	/* delegate to the symtab's trie */
-	return (TokenSym*)c_trie_get_data(symtab->trie, (char*)name);
+	return (TokenSym*)(*token_string_hash_get_ref(symtab->tsh, name));
 }
 
 LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * name) {
@@ -705,7 +622,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 	to_return->tok_start = tok_start;
 	
 	/* Allocate the trie and ram_hashs */
-	to_return->trie = c_trie_new();
+	to_return->tsh = token_string_hash_new();
 	ram_hash * sym_rh = to_return->sym_rh = ram_hash_new();
 	ram_hash * def_rh = to_return->def_rh = ram_hash_new();
 	to_return->N_syms = 0;
@@ -917,7 +834,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 		tok_sym->str[tok_copy->len] = '\0';
 		
 		/* Add this to the trie */
-		c_trie_add_data(to_return->trie, tok_sym->str, tok_sym);
+		*token_string_hash_get_ref(to_return->tsh, tok_sym->str) = tok_sym;
 	}
 
 	/* Store the extended symtab */
@@ -992,7 +909,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 	}
 	
 	/* Clear out the trie */
-	c_trie_free(symtab->trie);
+	token_string_hash_free(symtab->tsh);
 	
 	/* Clear out the allocated TokenSym pointers */
 	TokenSym** ts_to_delete = symtab->tokenSym_list;
@@ -1014,9 +931,9 @@ enum {
 	TS_TEST_HAS_STRUCT,
 	TS_TEST_HAS_IDENTIFIER
 };
-LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p symtab, int to_test, char * name) {
+LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p symtab, int to_test, const char * name) {
 	/* Get the tokenSym by the given name */
-	TokenSym * ts = c_trie_get_data(symtab->trie, name);
+	TokenSym * ts = *token_string_hash_get_ref(symtab->tsh, name);
 	if (ts == NULL) return 0;
 	
 	/* Perform the requested test */
@@ -1954,7 +1871,7 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok,
 	curr_ts->len = ts_len;
 	
 	/* Add this to the trie */
-	c_trie_add_data(symtab->trie, curr_ts->str, curr_ts);
+	*token_string_hash_get_ref(symtab->tsh, curr_ts->str) = curr_ts;
 	
 	/* Success! */
 	return 1;
@@ -2042,9 +1959,9 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
 	/* Allocate the c_trie. This may some day be serialized and
 	 * deserialized with the rest of the data, but for now keep things
 	 * simple. */
-	symtab->trie = c_trie_new();
-	if (symtab->trie == NULL) {
-		printf("Deserialization failed: Unable to allocate new c_trie\n");
+	symtab->tsh = token_string_hash_new();
+	if (symtab->tsh == NULL) {
+		printf("Deserialization failed: Unable to allocate new token string hash table\n");
 		goto FAIL;
 	}
 	

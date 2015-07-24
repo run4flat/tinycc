@@ -19,24 +19,24 @@
 #include "tcc.h"
 
 /*****************************************************************************/
-/*                              compressed trie                              */
+/*                            exsymtab_token_hash                            */
 /*****************************************************************************/
 
-struct compressed_trie {
-	unsigned long long filled_bits;
-	struct compressed_trie * children[1];
-};
-typedef struct compressed_trie c_trie;
+typedef struct token_string_hash_linked_list {
+	struct token_string_hash_linked_list * next;
+	void * data;
+	char name[1];
+} token_string_hash_linked_list;
 
-c_trie * c_trie_new();
-void c_trie_free(c_trie * curr);
-void * c_trie_get_data (c_trie * head, char * string);
-void c_trie_add_data (c_trie * head, char * string, void * data);
+typedef struct {
+	unsigned int N;
+	unsigned int N_buckets;
+	token_string_hash_linked_list ** buckets;
+} token_string_hash;
 
-unsigned char _c_trie_popcount (unsigned long long v);
-unsigned char _c_trie_bit_offset_for_char (char c);
-c_trie ** _c_trie_find_child (c_trie * current, char * string);
-c_trie** _c_trie_add_one_more_slot (c_trie** curr_p, c_trie * to_add, char slot_offset);
+token_string_hash * token_string_hash_new();
+void ** token_string_hash_get_ref(token_string_hash * tsh, const char * name);
+void token_string_hash_free(token_string_hash * tsh);
 
 /****************************************************************************/
 /*                                 ram hash                                 */
@@ -57,7 +57,7 @@ typedef struct {
 
 ram_hash * ram_hash_new();
 void ** ram_hash_get_ref(ram_hash * rh, void * old);
-void ** ram_hash_iterate(ram_hash * rh, void ** p_bypassed);
+void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data);
 void ram_hash_free(ram_hash * rh);
 
 /******************************************************************************/
@@ -73,7 +73,7 @@ typedef struct extended_symtab {
 		ram_hash * def_rh;
 		Sym * def_list;
 	};
-	c_trie * trie;
+	token_string_hash * tsh;
 	int tok_start;
 	int N_syms; /* zero for Sym collections stored in ram_hash */
 	int N_defs; /* zero for Sym collections stored in ram_hash */
@@ -104,7 +104,7 @@ Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh);
 int tokenstream_len (int * stream);
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start);
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab);
-LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, char * name);
+LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, const char * name);
 
 /* tcc_get_extended_tokensym declared in libtcc.h */
 /* tcc_get_extended_symbol declared in libtcc.h */
@@ -133,6 +133,6 @@ int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab);
 /*                      Extended Symbol Table Caching                        */
 /*****************************************************************************/
 
-/* tcc_set_extended_symbol is in libtcc.h; this assumes that the token exists in the trie */
+/* tcc_set_extended_symbol is in libtcc.h; this assumes that the token exists in the tsh */
 /* tcc_deserialize_extended_symtab declared in libtcc.h */
 /* tcc_serialize_extended_symtab declared in libtcc.h */
