@@ -558,6 +558,9 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh) {
 	 * a new Sym and add it to our hash table so it gets properly serialized
 	 * and/or cleaned up when we're done. */
 	to_return = *Sym_ref = tcc_mallocz(sizeof(Sym));
+/* XXX is this necessary and/or useful??? */
+//	if (old->v == SYM_FIELD) to_return->v = SYM_FIELD;
+//	else to_return->v = old->v & ~SYM_EXTENDED;
 	
 	/* Fill in the values, as appropriate. See notes under the symbol stack
 	 * copying for explanations. I suspect (highly) that this is only used in
@@ -1180,7 +1183,7 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 		if (from->type.ref->v & SYM_FIRST_ANOM) { \
 			/* Anonymous symbol; just copy it. */ \
 			to_type.ref = copy_extended_sym(symtab, from->type.ref, \
-				anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD))); \
+				/* ??? */ anon_sym++ | (from->type.ref->v & (SYM_STRUCT | SYM_FIELD))); \
 		} \
 		else if (from->type.ref->v == SYM_FIELD) { \
 			/* Anonymous symbol; just copy it. */ \
