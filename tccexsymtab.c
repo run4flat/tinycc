@@ -474,14 +474,19 @@ void copy_extended_symbols_to_exsymtab(TCCState *state) {
 	sym = &((ElfW(Sym) *)s->data)[sym_index];
 	name = s->link->data + sym->st_name;
 	while (strcmp("_etext", name) != 0) {
-		/* Copy the symbol's pointer into the hash_next field of the TokenSym */
-		TokenSym * ts = tcc_get_extended_tokensym(exsymtab, name);
-		if (ts == NULL) {
-			tcc_warning("Global symbol %s does not exist in extended symbol table; not copying\n",
-				name);
+		if (name[0] == 'L' && name[1] == '.') {
+			/* Skip constants */
 		}
 		else {
-			ts->hash_next = (void*)sym->st_value;
+			/* Copy the symbol's pointer into the hash_next field of the TokenSym */
+			TokenSym * ts = tcc_get_extended_tokensym(exsymtab, name);
+			if (ts == NULL) {
+				tcc_warning("Global symbol %s does not exist in extended symbol table; not copying\n",
+					name);
+			}
+			else {
+				ts->hash_next = (void*)sym->st_value;
+			}
 		}
 		/* Next iteration */
 		sym_index++;
