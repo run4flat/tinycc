@@ -617,13 +617,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
     int N_tokens = tok_ident - TOK_IDENT;
     /* Room for the first TokenSym is included in the struct definition, so I
      * need to allocate room for the extended symtab plus N_tokens - 1. */
-/*struct extended_symtab {
-	ram_hash * sym_rh;
-	c_trie * trie;
-	int tok_start;
-	TokenSym ** tokenSym_last;
-	TokenSym [1] tokenSym_list;
-     */
     
     extended_symtab * to_return = tcc_malloc(sizeof(extended_symtab)
 		+ sizeof(void*) * (N_tokens - 1));
