@@ -4,7 +4,7 @@ use warnings;
 # Simplifies the invocation of tests by number only
 my $cmd = shift;
 die "Command must be 'prove', 'test', or 'dbg'\n"
-	unless $cmd =~ /prove|test|dbg/;
+	unless $cmd =~ /prove|test|dbg|valgrind/;
 
 # I can either specify the test number or the whole file
 # name.

@@ -123,6 +123,7 @@ void token_string_hash_free(token_string_hash * tsh) {
 			curr_ll = tmp;
 		}
 	}
+	tcc_free(tsh->buckets);
 	tcc_free(tsh);
 }
 
@@ -388,6 +389,8 @@ void ram_hash_free(ram_hash * rh) {
 			curr = next;
 		} while(curr != NULL);
 	}
+	tcc_free(rh->buckets);
+	tcc_free(rh);
 }
 
 /******************************************************************************/
