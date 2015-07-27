@@ -1261,13 +1261,14 @@ LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * nam
 /* Write the total number of tokens that live on the end of this exsymtab, as
  * well as tok_start. */
 int exsymtab_serialize_init(extended_symtab * symtab, FILE * out_fh) {
-	int to_write[2];
+	int to_write[3];
 	to_write[0] = symtab->tokenSym_last - symtab->tokenSym_list; /* N_tokens */
 	to_write[1] = symtab->tok_start;
-	if (fwrite(to_write, sizeof(int), 2, out_fh) == 2) return 1;
+	to_write[2] = symtab->tok_start_offset;
+	if (fwrite(to_write, sizeof(int), 3, out_fh) == 3) return 1;
 	
 	/* Failed to serialize; write a message and return failure */
-	printf("Serialization failed: Unable to serialize the number of tokens and tok_start\n");
+	printf("Serialization failed: Unable to serialize the number of tokens, tok_start, and tok_start_offset\n");
 	return 0;
 }
 
@@ -1294,6 +1295,13 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh) {
 	/* deserialize tok_start */
 	if (fread(&(symtab->tok_start), sizeof(int), 1, in_fh) != 1) {
 		printf("Deserialization failed: Unable to get tok_start\n");
+		tcc_free(symtab);
+		return NULL;
+	}
+	
+	/* deserialize tok_start_offset */
+	if (fread(&(symtab->tok_start_offset), sizeof(int), 1, in_fh) != 1) {
+		printf("Deserialization failed: Unable to get tok_start_offset\n");
 		tcc_free(symtab);
 		return NULL;
 	}
