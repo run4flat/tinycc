@@ -100,7 +100,7 @@ PROVES =	\
 
 %.valgrind: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	valgrind --leak-check=yes ./$@ lib_path=$(top_srcdir); rm $@
+	valgrind --track-origins=yes --leak-check=yes ./$@ lib_path=$(top_srcdir); rm $@
 
 all test: $(TESTS)
 
