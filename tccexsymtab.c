@@ -713,14 +713,17 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
 				= get_new_symtab_pointer(curr_Sym->type.ref, sym_rh);
 		}
 		
-		/* Copy the c field, the "associated number." For functions, this is
-		 * one of FUNC_NEW, FUNC_OLD, or FUNC_ELLIPSIS. For structs, this is
-		 * the size (in bytes), and for struct members it is the byte offset
-		 * of the member, according to the end of struct_decl().
-		 * Line 5982 of tccgen.c seems to suggest that this needs to be
-		 * **negative** and we need VT_CONST in order to get external linkage.
-		 * However, it seems to work if I simply set it to zero for functions
-		 * and global variables, so I'm going with that. This almost certainly
+		/* Copy the c field, the "associated number." According to tcc-doc.texi
+		 * as well as the comments just above the definition of put_extern_sym2,
+		 * the c field will (for some Syms) point to an external symbol in an
+		 * associated section. But this is not true for all Syms. For structs,
+		 * this is the size (in bytes), and for struct members it is the byte
+		 * offset of the member, according to the end of struct_decl(). For
+		 * variable length arrays, this is "the location on the stack that holds
+		 * the runtime sizeof for the type." For functions, I believe this is
+		 * one of FUNC_NEW, FUNC_OLD, or FUNC_ELLIPSIS. At any rate, everything
+		 * seems to work if I simply set it to zero for functions and global
+		 * variables and copy it otherwise, so I'm going with that. This probably
 		 * needs to be more nuanced. */
 		if (btype == VT_FUNC || new_sym->r & (VT_SYM | VT_LVAL)) new_sym->c = 0;
 		else new_sym->c = curr_Sym->c;
