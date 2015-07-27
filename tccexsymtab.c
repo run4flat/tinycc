@@ -332,6 +332,7 @@ typedef struct {
 
 void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data) {
 	if (rh == NULL) return NULL;
+	if (rh->N == 0) return NULL;
 	
 	/* dereference the pointer they passed in */
 	rt_next_data * next_data = *p_next_data;
@@ -875,13 +876,15 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 		if (symtab->N_syms == 0) {
 			
 			/* Iterate through all Syms in the ram tree */
-			void * iterator_data = NULL;
-			do {
-				void ** data_ref = ram_hash_iterate(symtab->sym_rh, &iterator_data);
-				exsymtab_free_sym((Sym *)*data_ref, 0);
-				/* Clear the symbol itself */
-				tcc_free(*data_ref);
-			} while (iterator_data != NULL);
+			if (symtab->sym_rh->N > 0) {
+				void * iterator_data = NULL;
+				do {
+					void ** data_ref = ram_hash_iterate(symtab->sym_rh, &iterator_data);
+					exsymtab_free_sym((Sym *)*data_ref, 0);
+					/* Clear the symbol itself */
+					tcc_free(*data_ref);
+				} while (iterator_data != NULL);
+			}
 			
 			/* clean up the ram_hash itself */
 			ram_hash_free(symtab->sym_rh);
@@ -901,12 +904,14 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 	/* Perform identical steps for define Syms. */
 	if (symtab->def_list != NULL) {
 		if (symtab->N_defs == 0) {
-			void * iterator_data = NULL;
-			do {
-				void ** data_ref = ram_hash_iterate(symtab->def_rh, &iterator_data);
-				exsymtab_free_sym((Sym *)*data_ref, 1);
-				tcc_free(*data_ref);
-			} while (iterator_data != NULL);
+			if (symtab->def_rh->N > 0) {
+				void * iterator_data = NULL;
+				do {
+					void ** data_ref = ram_hash_iterate(symtab->def_rh, &iterator_data);
+					exsymtab_free_sym((Sym *)*data_ref, 1);
+					tcc_free(*data_ref);
+				} while (iterator_data != NULL);
+			}
 			ram_hash_free(symtab->def_rh);
 		}
 		else {
@@ -918,7 +923,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 		}
 	}
 	
-	/* Clear out the trie */
+	/* Clear out the token string hash table */
 	token_string_hash_free(symtab->tsh);
 	
 	/* Clear out the allocated TokenSym pointers */
