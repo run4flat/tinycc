@@ -149,10 +149,13 @@ void token_string_hash_free(token_string_hash * tsh) {
  * 
  */
 
+ram_hash_linked_list * ram_hash_get(ram_hash * rh, void * key);
 ram_hash * ram_hash_new() {
 	ram_hash * to_return = tcc_mallocz(sizeof(ram_hash));
 	to_return->N_buckets = 4;
 	to_return->buckets = tcc_mallocz(4*sizeof(ram_hash_linked_list));
+	/* Add entry for null pointer */
+	ram_hash_get(to_return, NULL)->value = NULL;
 	return to_return;
 }
 
@@ -849,7 +852,7 @@ void exsymtab_free_sym (Sym * to_delete, int is_def) {
 	if (to_delete == NULL) return;
 	if (is_def) {
 		/* If it's a define Sym, delete the token stream */
-/*		tcc_free(to_delete->d); XXX this causes segmentation faults :-( */
+		tcc_free(to_delete->d); /*XXX this causes segmentation faults :-( */
 	}
 	else {
 		/* otherwise, clear the assembler label */
