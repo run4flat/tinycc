@@ -1651,11 +1651,12 @@ ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 	ram_hash * offset_rt = ram_hash_new();
 	ram_hash * original_rt = symtab->sym_rh;
 	if (is_def) original_rt = symtab->def_rh;
-	uintptr_t N_syms = original_rt->N;
-	if (N_syms > 0) {
+	uintptr_t N_syms = 0;
+	if (original_rt->N > 0) {
 		/* Iterate through all Syms in the ram tree */
 		void * iterator_data = NULL;
 		do {
+			N_syms++;
 			/* Get the Sym pointer */
 			void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
 			Sym * to_count = (Sym *)*old_ref;
