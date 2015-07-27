@@ -74,9 +74,10 @@ typedef struct extended_symtab {
 		Sym * def_list;
 	};
 	token_string_hash * tsh;
-	int tok_start;
 	int N_syms; /* zero for Sym collections stored in ram_hash */
 	int N_defs; /* zero for Sym collections stored in ram_hash */
+	int tok_start;
+	int tok_start_offset;
 	TokenSym ** tokenSym_last;
 	TokenSym * tokenSym_list [1];
 } extended_symtab;
