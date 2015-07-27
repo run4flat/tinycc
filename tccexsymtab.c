@@ -971,25 +971,27 @@ TokenSym * get_extended_tokensym_for_extended_tok(int tok, extended_symtab * sym
 	tok &= ~(SYM_STRUCT | SYM_FIELD);
 	
 	int tok_start = symtab->tok_start;
+	TokenSym ** list = &symtab->tokenSym_list[0];
 	if (tok >= tok_start) {
 		/* Direct access for anything at or beyond tok_start */
-		return symtab->tokenSym_list[tok - tok_start + symtab->tok_start_offset];
+		return list[tok - tok_start + symtab->tok_start_offset];
 	}
 	
 	/* Earlier than tok_start requires a binary search */
 	int left = 0;
 	int right = symtab->tok_start_offset - 1;
-	while(left != right) {
+	if (list[left]->tok == tok) return list[left];
+	if (list[right]->tok == tok) return list[right];
+	while(left + 1 < right) {
 		int curr = (left + right) / 2;
-		if (symtab->tokenSym_list[curr]->tok == tok) {
-			return symtab->tokenSym_list[curr];
-		}
-		else if (symtab->tokenSym_list[curr]->tok < tok) {
-			left = curr;
-		}
+		if (list[curr]->tok == tok) return list[curr];
+		else if (list[curr]->tok < tok) left = curr;
 		else right = curr;
 	}
-	return symtab->tokenSym_list[right];
+	if (list[left]->tok == tok) return list[left];
+	if (list[right]->tok == tok) return list[right];
+	printf("Unable to find tok for extended tok %x!!!\n", tok);
+	return NULL;
 }
 
 void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym * to) {
