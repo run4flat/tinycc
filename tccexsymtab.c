@@ -1613,8 +1613,9 @@ int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i) {
 		return 1;
 	}
 	
-	/* Allocate memory for the assembler label length */
-	curr_sym->asm_label = tcc_malloc(asm_label_length);
+	/* Allocate memory for the assembler label length, INCLUDING an
+	 * extra byte for the null byte. */
+	curr_sym->asm_label = tcc_malloc(asm_label_length + 1);
 	if (curr_sym->asm_label == NULL) {
 		printf("Deserialization failed: Unable to allocate "
 			"memory for assembler label for Sym number %d\n", i);
@@ -1627,6 +1628,8 @@ int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i) {
 		tcc_free(curr_sym->asm_label);
 		return 0;
 	}
+	/* Add null byte */
+	curr_sym->asm_label[asm_label_length] = '\0';
 	
 	/* Success! */
 	return 1;
