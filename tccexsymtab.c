@@ -1643,20 +1643,21 @@ ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 	ram_hash * offset_rt = ram_hash_new();
 	ram_hash * original_rt = symtab->sym_rh;
 	if (is_def) original_rt = symtab->def_rh;
-	uintptr_t N_syms = 0;
-	/* Iterate through all Syms in the ram tree */
-	void * iterator_data = NULL;
-	do {
-		N_syms++;
-		/* Get the Sym pointer */
-		void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
-		Sym * to_count = (Sym *)*old_ref;
-		/* Get and set the data slot for the mapping. Note that I do
-		 * not allocate any memory for this, I merely treat the void*
-		 * as an integer via uintptr_t. */
-		void ** new_ref = ram_hash_get_ref(offset_rt, to_count);
-		*new_ref = (void*)N_syms; /* note 1-offset, not 0-offset */
-	} while (iterator_data != NULL);
+	uintptr_t N_syms = original_rt->N;
+	if (N_syms > 0) {
+		/* Iterate through all Syms in the ram tree */
+		void * iterator_data = NULL;
+		do {
+			/* Get the Sym pointer */
+			void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
+			Sym * to_count = (Sym *)*old_ref;
+			/* Get and set the data slot for the mapping. Note that I do
+			 * not allocate any memory for this, I merely treat the void*
+			 * as an integer via uintptr_t. */
+			void ** new_ref = ram_hash_get_ref(offset_rt, to_count);
+			*new_ref = (void*)N_syms; /* note 1-offset, not 0-offset */
+		} while (iterator_data != NULL);
+	}
 	
 	/* We now know the number of Syms that will be written out, and we
 	 * have a mapping from current address to serialized offset. */
@@ -1667,19 +1668,21 @@ ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh,
 		goto FAIL;
 	}
 	
-	/* Write out the contents of each Sym in the order set by the original
-	 * ram_hash iterator. */
-	iterator_data = NULL;
-	do {
-		/* Get the Sym pointer */
-		void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
-		Sym * to_serialize = (Sym *)*old_ref;
-		/* Call the appropriate serialization function */
-		int result = is_def ? exsymtab_serialize_def(out_fh, to_serialize, offset_rt)
-			: exsymtab_serialize_sym(out_fh, to_serialize, offset_rt);
-		/* bow out early if bad things happened */
-		if (result == 0) goto FAIL;
-	} while (iterator_data != NULL);
+	if (N_syms > 0) {
+		/* Write out the contents of each Sym in the order set by the original
+		 * ram_hash iterator. */
+		void * iterator_data = NULL;
+		do {
+			/* Get the Sym pointer */
+			void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
+			Sym * to_serialize = (Sym *)*old_ref;
+			/* Call the appropriate serialization function */
+			int result = is_def ? exsymtab_serialize_def(out_fh, to_serialize, offset_rt)
+				: exsymtab_serialize_sym(out_fh, to_serialize, offset_rt);
+			/* bow out early if bad things happened */
+			if (result == 0) goto FAIL;
+		} while (iterator_data != NULL);
+	}
 	
 	/* All done, return the offset ram_hash */
 	return offset_rt;
@@ -1700,7 +1703,7 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh,
 		return 0;
 	}
 	/* Allocate the sym_list array. */
-	Sym * new_list = tcc_mallocz(sizeof(Sym) * N_syms);
+	Sym * new_list = tcc_mallocz(sizeof(Sym) * (N_syms ? N_syms : 1));
 	if (new_list == NULL) {
 		printf("Deserialization failed: Unable to allocate array to "
 			"hold %d Syms\n", N_syms);
@@ -1708,9 +1711,11 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh,
 	}
 	
 	int i;
+	/* Corner case: if zero, set internal value of N_syms to 1 so that
+	 * deallocation will work correctly. */
 	if (is_def) {
 		symtab->def_list = new_list;
-		symtab->N_defs = N_syms;
+		symtab->N_defs = N_syms ? N_syms : 1;
 		/* Deserialize each def. */
 		for (i = 0; i < N_syms; i++) {
 			if (!exsymtab_deserialize_def(in_fh, new_list, i)) return 0;
@@ -1718,7 +1723,7 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh,
 	}
 	else {
 		symtab->sym_list = new_list;
-		symtab->N_syms = N_syms;
+		symtab->N_syms = N_syms ? N_syms : 1;
 		/* Deserialize each sym. */
 		for (i = 0; i < N_syms; i++) {
 			if (!exsymtab_deserialize_sym(in_fh, new_list, i)) return 0;
