@@ -967,32 +967,45 @@ int tokenstream_len (int * stream) {
 	return len + 1;
 }
 
-TokenSym * get_extended_tokensym_for_extended_tok(int tok, extended_symtab * symtab) {
+/* Figures out the local token id for a given extended token id. If the given
+ * token id is below tok_start, then it is known to exist in all compiler
+ * contexts and so it is simply returned. If the token id is equal to or above
+ * tok_start, this obtains a pointer to a local TokenSym and returns that
+ * TokenSym's token id, together with the flags of the origina, extended token id. */
+int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab) {
+	int tok_start = symtab->tok_start;
+	int orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD);      /* strip flags  */
+	
+	/* special case for ordinary tokens that exist in all compiler contexts,
+	 * including "data", "string", and others. */
+	if (orig_tok_no_fields < tok_start) return orig_tok;
+	
+	/* figure out the offset of the extended tokensym */
+	int tok_start_offset = symtab->tok_start_offset;
+	int orig_tok_offset = orig_tok_no_fields - tok_start + tok_start_offset;
+	
+	TokenSym* orig_ts = symtab->tokenSym_list[orig_tok_offset];         /* get ext ts   */
+	TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab); /* get local ts */
+	return local_ts->tok | (orig_tok & (SYM_STRUCT | SYM_FIELD));       /* add flags    */
+}
+
+/* Figures out the local TokenSym for a given extended token id. Uses
+ * get_local_ts_for_extended_ts to generate a new local TokenSym if necessary. */
+TokenSym * get_local_tokensym_for_extended_tok(int tok, extended_symtab * symtab) {
 	/* Clear out extraneous flags */
-	int mask = ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED);
-	tok &= mask;
+	tok &= ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED);
 	
 	int tok_start = symtab->tok_start;
-	TokenSym ** list = &symtab->tokenSym_list[0];
 	if (tok >= tok_start) {
-		/* Direct access for anything at or beyond tok_start */
-		return list[tok - tok_start + symtab->tok_start_offset];
+		/* This is easy because (1) we know exactly how to compute the TokenSym's
+		 * array offset and (2) we have a function that'll create a local TokenSym
+		 * if one isn't already available. */
+		TokenSym * from_ts = symtab->tokenSym_list[tok - tok_start + symtab->tok_start_offset];
+		return get_local_ts_for_extended_ts(from_ts, symtab);
 	}
 	
-	/* Earlier than tok_start requires a binary search */
-	int left = 0;
-	int right = symtab->tok_start_offset - 1;
-	if ((list[left]->tok & mask) == tok) return list[left];
-	if ((list[right]->tok & mask) == tok) return list[right];
-	while(left + 1 < right) {
-		int curr = (left + right) / 2;
-		int curr_tok = list[curr]->tok & mask;
-		if (curr_tok == tok) return list[curr];
-		else if (curr_tok < tok) left = curr;
-		else right = curr;
-	}
-	printf("Unable to find tok for extended tok %x!!!\n", tok);
-	return NULL;
+	/* And if it's earlier than tok_start, we can directly access the table_ident. */
+	return table_ident[tok - TOK_IDENT];
 }
 
 void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym * to) {
@@ -1100,8 +1113,7 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 			curr_from_arg = curr_from_arg->next
 		) {
 			/* Get local TokenSym associated with curr_from_arg */
-			TokenSym * orig_ts = get_extended_tokensym_for_extended_tok(curr_from_arg->v, symtab);
-			TokenSym * local_ts = get_local_ts_for_extended_ts(orig_ts, symtab);
+			TokenSym * local_ts = get_local_tokensym_for_extended_tok(curr_from_arg->v, symtab);
 			/* Add the argument to the local define stack and move the chains */
 			newest_arg = sym_push2(&define_stack, local_ts->tok | SYM_FIELD,
 				curr_from_arg->type.t, 0);
@@ -1134,34 +1146,13 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 		} \
 		else { \
 			/* Not anonymous: get the tokensym */ \
-			TokenSym* orig_ts = get_extended_tokensym_for_extended_tok(from->type.ref->v, symtab); \
-			/* Get the local for the just-found tokensym */ \
-			TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab); \
+			TokenSym* local_ts = get_local_tokensym_for_extended_tok(from->type.ref->v, symtab); \
 			if (btype == VT_STRUCT) to_type.ref = local_ts->sym_struct; \
 			else to_type.ref = local_ts->sym_identifier; \
 		} \
 	} \
 	else to_type.ref = NULL; \
 } while(0)
-
-/* Gets a local TokenSym pointer for a given extended TokenSym of the given tok,
- * and adds the extended tok's flags to the local tok's id. */
-int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab) {
-	int tok_start = symtab->tok_start;
-	int orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD);      /* strip flags  */
-	
-	/* special case for ordinary tokens that exist in all compiler contexts,
-	 * including "data", "string", and others. */
-	if (orig_tok_no_fields < tok_start) return orig_tok;
-	
-	/* figure out the offset of the extended tokensym */
-	int tok_start_offset = symtab->tok_start_offset;
-	int orig_tok_offset = orig_tok_no_fields - tok_start + tok_start_offset;
-	
-	TokenSym* orig_ts = symtab->tokenSym_list[orig_tok_offset];         /* get ext ts   */
-	TokenSym* local_ts = get_local_ts_for_extended_ts(orig_ts, symtab); /* get local ts */
-	return local_ts->tok | (orig_tok & (SYM_STRUCT | SYM_FIELD));       /* add flags    */
-}
 
 Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok) {
 	if (from == NULL) return NULL;
@@ -1205,23 +1196,11 @@ Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok) {
 			return s;
 		}
 		
-		/* Figure out the new token. This can be from's token if the token
-		 * exists in all compiler contexts. Such tokens include "data",
-		 * "string", and others; assume this until proven otherwise. */
-		int new_tok = from_next->v;
-		int from_tok_no_fields = from_next->v & ~(SYM_STRUCT | SYM_FIELD);
-		int tok_start = symtab->tok_start;
-		if (from_tok_no_fields >= tok_start) {
-			/* figure out the offset of the extended tokensym */
-			int from_tok_offset = from_tok_no_fields - tok_start + symtab->tok_start_offset;
-			TokenSym* from_ts = symtab->tokenSym_list[from_tok_offset];         /* get ext ts   */
-			TokenSym* local_ts = get_local_ts_for_extended_ts(from_ts, symtab); /* get local ts */
-			new_tok = local_ts->tok | (from_next->v & (SYM_STRUCT | SYM_FIELD));       /* add flags    */
-		}
 		
 		/* Push a copy of the Sym to the local symbol stack. */
 		CType new_next_type;
 		copy_ctype(new_next_type, from_next, symtab);
+		int new_tok = get_local_tok_for_extended_tok(from_next->v, symtab);
 		*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
 		
 		/* Cycle the pointers. */
