@@ -889,7 +889,8 @@ LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab * symtab) {
 	int i;
 	for (i = 0; i < symtab->tok_start_offset; i++) {
 		TokenSym * ext_ts = symtab->tokenSym_list[i];
-		TokenSym * local_ts = table_ident[ext_ts->tok - TOK_IDENT];
+		int flagless_tok = ext_ts->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED | SYM_FIRST_ANOM);
+		TokenSym * local_ts = table_ident[flagless_tok - TOK_IDENT];
 		/* Skip if we've already copied something for this TokenSym from another
 		 * extended symbol table, since it'll never get looked up in this
 		 * extended symbol table. */
