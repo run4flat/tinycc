@@ -969,7 +969,8 @@ int tokenstream_len (int * stream) {
 
 TokenSym * get_extended_tokensym_for_extended_tok(int tok, extended_symtab * symtab) {
 	/* Clear out extraneous flags */
-	tok &= ~(SYM_STRUCT | SYM_FIELD);
+	int mask = ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED);
+	tok &= mask;
 	
 	int tok_start = symtab->tok_start;
 	TokenSym ** list = &symtab->tokenSym_list[0];
@@ -981,16 +982,15 @@ TokenSym * get_extended_tokensym_for_extended_tok(int tok, extended_symtab * sym
 	/* Earlier than tok_start requires a binary search */
 	int left = 0;
 	int right = symtab->tok_start_offset - 1;
-	if (list[left]->tok == tok) return list[left];
-	if (list[right]->tok == tok) return list[right];
+	if ((list[left]->tok & mask) == tok) return list[left];
+	if ((list[right]->tok & mask) == tok) return list[right];
 	while(left + 1 < right) {
 		int curr = (left + right) / 2;
-		if (list[curr]->tok == tok) return list[curr];
-		else if (list[curr]->tok < tok) left = curr;
+		int curr_tok = list[curr]->tok & mask;
+		if (curr_tok == tok) return list[curr];
+		else if (curr_tok < tok) left = curr;
 		else right = curr;
 	}
-	if (list[left]->tok == tok) return list[left];
-	if (list[right]->tok == tok) return list[right];
 	printf("Unable to find tok for extended tok %x!!!\n", tok);
 	return NULL;
 }
