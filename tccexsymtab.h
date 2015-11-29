@@ -78,6 +78,8 @@ typedef struct extended_symtab {
 	int N_defs; /* zero for Sym collections stored in ram_hash */
 	int tok_start;
 	int tok_start_offset;
+	int N_inline_funcs; /* XXX working here - set to null on allocation, etc */
+	InlineFunc ** inline_funcs;
 	TokenSym ** tokenSym_last;
 	TokenSym * tokenSym_list [1];
 } extended_symtab;
@@ -102,7 +104,8 @@ void copy_extended_symbols_to_exsymtab(TCCState *state);
 
 Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh);
 Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh);
-int tokenstream_len (int * stream);
+int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab);
+#define tokenstream_len(stream) tokenstream_copy(stream, 0, 0)
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start);
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab);
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, const char * name);
@@ -124,7 +127,6 @@ void local_stack_off();
 void local_stack_on();
 ST_FUNC TokenSym** symtab_tok_find(const char *str, int len); /* in tccpp.c */
 TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, extended_symtab* orig_symtab);
-int tokenstream_len (int * stream);
 Sym * copy_extended_sym (extended_symtab* symtab, Sym * from, int to_tok);
 void copy_extended_tokensym (extended_symtab* symtab, TokenSym * from, TokenSym * to);
 void copy_ctype(CType * to_type, Sym * from, extended_symtab*symtab);

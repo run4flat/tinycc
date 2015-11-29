@@ -30,6 +30,7 @@ TESTS =	\
  35-two-contexts-vtable-share.test \
  36-two-contexts-typedef-share.test \
  40-two-contexts-func-decl-share.test \
+ 41-two-contexts-inline-func-share.test \
  42-three-contexts-func-share.test \
  47-many-consuming-contexts-func-share.test \
  48-many-consuming-contexts-delete.test \
@@ -45,7 +46,8 @@ TESTS =	\
  81-cache-struct.test \
  82-cache-func-decl.test \
  83-cache-func-decl-with-args.test \
- 84-cache-func-decl-with-pointer-args.test
+ 84-cache-func-decl-with-pointer-args.test \
+ 85-cache-inline-func.test
 
 # 02-ram_tree.prove 
 PROVES =	\
@@ -61,6 +63,7 @@ PROVES =	\
  35-two-contexts-vtable-share.prove \
  36-two-contexts-typedef-share.prove \
  40-two-contexts-func-decl-share.prove \
+ 41-two-contexts-inline-func-share.prove \
  42-three-contexts-func-share.prove \
  47-many-consuming-contexts-func-share.prove \
  48-many-consuming-contexts-delete.prove \
@@ -76,7 +79,8 @@ PROVES =	\
  81-cache-struct.prove \
  82-cache-func-decl.prove \
  83-cache-func-decl-with-args.prove \
- 84-cache-func-decl-with-pointer-args.prove
+ 84-cache-func-decl-with-pointer-args.prove \
+ 85-cache-inline-func.prove
 
 # some tests do not pass on all platforms, remove them for now
 #ifeq ($(TARGETOS),Darwin)
@@ -88,7 +92,7 @@ PROVES =	\
 
 %.prove: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	prove -v --exec '' ./$@ :: lib_path=$(top_srcdir); rm $@
+	prove --exec '' ./$@ :: lib_path=$(top_srcdir); rm $@
 
 %.test: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)

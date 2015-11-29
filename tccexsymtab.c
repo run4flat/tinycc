@@ -764,6 +764,39 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start) {
      * last element. */
     to_return->tokenSym_last = to_return->tokenSym_list + N_tokens;
     
+    /* Copy the collection of inline functions */
+    if (s->nb_inline_fns > 0) {
+		/* make room for the number of inline functions */
+		int N = s->nb_inline_fns;
+		to_return->N_inline_funcs = N;
+		to_return->inline_funcs = tcc_malloc(N * sizeof(InlineFunc*));
+		
+		InlineFunc* new_func;
+		InlineFunc* old_func;
+		/* Copy each inline function verbatim. Based on the behavior of
+		 * get_new_deftab_pointer, I do not need to update any token ids.
+		 */
+		for (i = 0; i < s->nb_inline_fns; i++) {
+			old_func = s->inline_fns[i];
+			
+			new_func = tcc_malloc(sizeof *new_func + strlen(old_func->filename));
+			strcpy(new_func->filename, old_func->filename);
+			new_func->sym = get_new_symtab_pointer(old_func->sym, sym_rh);
+			
+			/* Copy the token stream, WITHOUT replacement (see copy_extended_tokensym
+			 * for contrast) */
+			int ts_len = tokenstream_len(old_func->token_str);
+			new_func->token_str = tcc_malloc(ts_len * sizeof(int));
+			memcpy(new_func->token_str, old_func->token_str, ts_len * sizeof(int));
+			
+			to_return->inline_funcs[i] = new_func;
+		}
+	}
+	else {
+		to_return->inline_funcs = 0;
+		to_return->N_inline_funcs = 0;
+	}
+    
 	/* Store the extended symtab */
 	s->exsymtab = to_return;
 }
@@ -850,6 +883,16 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab) {
 		ts_to_delete++;
 	}
 	
+	/* Clear out the inline functions */
+	if (symtab->inline_funcs) {
+		int i;
+		for (i = 0; i < symtab->N_inline_funcs; i++) {
+			tcc_free(symtab->inline_funcs[i]->token_str);
+			tcc_free(symtab->inline_funcs[i]);
+		}
+		tcc_free(symtab->inline_funcs);
+	}
+	
 	/* Clear out the full memory allocation. */
 	tcc_free(symtab);
 }
@@ -922,8 +965,29 @@ void local_stack_on() {
  * TOK_STR, or TOK_LSTR, then the next few bytes are a CString struct (mostly
  * filled with NULLs) followed by the associated character string. It gets
  * complicated, but has only a handful of special cases to handle. The formats
- * of the stream are codified in tok_str_add2, which is defined in tccpp.c. */
-int tokenstream_len (int * stream) {
+ * of the stream are codified in tok_str_add2, which is defined in tccpp.c.
+ * 
+ * This function returns the length of a tokenstream, including the final
+ * null. If it is given a target tokenstream, it assumes that the
+ * contents of the original have already been copied to the target
+ * using memcpy, in which case it updates the token ids for arbitrary
+ * tokens (function names, variable names, etc). Using the macro for
+ * tokenstream_len defined in tccexsymtab.h, proper usage is:
+ * 
+ *   int len = tokenstream_len (stream_to_copy); // implicitly calls tokenstream_copy
+ *   int * new = malloc(len * sizeof(int));
+ *   memcpy(new, stream_to_copy, len * sizeof(int));
+ *   tokenstream_copy(stream_to_copy, new, symtab);
+ * 
+ * Note that the final symtab pointer is the symtab associated with the
+ * input stream, not the output stream.
+ */
+int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab) {
+	/* handle dumb user edge cases: either both to_stream and symtab
+	 * are null, or they are both specified. */
+	if (to_stream == 0) symtab = 0;
+	if (symtab == 0) to_stream = 0;
+	
 	int len = 0;
 	while(stream[len] != 0) {
 		/* One for the type */
@@ -938,6 +1002,12 @@ int tokenstream_len (int * stream) {
 					CString *cstr = (CString *)(stream + len);
 					/* Note this right shift assumes 32 bit integers */
 					len += (sizeof(CString) + cstr->size + 3) >> 2;
+					/* If copying, then one might naively expect that I
+					 * should set up cstr to be usable for later
+					 * preprocessor expansions. See tok_str_add2 in
+					 * tccpp.c for details. However, since the memcpy
+					 * which was presumably performed prior to calling
+					 * this function already did that! So I'm done. */
 				}
 				break;
 			case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
@@ -958,6 +1028,17 @@ int tokenstream_len (int * stream) {
 				break;
 			
 			default:
+				if (to_stream && stream[len] >= symtab->tok_start) {
+					/* This is the case for an arbitrary token. Get a local
+					 * token and replace the token stream's value with the
+					 * local token's tok id. */
+					int from_tok = stream[len] & ~SYM_EXTENDED;
+					to_stream[len] = get_local_tok_for_extended_tok(from_tok, symtab);
+				}
+				/* Any token value less than tok_start refers to a value in
+				 * the symbol table that is pre-defined, such as the C
+				 * language key words (struct, case) and the ASCII letters. */
+				
 				/* Default is a single token (integer), which doesn't require
 				 * any additional bytes. So do nothing. */
 				break;
@@ -1028,6 +1109,33 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 	to->sym_struct = copy_extended_sym(symtab, from->sym_struct, to->tok);
 	to->sym_identifier = copy_extended_sym(symtab, from->sym_identifier, to->tok);
 	
+	/***** token stream if it's an inline function *****/
+	if (from->sym_identifier && (from->sym_identifier->type.t & VT_INLINE)) {
+		int i;
+		InlineFunc* new_func;
+		InlineFunc* old_func;
+		/* Find the associated inline func, copy its contents, add to
+		 * current context's collection of inline functions */
+		for (i = 0; i < symtab->N_inline_funcs; i++) {
+			old_func = symtab->inline_funcs[i];
+			if (old_func->sym != from->sym_identifier) continue;
+			
+			new_func = tcc_malloc(sizeof *new_func + strlen(old_func->filename));
+			strcpy(new_func->filename, old_func->filename);
+			new_func->sym = to->sym_identifier;
+			
+			/* Copy the token stream, WITH replacement (see copy_extended_symtab
+			 * for contrast) */
+			int ts_len = tokenstream_len(old_func->token_str);
+			new_func->token_str = tcc_malloc(ts_len * sizeof(int));
+			memcpy(new_func->token_str, old_func->token_str, ts_len * sizeof(int));
+			tokenstream_copy(old_func->token_str, new_func->token_str, symtab);
+			
+			/* Add to the list */
+			dynarray_add((void ***)&tcc_state->inline_fns, &tcc_state->nb_inline_fns, new_func);
+		}
+	}
+	
 	/***** sym_define copy *****/
 	/* There may be no sym_define, or it may have been undef'd. Note that
 	 * something which is just defined (and subsequently used in #ifdef
@@ -1043,67 +1151,13 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 	 * referring to barewords so that they refer to tokens in the current
 	 * compilation context rather than the original extended symbol table. */
 	else {
-		/* Get the length and copy the original */
+		/* Copy the token stream, WITH replacement */
 		int * from_stream = from->sym_define->d;
 		int len = tokenstream_len(from_stream);
 		int * to_stream = tcc_malloc(sizeof(int) * len);
 		memcpy(to_stream, from_stream, sizeof(int) * len);
-		int tok_start = symtab->tok_start;
+		tokenstream_copy(from_stream, to_stream, symtab);
 		
-		/* Update TokenSym references to point to TokenSyms in the current
-		 * compiler context. Most of this code involves stepping over the other
-		 * possible elements of the token stream. See tokenstream_len for
-		 * details. */
-		for (len = 0; from_stream[len] != 0;len++) {
-			switch(from_stream[len]) {
-				case TOK_CINT: case TOK_CUINT: case TOK_CCHAR:
-				case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
-					/* Skip the next stream value */
-					len++;
-					break;
-				case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
-				{
-					CString *cstr = (CString *)(from_stream + len + 1);
-					/* Note this right shift assumes 32 bit integers */
-					len += (sizeof(CString) + cstr->size + 3) >> 2;
-					/* Naively, I should set up cstr to be usable for later
-					 * preprocessor expansions. See tok_str_add2 in tccpp.c
-					 * for details. However, the memcpy performed above
-					 * already did that! So I'm done. */
-					break;
-				}
-				case TOK_CDOUBLE: case TOK_CLLONG: case TOK_CULLONG:
-			#if LDOUBLE_SIZE == 8
-				case TOK_CLDOUBLE:
-			#endif
-					len += 2;
-					break;
-			#if LDOUBLE_SIZE == 12
-				case TOK_CLDOUBLE:
-					len += 3;
-			#elif LDOUBLE_SIZE == 16
-				case TOK_CLDOUBLE:
-					len += 4;
-			#elif LDOUBLE_SIZE != 8
-			#error add long double size support
-			#endif
-					break;
-				default:
-					if (from_stream[len] >= tok_start) {
-						/* This is the case for an arbitrary token. Get a local
-						 * token and replace the token stream's value with the
-						 * local token's tok id. */
-						int from_tok = from_stream[len] & ~SYM_EXTENDED;
-						to_stream[len] = get_local_tok_for_extended_tok(from_tok, symtab);
-					}
-					/* Any token value less than tok_start refers to a value in
-					 * the symbol table that is pre-defined, such as the C
-					 * language key words (struct, case) and the ASCII letters. */
-					
-					
-					break;
-			}
-		}
 		/* We have copied the token stream, but we still need to copy the
 		 * argument list (for macro functions). */
 		Sym *first_arg, *curr_from_arg, *newest_arg, **p_curr_arg;
@@ -1835,6 +1889,221 @@ int exsymtab_deserialize_tokensyms(extended_symtab * symtab, FILE * in_fh) {
 	return 1;
 }
 
+/**** Serialize/deserialize an inline function filename ****/
+
+/* Serialize the filename length (not including null) and its contents */
+int exsymtab_serialize_inline_func_filename(FILE * out_fh,
+	InlineFunc * curr_func)
+{
+	int len = strlen(curr_func->filename);
+	if (fwrite(&len, sizeof(int), 1, out_fh) != 1) {
+		printf("Serialization failed: Unable to write filename "
+			"length for inline function associated with "
+			"Sym %d\n", curr_func->sym->v);
+		return 0;
+	}
+	
+	if (fwrite(curr_func->filename, sizeof(char), len, out_fh) == len)
+		return 1;
+	
+	/* Failed */
+	printf("Serialization failed: Unable to write filename for inline "
+		"function associated with Sym %d\n", curr_func->sym->v);
+	return 0;
+}
+
+/* Deserialize the filename length, allocate the InlineFunc struct with
+ * enough room for the filename, and deserialize the filename. */
+InlineFunc * exsymtab_deserialize_inline_func_filename(FILE * in_fh,
+	int inline_offset)
+{
+	int len;
+	if (fread(&len, sizeof(int), 1, in_fh) != 1) {
+		printf("Deserialization failed: Unable to get length "
+			"of filename for Inline function number %d\n", inline_offset);
+		return NULL;
+	}
+	
+	InlineFunc * to_return = tcc_mallocz(sizeof(InlineFunc) + len);
+	if (to_return == NULL) {
+		printf("Deserialization failed: Unable to allocate memory for "
+			"Inline function number %d\n", inline_offset);
+		return NULL;
+	}
+	
+	if (fread(to_return->filename, sizeof(char), len, in_fh) == len)
+		return to_return;
+	
+	/* Failed */
+	printf("Deserialization failed: Unable to get filename for "
+		"Inline function number %d\n", inline_offset);
+	return NULL;
+}
+
+/**** Serialize/deserialize an inline function Sym ****/
+/* see exsymtab_serialize_tokensym and exsymtab_deserialize_tokensym for
+ * similar logic */
+
+int exsymtab_serialize_inline_func_sym(FILE * out_fh,
+	InlineFunc * curr_func, ram_hash * sym_offset_rt)
+{
+	/* Of course, serialize the sym offset, not the sym itself */
+	void * sym_offset = *ram_hash_get_ref(sym_offset_rt, curr_func->sym);
+	if (fwrite(&sym_offset, sizeof(void*), 1, out_fh) != 1) {
+		printf("Serialization failed: Unable to write sym offset "
+			"for inline function associated with Sym %d\n",
+			curr_func->sym->v);
+		return 0;
+	}
+	/* Success! */
+	return 1;
+	
+}
+
+int exsymtab_deserialize_inline_func_sym(FILE * in_fh, int inline_offset,
+	InlineFunc * curr_func, extended_symtab * symtab)
+{
+	uintptr_t offset;
+	if (fread(&offset, sizeof(void*), 1, in_fh) != 1) {
+		printf("Deserialization failed: Unable to get sym offset for "
+			"Inline function number %d\n", inline_offset);
+		return 0;
+	}
+	
+	/* offsets are always off by one so that they are nonzero */
+	curr_func->sym = symtab->sym_list + offset - 1;
+	
+	return 1;
+}
+
+/**** Serialize/deserialize an inline function token stream ****/
+
+int exsymtab_serialize_inline_func_token_stream(FILE * out_fh,
+	InlineFunc * curr_func)
+{
+	int len = tokenstream_len(curr_func->token_str);
+	if (fwrite(&len, sizeof(int), 1, out_fh) != 1) {
+		printf("Serialization failed: Unable to write token stream "
+			"length for inline function associated with Sym %d\n",
+			curr_func->sym->v);
+		return 0;
+	}
+	
+	if (fwrite(curr_func->token_str, sizeof(int), len, out_fh) == len)
+		return 1;
+	
+	printf("Serialization failed: Unable to write token stream for "
+		"for inline function associated with Sym %d\n", curr_func->sym->v);
+	return 0;
+}
+
+int exsymtab_deserialize_inline_func_token_stream(FILE * in_fh,
+	int inline_offset, InlineFunc * curr_func)
+{
+	int len;
+	if (fread(&len, sizeof(int), 1, in_fh) != 1) {
+		printf("Deserialization failed: Unable to get token stream "
+			"length for Inline function number %d\n", inline_offset);
+		return 0;
+	}
+	
+	int * stream = tcc_malloc(sizeof(int) * len);
+	if (stream == NULL) {
+		printf("Deserialization failed: Unable to allocate memory for "
+			"token stream for Inline function number %d\n", inline_offset);
+		return 0;
+	}
+	
+	if (fread(stream, sizeof(int), len, in_fh) != len) {
+		tcc_free(stream);
+		printf("Deserialization failed: Unable to get token stream for "
+			"Inline function number %d\n", inline_offset);
+		return 0;
+	}
+	
+	curr_func->token_str = stream;
+	return 1;
+}
+
+/**** Serialize/deserialize an inline function ****/
+
+int exsymtab_serialize_inline_func(FILE * out_fh, InlineFunc * curr_func,
+	ram_hash * sym_offset_rt)
+{
+	if (exsymtab_serialize_inline_func_filename(out_fh, curr_func)
+		&& exsymtab_serialize_inline_func_sym(out_fh, curr_func, sym_offset_rt)
+		&& exsymtab_serialize_inline_func_token_stream(out_fh, curr_func)
+	)	return 1;
+	
+	return 0;
+}
+
+InlineFunc *  exsymtab_deserialize_inline_func(FILE * in_fh,
+	int inline_offset, extended_symtab * symtab)
+{
+	InlineFunc * to_return = exsymtab_deserialize_inline_func_filename(in_fh, inline_offset);
+	if (to_return == NULL) return NULL;
+	
+	if (exsymtab_deserialize_inline_func_sym(in_fh, inline_offset,
+		to_return, symtab) == 0) goto FAIL;
+	
+	if (exsymtab_deserialize_inline_func_token_stream(in_fh, inline_offset,
+		to_return) == 1) return to_return;
+	
+FAIL:
+	tcc_free(to_return);
+	return NULL;
+}
+
+/**** Serialize/deserialize all inline functions ****/
+
+int exsymtab_serialize_inline_funcs(extended_symtab * symtab, FILE * out_fh,
+	ram_hash * sym_offset_rt)
+{
+	/* serialize the number of inline functions */
+	if (fwrite(&symtab->N_inline_funcs, sizeof(symtab->N_inline_funcs),
+		1, out_fh) != 1)
+	{
+		printf("Serialization failed: Unable to serialize the number "
+			"of inline functions\n");
+		return 0;
+	}
+	
+	int i;
+	for (i = 0; i < symtab->N_inline_funcs; i++) {
+		if (!exsymtab_serialize_inline_func(out_fh,
+			symtab->inline_funcs[i], sym_offset_rt)) return 0;
+	}
+	
+	return 1;
+}
+
+int exsymtab_deserialize_inline_funcs(extended_symtab * symtab, FILE * in_fh) {
+	int len, i;
+	if (fread(&len, sizeof(int), 1, in_fh) != 1) {
+		printf("Deserialization failed: Unable to get number of inline "
+			"functions\n");
+		return 0;
+	}
+	
+	InlineFunc ** inline_funcs = tcc_malloc(sizeof(InlineFunc *) * len);
+	if (inline_funcs == NULL) {
+		printf("Deserialization failed: Unable to allocate memory for "
+			"Inline function list\n");
+		return 0;
+	}
+	
+	for (i = 0; i < len; i++) {
+		inline_funcs[i] = exsymtab_deserialize_inline_func(in_fh, i,
+			symtab);
+		if (inline_funcs[i] == NULL) return 0;
+	}
+	
+	return 1;
+}
+
+/**** Serialize/deserialize full symtab ****/
+
 LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char * output_filename) {
     /* Do nothing if we have an empty symtab. */
     if (NULL == symtab) return 0;
@@ -1861,6 +2130,10 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
 	if (!exsymtab_serialize_tokensyms(symtab, out_fh, sym_offset_rt,
 		def_offset_rt)
 	) goto FAIL_RT;
+	
+	/* serialize the inline functions */
+	if (!exsymtab_serialize_inline_funcs(symtab, out_fh, sym_offset_rt))
+		goto FAIL_RT;
 	
 	/* All set! */
 	ram_hash_free(sym_offset_rt);
@@ -1899,10 +2172,11 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
 		goto FAIL;
 	}
 	
-	/* load the Syms and TokenSyms */
+	/* load the Syms, TokenSyms, and inline functions */
 	if (!exsymtab_deserialize_syms(symtab, in_fh, 0)) goto FAIL;
 	if (!exsymtab_deserialize_syms(symtab, in_fh, 1)) goto FAIL;
 	if (!exsymtab_deserialize_tokensyms(symtab, in_fh)) goto FAIL;
+	if (!exsymtab_deserialize_inline_funcs(symtab, in_fh)) goto FAIL;
 	
 	/* All set! */
 	return symtab;
