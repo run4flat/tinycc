@@ -1032,12 +1032,12 @@ int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab) {
 				break;
 			
 			default:
-				if (to_stream && stream[len] >= symtab->tok_start) {
+				if (to_stream && stream[len-1] >= symtab->tok_start) {
 					/* This is the case for an arbitrary token. Get a local
 					 * token and replace the token stream's value with the
 					 * local token's tok id. */
-					int from_tok = stream[len] & ~SYM_EXTENDED;
-					to_stream[len] = get_local_tok_for_extended_tok(from_tok, symtab);
+					int from_tok = stream[len-1] & ~SYM_EXTENDED;
+					to_stream[len-1] = get_local_tok_for_extended_tok(from_tok, symtab);
 				}
 				/* Any token value less than tok_start refers to a value in
 				 * the symbol table that is pre-defined, such as the C
