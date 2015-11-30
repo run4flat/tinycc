@@ -2088,7 +2088,7 @@ int exsymtab_deserialize_inline_funcs(extended_symtab * symtab, FILE * in_fh) {
 		return 0;
 	}
 	
-	InlineFunc ** inline_funcs = tcc_malloc(sizeof(InlineFunc *) * len);
+	InlineFunc ** inline_funcs = tcc_mallocz(sizeof(InlineFunc *) * len);
 	if (inline_funcs == NULL) {
 		printf("Deserialization failed: Unable to allocate memory for "
 			"Inline function list\n");

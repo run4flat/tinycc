@@ -78,7 +78,7 @@ typedef struct extended_symtab {
 	int N_defs; /* zero for Sym collections stored in ram_hash */
 	int tok_start;
 	int tok_start_offset;
-	int N_inline_funcs; /* XXX working here - set to null on allocation, etc */
+	int N_inline_funcs;
 	InlineFunc ** inline_funcs;
 	TokenSym ** tokenSym_last;
 	TokenSym * tokenSym_list [1];
