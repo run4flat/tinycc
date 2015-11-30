@@ -92,7 +92,7 @@ PROVES =	\
 
 %.prove: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	prove --exec '' ./$@ :: lib_path=$(top_srcdir); rm $@
+	prove -v --exec '' ./$@ :: lib_path=$(top_srcdir); rm $@
 
 %.test: %.c $(top_builddir)/$(LIBTCC)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)

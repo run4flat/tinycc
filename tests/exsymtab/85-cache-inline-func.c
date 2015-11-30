@@ -8,7 +8,7 @@
 #include "test_setup.h"
 
 char func_decl_code[] =
-"inline int add_10(int n)\n"
+"static inline int add_10(int n)\n"
 "{\n"
 "    return (n + 10);\n"
 "}\n"

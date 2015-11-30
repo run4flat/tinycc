@@ -608,6 +608,10 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh) {
 	/* Remove static indicator from functions */
 	if ((btype == VT_FUNC) && (old->type.t & VT_STATIC))
 		to_return->type.t &= ~VT_STATIC;
+	/* Static inline functions are the exception to this rule, so undo
+	 * the above work for them. */
+	if ((old->type.t & (VT_INLINE | VT_STATIC)) == (VT_INLINE | VT_STATIC))
+		to_return->type.t = old->type.t;
 	
 	/* The type.ref field contains something useful only if the basic type
 	 * is a pointer, struct, or function. See code from tccgen's
@@ -2061,9 +2065,7 @@ int exsymtab_serialize_inline_funcs(extended_symtab * symtab, FILE * out_fh,
 	ram_hash * sym_offset_rt)
 {
 	/* serialize the number of inline functions */
-	if (fwrite(&symtab->N_inline_funcs, sizeof(symtab->N_inline_funcs),
-		1, out_fh) != 1)
-	{
+	if (fwrite(&symtab->N_inline_funcs, sizeof(int), 1, out_fh) != 1) {
 		printf("Serialization failed: Unable to serialize the number "
 			"of inline functions\n");
 		return 0;
@@ -2092,6 +2094,8 @@ int exsymtab_deserialize_inline_funcs(extended_symtab * symtab, FILE * in_fh) {
 			"Inline function list\n");
 		return 0;
 	}
+	symtab->inline_funcs = inline_funcs;
+	symtab->N_inline_funcs = len;
 	
 	for (i = 0; i < len; i++) {
 		inline_funcs[i] = exsymtab_deserialize_inline_func(in_fh, i,
