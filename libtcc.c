@@ -39,6 +39,9 @@ ST_DATA struct TCCState *tcc_state;
 #include "tccgen.c"
 #include "tccelf.c"
 #include "tccrun.c"
+#ifdef CONFIG_TCC_EXSYMTAB
+#include "tccexsymtab.c"
+#endif
 #ifdef TCC_TARGET_I386
 #include "i386-gen.c"
 #endif
@@ -886,11 +889,19 @@ static int tcc_compile(TCCState *s1)
     Sym *define_start;
     char buf[512];
     volatile int section_sym;
+#ifdef CONFIG_TCC_EXSYMTAB
+    int tok_start;
+#endif
 
 #ifdef INC_DEBUG
     printf("%s: **** new file\n", file->filename);
 #endif
     preprocess_init(s1);
+
+#ifdef CONFIG_TCC_EXSYMTAB
+    /* Note where we start adding new tokens */
+    tok_start = tok_ident;
+#endif
 
     cur_text_section = NULL;
     funcname = "";
@@ -953,6 +964,11 @@ static int tcc_compile(TCCState *s1)
     define_start = define_stack;
     nocode_wanted = 1;
 
+#ifdef CONFIG_TCC_EXSYMTAB
+    /* Perform tokensym preparation */
+    if (s1->symtab_prep_callback) s1->symtab_prep_callback(s1->symtab_callback_data);
+#endif
+
     if (setjmp(s1->error_jmp_buf) == 0) {
         s1->nb_errors = 0;
         s1->error_set_jmp_enabled = 1;
@@ -975,6 +991,20 @@ static int tcc_compile(TCCState *s1)
 
     s1->error_set_jmp_enabled = 0;
 
+#ifdef CONFIG_TCC_EXSYMTAB
+    /* Make an extended copy of the symbol table, if requested */
+    if (s1->nb_errors == 0 && s1->exsymtab == (extended_symtab*)1)
+    {
+        copy_extended_symtab(s1, define_start, tok_start);
+        /* Output the symbol table to a cache if requested */
+        if (s1->symtab_serialize_outfile)
+            tcc_serialize_extended_symtab(s1->exsymtab, s1->symtab_serialize_outfile);
+        /* Output the symbol names */
+        if (s1->dump_identifier_names_outfile)
+            tcc_dump_identifier_names(s1->exsymtab, s1->dump_identifier_names_outfile);
+    }
+#endif
+
     /* reset define stack, but leave -Dsymbols (may be incorrect if
        they are undefined) */
     free_defines(define_start);
@@ -986,6 +1016,23 @@ static int tcc_compile(TCCState *s1)
 
     return s1->nb_errors != 0 ? -1 : 0;
 }
+
+#ifdef CONFIG_TCC_EXSYMTAB
+LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num)
+{
+    int ret;
+
+    /* Open the buffer and copy the contents */
+    tcc_open_bf(s, filename, len);
+    memcpy(file->buffer, str, len);
+    /* Set the line number */
+    file->line_num = line_num;
+    /* Compile and cleanup */
+    ret = tcc_compile(s);
+    tcc_close();
+    return ret;
+}
+#endif
 
 LIBTCCAPI int tcc_compile_string(TCCState *s, const char *str)
 {
@@ -1214,6 +1261,17 @@ LIBTCCAPI TCCState *tcc_new(void)
 #ifdef TCC_IS_NATIVE
     s->runtime_main = "main";
 #endif
+
+#ifdef CONFIG_TCC_EXSYMTAB
+    /* Extended symbol table API */
+    s->symtab_name_callback = NULL;
+    s->symtab_sym_used_callback = NULL;
+    s->symtab_prep_callback = NULL;
+    s->symtab_callback_data = NULL;
+    s->symtab_serialize_outfile = NULL;
+    s->dump_identifier_names_outfile = NULL;
+#endif
+
     return s;
 }
 
@@ -1229,6 +1287,15 @@ LIBTCCAPI void tcc_delete(TCCState *s1)
         fclose(s1->ppfp);
     if (s1->dffp && s1->dffp != s1->ppfp)
         fclose(s1->dffp);
+
+#ifdef CONFIG_TCC_EXSYMTAB
+    /* Clean up the extended symbol table if it was never copied. */
+    if (s1->exsymtab > (extended_symtab*)1)
+        tcc_delete_extended_symbol_table(s1->exsymtab);
+    /* free file paths related to caching */
+    tcc_free(s1->symtab_serialize_outfile);
+    tcc_free(s1->dump_identifier_names_outfile);
+#endif
 
     /* free all sections */
     for(i = 1; i < s1->nb_sections; i++)
@@ -1965,6 +2032,9 @@ enum {
     TCC_OPTION_c,
     TCC_OPTION_C,
     TCC_OPTION_dumpversion,
+#ifdef CONFIG_TCC_EXSYMTAB
+    TCC_OPTION_dump_identifier_names,
+#endif
     TCC_OPTION_d,
     TCC_OPTION_float_abi,
     TCC_OPTION_static,
@@ -1973,6 +2043,9 @@ enum {
     TCC_OPTION_soname,
     TCC_OPTION_o,
     TCC_OPTION_r,
+#ifdef CONFIG_TCC_EXSYMTAB
+    TCC_OPTION_serialize_symtab,
+#endif
     TCC_OPTION_s,
     TCC_OPTION_traditional,
     TCC_OPTION_Wl,
@@ -2023,9 +2096,15 @@ static const TCCOption tcc_options[] = {
     { "c", TCC_OPTION_c, 0 },
     { "C", TCC_OPTION_C, 0 },
     { "dumpversion", TCC_OPTION_dumpversion, 0},
+#ifdef CONFIG_TCC_EXSYMTAB
+    { "dump-identifier-names", TCC_OPTION_dump_identifier_names, TCC_OPTION_HAS_ARG },
+#endif
     { "d", TCC_OPTION_d, TCC_OPTION_HAS_ARG | TCC_OPTION_NOSEP },
 #ifdef TCC_TARGET_ARM
     { "mfloat-abi", TCC_OPTION_float_abi, TCC_OPTION_HAS_ARG },
+#endif
+#ifdef CONFIG_TCC_EXSYMTAB
+    { "serialize-symtab", TCC_OPTION_serialize_symtab, TCC_OPTION_HAS_ARG },
 #endif
     { "static", TCC_OPTION_static, 0 },
     { "std", TCC_OPTION_std, TCC_OPTION_HAS_ARG | TCC_OPTION_NOSEP },
@@ -2343,6 +2422,16 @@ ST_FUNC int tcc_parse_args1(TCCState *s, int argc, char **argv)
         case TCC_OPTION_MF:
             s->deps_outfile = tcc_strdup(optarg);
             break;
+#ifdef CONFIG_TCC_EXSYMTAB
+        case TCC_OPTION_serialize_symtab:
+            s->symtab_serialize_outfile = tcc_strdup(optarg + 1);
+            s->exsymtab = (extended_symtab*)1;
+            break;
+        case TCC_OPTION_dump_identifier_names:
+            s->dump_identifier_names_outfile = tcc_strdup(optarg + 1);
+            s->exsymtab = (extended_symtab*)1;
+            break;
+#endif
         case TCC_OPTION_dumpversion:
             printf ("%s\n", TCC_VERSION);
             exit(0);

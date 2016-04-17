@@ -57,6 +57,13 @@ LIBTCCAPI int tcc_add_file(TCCState *s, const char *filename, int filetype);
 /* compile a string containing a C source. Return -1 if error. */
 LIBTCCAPI int tcc_compile_string(TCCState *s, const char *buf);
 
+#ifdef CONFIG_TCC_EXSYMTAB
+/* like tcc_compile_string, but also lets you specify the length of the
+ * string to compile, the filename, and the line number from whence this
+ * code came. */
+LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num);
+#endif
+
 /*****************************/
 /* linking commands */
 
@@ -96,6 +103,67 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr);
 
 /* return symbol value or NULL if not found */
 LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
+
+#ifdef CONFIG_TCC_EXSYMTAB
+/**********************************************/
+/* ---- Extended symbol table management ---- */
+/**********************************************/
+
+typedef struct TokenSym* TokenSym_p;
+typedef struct extended_symtab* extended_symtab_p;
+
+/*** For building a symbol table ***/
+/* Set flag in compiler state to save an extended symbol table */
+LIBTCCAPI void tcc_save_extended_symtab(TCCState * s);
+/* Retrieve an extended symbol table after compilation or relocation */
+LIBTCCAPI extended_symtab_p tcc_get_extended_symbol_table(TCCState * s);
+/* Free an extended symbol table */
+LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab_p symtab);
+/* Get a TokenSym from an extended symbol table */
+LIBTCCAPI TokenSym_p tcc_get_extended_tokensym(extended_symtab_p symtab, const char * name);
+/* Get a Symbol (i.e. function pointer) from an extended symbol table */
+LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab_p symtab, const char * name);
+/* Set a Symbol pointer, i.e. handle linking by hand without needing a TCCState */
+LIBTCCAPI int tcc_set_extended_symbol(extended_symtab_p symtab, const char * name, const void * pointer);
+
+/*** For using a symbol table in a dependent compilation unit ***/
+/* Adds details for TokenSyms whose token ids are added to *all* compilation
+ * contexts, tokens like "push" and "str". NOTE: This function acts on
+ * the currently compiling table of identifiers by modifying table_ident
+ * directly. Only use this after you have initialized a compiler state!!!! */
+LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
+/* Callback function signature for lookup-by-name:
+ * TokenSym_p my_callback(char * name, int len, void * data, extended_symtab_p* containing_symtab) */
+typedef TokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name,
+       int len, void * data, extended_symtab_p* containing_symtab);
+/* Callback function signature for sym-is-used:
+ * void my_callback(char * name, int len, void * data) */
+typedef void (*extended_symtab_sym_used_callback)(char * sym_name, int len, void * data);
+/* Callback function signature for compilation unit preparation:
+ * void my_callback(TokenSym_p* local_ts_list, void * data) */
+typedef void (*extended_symtab_prep_callback)(void * data);
+/* Set the lookup/sym-used callback functions */
+LIBTCCAPI void tcc_set_extended_symtab_callbacks (
+       TCCState * compiler_state,
+       extended_symtab_lookup_by_name_callback new_name_callback,
+       extended_symtab_sym_used_callback new_sym_used_callback,
+       extended_symtab_prep_callback new_prep_callback,
+       void * data
+);
+
+/*** For symbol table caching ***/
+LIBTCCAPI extended_symtab_p tcc_deserialize_extended_symtab(const char * input_filename);
+LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab_p symtab, const char * output_filename);
+LIBTCCAPI void tcc_dump_identifier_names(extended_symtab_p symtab, char * outfile);
+
+/* Testing functions, not really for general use */
+LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p, int to_test, const char * name);
+LIBTCCAPI char* tcc_get_next_extended_symbol_name(extended_symtab_p symtab, int * poffset);
+
+#ifndef SYM_EXTENDED
+       #define SYM_EXTENDED   0x40000000 /* extended symbol space */
+#endif
+#endif
 
 #ifdef __cplusplus
 }

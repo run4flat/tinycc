@@ -20,6 +20,7 @@ TMPH=$TMPN.h
 build_cross="no"
 use_libgcc="no"
 enable_assert="no"
+enable_exsymtab="no"
 prefix=""
 execprefix=""
 bindir=""
@@ -186,6 +187,8 @@ for opt do
   --enable-cross) build_cross="yes"
   ;;
   --enable-assert) enable_assert="yes"
+  ;;
+  --enable-exsymtab) enable_exsymtab="yes"
   ;;
   --disable-static) disable_static="yes"
   ;;
@@ -423,6 +426,9 @@ echo "Target OS        $targetos"
 echo "Big Endian       $bigendian"
 echo "gprof enabled    $gprof"
 echo "use libgcc       $use_libgcc"
+if test "$enable_exsymtab" = "yes" ; then
+echo "tcc with exsymtab"
+fi
 
 echo "Creating config.mak and config.h"
 
@@ -555,6 +561,12 @@ if test "$have_selinux" = "yes" ; then
 fi
 if test "$enable_assert" = "yes" ; then
   echo "#define CONFIG_TCC_ASSERT" >> $TMPH
+fi
+if test "$enable_exsymtab" = "yes" ; then
+  echo "CONFIG_TCC_EXSYMTAB=yes" >> config.mak
+  echo "#ifndef  CONFIG_TCC_EXSYMTAB" >> $TMPH
+  echo " #define CONFIG_TCC_EXSYMTAB" >> $TMPH
+  echo "#endif"                       >> $TMPH
 fi
 
 version=`head $source_path/VERSION`

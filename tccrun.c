@@ -214,6 +214,12 @@ static int tcc_relocate_ex(TCCState *s1, void *ptr)
 #ifdef _WIN64
     win64_add_function_table(s1);
 #endif
+
+#ifdef CONFIG_TCC_EXSYMTAB
+    /* If they have an extended symbol table, copy the symbol pointers. */
+    if (s1->exsymtab > (extended_symtab*)1) copy_extended_symbols_to_exsymtab(s1);
+#endif
+
     return 0;
 }
 
