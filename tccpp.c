@@ -2912,7 +2912,8 @@ maybe_newline:
             cstr_reset(&tokcstr);
             cstr_ccat(&tokcstr, '.');
             goto parse_num;
-        } else if (parse_flags & PARSE_FLAG_ASM_FILE) {
+        } else if ((parse_flags & PARSE_FLAG_ASM_FILE)
+                   && (isidnum_table[c - CH_EOF] & (IS_ID|IS_NUM))) {
             *--p = c = '.';
             goto parse_ident_fast;
         } else if (c == '.') {
