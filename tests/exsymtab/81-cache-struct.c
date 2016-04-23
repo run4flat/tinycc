@@ -73,9 +73,7 @@ int main(int argc, char **argv) {
 	remove("struct.cache");
 	pass("cleanup");
 	
-	done_testing();
-	
-	return 0;
+	return done_testing();
 	
 FAIL:
 	remove("struct.cache");

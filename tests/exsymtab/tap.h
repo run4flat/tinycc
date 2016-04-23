@@ -32,11 +32,11 @@ void init_tap(int N_tests) {
 	fflush(stdout);
 }
 
-void done_testing() {
+int done_testing() {
 	if (N_tests_planned > 0) {
 		printf("# ignoring call to done_testing since the number of tests was specified\n");
 		fflush(stdout);
-		return;
+		return N_tests_planned - N_passes;
 	}
 	N_tests_planned = N_tests_seen;
 	printf("1..%d\n", N_tests_planned);
@@ -46,6 +46,7 @@ void done_testing() {
 			N_failed > 1 ? "s" : "", N_tests_seen);
 	}
 	fflush(stdout);
+	return N_tests_planned - N_passes;
 }
 
 void _ok(int boolean) {

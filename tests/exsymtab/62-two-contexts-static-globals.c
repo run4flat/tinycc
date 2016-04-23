@@ -70,7 +70,5 @@ int main(int argc, char **argv) {
 	tcc_delete(s2);
 	pass("cleanup");
 	
-	done_testing();
-	
-	return 0;
+	return done_testing();
 }

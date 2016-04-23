@@ -93,7 +93,5 @@ int main(int argc, char **argv) {
 	free(point_p);
 	pass("cleanup");
 	
-	done_testing();
-	
-	return 0;
+	return done_testing();
 }
