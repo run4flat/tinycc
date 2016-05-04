@@ -48,6 +48,7 @@ static TokenSym *hash_ident[TOK_HASH_SIZE];
 static char token_buf[STRING_MAX_SIZE + 1];
 static CString cstr_buf;
 static TokenString tokstr_buf;
+static TokenString tokstr_buf2;
 static unsigned char isidnum_table[256 - CH_EOF];
 /* isidnum_table flags: */
 #define IS_SPC 1
@@ -242,7 +243,7 @@ tail_call:
             al->nb_total++;
 #endif
             return ret;
-        } else if (al->top && is_own) {
+        } else if (is_own) {
             al->nb_allocs--;
             ret = tal_realloc(*pal, 0, size);
             header = (((tal_header_t *)p) - 1);
@@ -319,7 +320,7 @@ ST_FUNC void cstr_cat(CString *cstr, const char *str, int len)
     size = cstr->size + len;
     if (size > cstr->size_allocated)
         cstr_realloc(cstr, size);
-    memcpy(((unsigned char *)cstr->data) + cstr->size, str, len);
+    memmove(((unsigned char *)cstr->data) + cstr->size, str, len);
     cstr->size = size;
 }
 
@@ -3263,10 +3264,10 @@ static int next_argstream(Sym **nested_list, int can_read_stream, TokenString *w
                 end_macro();
                 /* also, end of scope for nested defined symbol */
                 sa = *nested_list;
-                while (sa && sa->v == -1)
+                while (sa && sa->v == 0)
                     sa = sa->prev;
                 if (sa)
-                    sa->v = -1;
+                    sa->v = 0;
                 continue;
             }
         } else {
@@ -3458,7 +3459,7 @@ static int macro_subst_tok(
 
         sym_push2(nested_list, s->v, 0, 0);
         parse_flags = saved_parse_flags;
-        macro_subst(tok_str, nested_list, mstr, can_read_stream);
+        macro_subst(tok_str, nested_list, mstr, can_read_stream | 2);
 
         /* pop nested defined symbol */
         sa1 = *nested_list;
@@ -3582,7 +3583,7 @@ static void macro_subst(
     spc = nosubst = 0;
 
     /* first scan for '##' operator handling */
-    if (can_read_stream) {
+    if (can_read_stream & 1) {
         macro_str1 = macro_twosharps(ptr);
         if (macro_str1)
             ptr = macro_str1;
@@ -3667,10 +3668,48 @@ ST_FUNC void next(void)
         /* if reading from file, try to substitute macros */
         s = define_find(tok);
         if (s) {
-            Sym *nested_list = NULL;
-            tokstr_buf.len = 0;
-            nested_list = NULL;
-            macro_subst_tok(&tokstr_buf, &nested_list, s, 1);
+            if (tcc_state->output_type == TCC_OUTPUT_PREPROCESS)
+            {
+                int t = 0;
+                Sym *nested_list = NULL;
+                tokstr_buf2.len = 0;
+                macro_subst_tok(&tokstr_buf2, &nested_list, s, 1);
+                {
+                    CValue cval;
+                    const int *str  = tokstr_buf2.str;
+                    const int *str1 = tokstr_buf2.str + tokstr_buf2.len;
+                    int tok = 0;
+                    tokstr_buf.len = 0;
+                    while (str < str1) {
+                        t = tok;
+                        TOK_GET(&tok, &str, &cval);
+                        if (t == TOK_PPNUM && (tok == '+' || tok == '-'))
+                            tok_str_add(&tokstr_buf, ' ');
+                        tok_str_add2(&tokstr_buf, tok, &cval);
+                    }
+                    t = tok;
+                }
+                if (macro_ptr)
+                    ch = *macro_ptr;
+                else
+                    ch = handle_eob();
+                if (t == TOK_PPNUM && (ch == '+' || ch == '-' || ch >= 'a')) {
+                    tok_str_add(&tokstr_buf, ' ');
+                } else
+                if ((t == TOK_INC || t == TOK_DEC) && (ch == '+' || ch == '-')) {
+                    tok_str_add(&tokstr_buf, ch);
+                    tok_str_add(&tokstr_buf, ' ');
+                    if (macro_ptr)
+                        macro_ptr++;
+                    else
+                        file->buf_ptr++;
+                }
+            }
+            else {
+                Sym *nested_list = NULL;
+                tokstr_buf.len = 0;
+                macro_subst_tok(&tokstr_buf, &nested_list, s, 1);
+            }
             tok_str_add(&tokstr_buf, 0);
             begin_macro(&tokstr_buf, 2);
             goto redo;
@@ -3745,6 +3784,8 @@ ST_FUNC void preprocess_new(void)
     cstr_realloc(&cstr_buf, STRING_MAX_SIZE);
     tok_str_new(&tokstr_buf);
     tok_str_realloc(&tokstr_buf, TOKSTR_MAX_SIZE);
+    tok_str_new(&tokstr_buf2);
+    tok_str_realloc(&tokstr_buf2, TOKSTR_MAX_SIZE);
     
     tok_ident = TOK_IDENT;
     p = tcc_keywords;
@@ -3783,6 +3824,7 @@ ST_FUNC void preprocess_delete(void)
     cstr_free(&tokcstr);
     cstr_free(&cstr_buf);
     tok_str_free(tokstr_buf.str);
+    tok_str_free(tokstr_buf2.str);
 
     /* free allocators */
     tal_delete(toksym_alloc);
