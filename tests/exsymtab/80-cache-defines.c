@@ -98,8 +98,7 @@ int main(int argc, char **argv)
     remove("defines.cache");
     pass("cleanup");
 
-    done_testing();
-    return 0;
+    return done_testing();
 
 FAIL:
     remove("defines.cache");

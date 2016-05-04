@@ -124,8 +124,7 @@ int main(int argc, char **argv)
     tcc_delete_extended_symbol_table(def_symtab);
     tcc_delete_extended_symbol_table(decl_symtab);
 
-    done_testing();
-    return 0;
+    return done_testing();
 }
 
 /* Original info:

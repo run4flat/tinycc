@@ -72,6 +72,5 @@ int main(int argc, char **argv)
     tcc_delete_extended_symbol_table(my_symtab);
     pass("Cleaned up extended symtab memory");
 
-    done_testing();
-    return 0;
+    return done_testing();
 }

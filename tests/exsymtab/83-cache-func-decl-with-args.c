@@ -69,8 +69,7 @@ int main(int argc, char **argv)
     remove("func_decl.cache");
     pass("cleanup");
 
-    done_testing();
-    return 0;
+    return done_testing();
 
 FAIL:
     remove("func_decl.cache");

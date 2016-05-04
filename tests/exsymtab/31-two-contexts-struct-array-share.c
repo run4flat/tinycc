@@ -98,6 +98,5 @@ int main(int argc, char **argv)
     free(list_p);
     pass("cleanup");
 
-    done_testing();
-    return 0;
+    return done_testing();
 }
