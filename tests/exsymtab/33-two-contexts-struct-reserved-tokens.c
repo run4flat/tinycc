@@ -24,7 +24,6 @@ char first_code[] =
 
      /* Get length of word */
 "    for (length = 0; word[length] != 0; length++);\n"
-"    length--;\n"
 
 "    f = malloc(sizeof(struct file) + length);\n"
 "    f->length = length;\n"
@@ -61,7 +60,7 @@ int main(int argc, char **argv)
         pass("Allocated file");
 
     int * manual_unpack_size = file_p;
-    is_i(*manual_unpack_size, 9, "manually unpacked length");
+    is_i(*manual_unpack_size, 10, "manually unpacked length");
     char * manual_unpack_name = (char*) file_p + sizeof(int);
     is_s(manual_unpack_name, "foobar.txt", "manually unpacked file name");
 
@@ -70,7 +69,7 @@ int main(int argc, char **argv)
     setup_and_relocate_second_state(s_second, second_code);
     int (*get_file_length)(void*) = tcc_get_symbol(s_second, "get_file_length");
     if (get_file_length == NULL) return 1;
-    is_i(get_file_length(file_p), 9, "Second context able to unpack struct");
+    is_i(get_file_length(file_p), 10, "Second context able to unpack struct");
 
     /* ---- clean up the memory ---- */
     tcc_delete_extended_symbol_table(my_symtab);
