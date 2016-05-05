@@ -1125,16 +1125,14 @@ int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab)
             case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
                 {
                     CString *cstr = (CString *)(stream + len);
-
-                    /* Note this right shift assumes 32 bit integers */
-                    len += (sizeof(CString) + cstr->size + 3) >> 2;
+                    len += 1 + (cstr->size + sizeof(int) - 1) / sizeof(int);
 
                     /* If copying, then one might naively expect that I
                      * should set up cstr to be usable for later
                      * preprocessor expansions. See tok_str_add2 in
-                     * tccpp.c for details. However, since the memcpy
-                     * which was presumably performed prior to calling
-                     * this function already did that! So I'm done. */
+                     * tccpp.c for details. However, the memcpy that was
+                     * presumably performed prior to calling this
+                     * function already did that! So I'm done. */
                 }
                 break;
 
