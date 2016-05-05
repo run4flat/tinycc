@@ -77,10 +77,10 @@ static void display_info(TCCState *s, int what)
 static void help(void)
 {
     printf("Tiny C Compiler "TCC_VERSION" - Copyright (C) 2001-2006 Fabrice Bellard\n"
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
            "compiled with the exsymtab extension by David Mertens\n"
            "\n"
-#endif
+/* #endif */
            "Usage: tcc [options...] [-o outfile] [-c] infile(s)...\n"
            "       tcc [options...] -run infile [arguments...]\n"
            "General options:\n"
@@ -349,13 +349,13 @@ int main(int argc, char **argv)
             ret = 1;
 #endif
         } else
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
         if (!s->outfile
             && (s->symtab_serialize_outfile || s->dump_identifier_names_outfile))
         {
             /* do nothing */
         } else
-#endif
+/* #endif */
         if (s->output_type == TCC_OUTPUT_EXE ||
             s->output_type == TCC_OUTPUT_DLL)
         {

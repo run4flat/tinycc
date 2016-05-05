@@ -114,9 +114,9 @@ endif
 CORE_FILES = tcc.c libtcc.c tccpp.c tccgen.c tccelf.c tccasm.c tccrun.c
 CORE_FILES += tcc.h config.h libtcc.h tcctok.h
 
-ifdef CONFIG_TCC_EXSYMTAB
+#ifdef CONFIG_TCC_EXSYMTAB
 CORE_FILES +=  tccexsymtab.c
-endif
+#endif
 
 I386_FILES = $(CORE_FILES) i386-gen.c i386-asm.c i386-asm.h i386-tok.h
 WIN32_FILES = $(CORE_FILES) i386-gen.c i386-asm.c i386-asm.h i386-tok.h tccpe.c

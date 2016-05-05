@@ -451,7 +451,7 @@ ST_FUNC TokenSym *tok_alloc(const char *str, int len)
     return tok_alloc_new(pts, str, len);
 }
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 /* Almost identical to above: Returns a pointer to the hash_next which either
  * points to the token (if found) or points to null. If the dereferenced value
  * is null, then this pointer itself can be passed to tok_alloc_new; if the
@@ -478,7 +478,7 @@ ST_FUNC TokenSym** symtab_tok_find(const char *str, int len)
     }
     return pts;
 }
-#endif
+/* #endif CONFIG_TCC_EXSYMTAB */
 
 /* XXX: buffer overflow */
 /* XXX: float tokens */
@@ -490,10 +490,10 @@ ST_FUNC const char *get_tok_str(int v, CValue *cv)
     cstr_reset(&cstr_buf);
     p = cstr_buf.data;
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     /* Mask out extended token flag */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
 
     switch(v) {
     case TOK_CINT:
@@ -1300,7 +1300,7 @@ ST_INLN void define_push(int v, int macro_type, TokenString *str, Sym *first_arg
 	tcc_warning("%s redefined", get_tok_str(v, NULL));
 }
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 ST_INLN void define_push_old(int v, int macro_type, int *str, Sym *first_arg)
 {
     Sym *s;
@@ -1314,24 +1314,24 @@ ST_INLN void define_push_old(int v, int macro_type, int *str, Sym *first_arg)
     s->next = first_arg;
     table_ident[v - TOK_IDENT]->sym_define = s;
 }
-#endif
+/* #endif */
 
 /* undefine a define symbol. Its name is just set to zero */
 ST_FUNC void define_undef(Sym *s)
 {
     int v = s->v;
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     if (v >= TOK_IDENT && v < tok_ident)
         table_ident[v - TOK_IDENT]->sym_define = NULL;
 }
 
 ST_INLN Sym *define_find(int v)
 {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -1350,11 +1350,11 @@ ST_FUNC void free_defines(Sym *b)
         /* do not free args or predefined defines */
         if (top->d)
             tok_str_free(top->d);
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
         v = top->v & ~SYM_EXTENDED;
-#else
+/* #else
         v = top->v;
-#endif
+#endif */
         if (v >= TOK_IDENT && v < tok_ident)
             table_ident[v - TOK_IDENT]->sym_define = NULL;
         sym_free(top);
@@ -1366,9 +1366,9 @@ ST_FUNC void free_defines(Sym *b)
 /* label lookup */
 ST_FUNC Sym *label_find(int v)
 {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -1378,9 +1378,9 @@ ST_FUNC Sym *label_find(int v)
 ST_FUNC Sym *label_push(Sym **ptop, int v, int flags)
 {
     Sym *s, **ps;
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     s = sym_push2(ptop, v, 0, 0);
     s->r = flags;
     ps = &table_ident[v - TOK_IDENT]->sym_label;
@@ -2479,7 +2479,7 @@ static void parse_number(const char *p)
         tcc_error("invalid number\n");
 }
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 /* MUST NEVER RETURN NULL (or if it does, call sites must be updated to handle that) */
 TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, extended_symtab* orig_symtab) {
        /* Look up the original tokensym in the extended symbol and see if an
@@ -2521,7 +2521,7 @@ TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, extended_symta
        }
        return local_ts;
 }
-#endif
+/* #endif CONFIG_TCC_EXSYMTAB */
 
 #define PARSE2(c1, tok1, c2, tok2)              \
     case c1:                                    \
@@ -2700,7 +2700,7 @@ maybe_newline:
                 pts = &(ts->hash_next);
             }
             ts = tok_alloc_new(pts, (char *) p1, len);
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
             /* If we are here, it's because we didn't find the token in our
              * current symbol table. It may, however, exist in the extended
              * symbol table. If we find it there, copy its contents into the
@@ -2715,7 +2715,7 @@ maybe_newline:
                     local_stack_on();  /* restore */
                 }
             }
-#endif
+/* #endif */
         token_found: ;
         } else {
             /* slower case */

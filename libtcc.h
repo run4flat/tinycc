@@ -57,12 +57,12 @@ LIBTCCAPI int tcc_add_file(TCCState *s, const char *filename, int filetype);
 /* compile a string containing a C source. Return -1 if error. */
 LIBTCCAPI int tcc_compile_string(TCCState *s, const char *buf);
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 /* like tcc_compile_string, but also lets you specify the length of the
  * string to compile, the filename, and the line number from whence this
  * code came. */
 LIBTCCAPI int tcc_compile_string_ex(TCCState *s, const char *str, int len, const char * filename, int line_num);
-#endif
+/* #endif */
 
 /*****************************/
 /* linking commands */
@@ -104,7 +104,10 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr);
 /* return symbol value or NULL if not found */
 LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 
-#ifdef CONFIG_TCC_EXSYMTAB
+
+/* The next bit of code is guarded by an ifdef, but for this fork of
+ * tcc, it should always be enabled. */
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 /**********************************************/
 /* ---- Extended symbol table management ---- */
 /**********************************************/
@@ -163,7 +166,7 @@ LIBTCCAPI char* tcc_get_next_extended_symbol_name(extended_symtab_p symtab, int 
 #ifndef SYM_EXTENDED
        #define SYM_EXTENDED   0x40000000 /* extended symbol space */
 #endif
-#endif
+/* #endif CONFIG_TCC_EXSYMTAB */
 
 #ifdef __cplusplus
 }

@@ -14,7 +14,8 @@ ifeq ($(TARGETOS),Darwin)
  export MACOSX_DEPLOYMENT_TARGET:=10.2
 endif
 
-CFLAGS += -DCONFIG_TCC_EXSYMTAB -Wno-declaration-after-statement
+#CFLAGS += -DCONFIG_TCC_EXSYMTAB -Wno-declaration-after-statement
+CFLAGS += -Wno-declaration-after-statement
 TCC = $(TOP)/tcc $(TCCFLAGS)
 
 # 02-ram_tree.test 

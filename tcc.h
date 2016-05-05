@@ -521,12 +521,13 @@ typedef struct DLLReference {
 
 /* -------------------------------------------------- */
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 #define SYM_EXTENDED   0x40000000 /* extended symbol space */
 #define SYM_STRUCT     0x20000000 /* struct/union/enum symbol space */
 #define SYM_FIELD      0x10000000 /* struct/union field symbol space */
 #define SYM_FIRST_ANOM 0x08000000 /* first anonymous sym */
-#else
+/* #else */
+#if 0
 #define SYM_STRUCT     0x40000000 /* struct/union/enum symbol space */
 #define SYM_FIELD      0x20000000 /* struct/union field symbol space */
 #define SYM_FIRST_ANOM 0x10000000 /* first anonymous sym */
@@ -871,7 +872,7 @@ struct TCCState {
     char *deps_outfile; /* option -MF */
     ParseArgsState *parse_args_state;
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     /* ---- Extended symbol table handling ---- */
     struct extended_symtab * exsymtab;
     extended_symtab_lookup_by_name_callback symtab_name_callback;
@@ -880,7 +881,7 @@ struct TCCState {
     void * symtab_callback_data;
     char * symtab_serialize_outfile; /* option -serialize-symtab */
     char * dump_identifier_names_outfile; /* option -dump-identifier-names */
-#endif
+/* #endif */
 
 };
 
@@ -1312,9 +1313,9 @@ ST_FUNC void tok_str_free(int *str);
 ST_FUNC void tok_str_add(TokenString *s, int t);
 ST_FUNC void tok_str_add_tok(TokenString *s);
 ST_INLN void define_push(int v, int macro_type, TokenString *str, Sym *first_arg);
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
   ST_INLN void define_push_old(int v, int macro_type, int *str, Sym *first_arg);
-#endif
+/* #endif */
 ST_FUNC void define_undef(Sym *s);
 ST_INLN Sym *define_find(int v);
 ST_FUNC void free_defines(Sym *b);
@@ -1594,10 +1595,10 @@ ST_FUNC void pe_add_unwind_data(unsigned start, unsigned end, unsigned stack);
 # define ST_PE_STDCALL 0x40
 #endif
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
 /* ------------ tccexsymtab.c ----------------- */
 #include "tccexsymtab.h"
-#endif
+/* #endif */
 
 /* ------------ tccrun.c ----------------- */
 #ifdef TCC_IS_NATIVE

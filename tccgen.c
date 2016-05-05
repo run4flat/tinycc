@@ -187,15 +187,15 @@ ST_FUNC Sym *sym_push2(Sym **ps, int v, int t, long c)
    of the symbol stack */
 ST_FUNC Sym *sym_find2(Sym *s, int v)
 {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     while (s) {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
         if ((s->v & ~SYM_EXTENDED) == v)
-#else
+/* #else
         if (s->v == v)
-#endif
+#endif */
             return s;
         else if (s->v == -1)
             return NULL;
@@ -207,9 +207,9 @@ ST_FUNC Sym *sym_find2(Sym *s, int v)
 /* structure lookup */
 ST_INLN Sym *struct_find(int v)
 {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     v -= TOK_IDENT;
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
@@ -219,10 +219,10 @@ ST_INLN Sym *struct_find(int v)
 /* find an identifier */
 ST_INLN Sym *sym_find(int v)
 {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     int is_extended = v & SYM_EXTENDED;
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     v -= TOK_IDENT;
 
     /* Does not exist in our table! The best we can do is return null. XXX Maybe
@@ -231,7 +231,7 @@ ST_INLN Sym *sym_find(int v)
     if ((unsigned)v >= (unsigned)(tok_ident - TOK_IDENT))
         return NULL;
 
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     /* If this is an extended symbol table reference, then we need to make sure
      * that the extended symbol reference callback gets fired, but only once.
      * We'll modify the TokenSym's tok field and remove the flag if the callback
@@ -253,7 +253,7 @@ ST_INLN Sym *sym_find(int v)
                 tcc_state->symtab_callback_data);
         }
     }
-#endif
+/* #endif */
 
     return table_ident[v]->sym_identifier;
 }
@@ -267,7 +267,7 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
     if (local_stack)
         ps = &local_stack;
     else {
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
         /* Global symbol stack. This is OK for the local symbol stack, but don't allow
          * this for symbols that are in the extended symbol stack. There seem to be
          * some issues associated with copying *all* TokenSyms, so this needs to be
@@ -277,12 +277,12 @@ ST_FUNC Sym *sym_push(int v, CType *type, int r, int c)
          //     tcc_error("Cannot use name '%s' as a global variable, it is already in the "
          //               "extended symbol table.", get_tok_str(v, 0));
          // }
-#endif
+/* #endif */
         ps = &global_stack;
     }
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     v &= ~SYM_EXTENDED;
-#endif
+/* #endif */
     s = sym_push2(ps, v, type->t, c);
     s->type.ref = type->ref;
     s->r = r;
@@ -312,13 +312,13 @@ ST_FUNC Sym *global_identifier_push(int v, int t, int c)
     Sym *s, **ps;
     s = sym_push2(&global_stack, v, t, c);
     /* don't record anonymous symbol */
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     if ((v & ~SYM_EXTENDED) < SYM_FIRST_ANOM) {
         ps = &table_ident[(v & ~SYM_EXTENDED) - TOK_IDENT]->sym_identifier;
-#else
+/* #else
     if (v < SYM_FIRST_ANOM) {
         ps = &table_ident[v - TOK_IDENT]->sym_identifier;
-#endif
+#endif */
         /* modify the top most local identifier, so that
            sym_identifier will point to 's' when popped */
         while (*ps != NULL)
@@ -326,12 +326,12 @@ ST_FUNC Sym *global_identifier_push(int v, int t, int c)
         s->prev_tok = NULL;
         *ps = s;
     }
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     if (v & SYM_EXTENDED) {
         tcc_warning("pushing global identifier with name from extended symbol table '%s'",
                get_tok_str(v, 0));
     }
-#endif
+/* #endif */
     return s;
 }
 
@@ -348,11 +348,11 @@ ST_FUNC void sym_pop(Sym **ptop, Sym *b)
         v = s->v;
         /* remove symbol in token array */
         /* XXX: simplify */
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
         if (!(v & SYM_FIELD) && (v & ~(SYM_STRUCT|SYM_EXTENDED)) < SYM_FIRST_ANOM) {
-#else
+/* #else
         if (!(v & SYM_FIELD) && (v & ~SYM_STRUCT) < SYM_FIRST_ANOM) {
-#endif
+#endif */
             ts = table_ident[(v & ~SYM_STRUCT) - TOK_IDENT];
             if (v & SYM_STRUCT)
                 ps = &ts->sym_struct;
@@ -1772,9 +1772,9 @@ ST_FUNC void gen_op(int op)
     t2 = vtop[0].type.t;
     bt1 = t1 & VT_BTYPE;
     bt2 = t2 & VT_BTYPE;
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     type1.ref = NULL;
-#endif
+/* #endif */
 
     if (bt1 == VT_PTR || bt2 == VT_PTR) {
         /* at least one operand is a pointer */
@@ -2396,13 +2396,11 @@ static int compare_types(CType *type1, CType *type2, int unqualified)
         type2 = pointed_type(type2);
         return is_compatible_types(type1, type2);
     } else if (bt1 == VT_STRUCT) {
-#ifdef CONFIG_TCC_EXSYMTAB
         /* XXX This currently runs into trouble with extended symbol
          * tables when using the common idiom
          * "typedef struct { ... } <typename>"
          * This probably needs to be fixed by changing the copy_ctype
          * macro in tccexsymtab.c. */
-#endif
         return (type1->ref == type2->ref);
     } else if (bt1 == VT_FUNC) {
         return is_compatible_func(type1, type2);
@@ -2490,11 +2488,11 @@ static void type_to_str(char *buf, int buf_size,
             tstr = "enum ";
         pstrcat(buf, buf_size, tstr);
         v = type->ref->v & ~SYM_STRUCT;
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
         if ((v & ~SYM_EXTENDED) >= SYM_FIRST_ANOM)
-#else
+/* #else
         if (v >= SYM_FIRST_ANOM)
-#endif
+#endif */
             pstrcat(buf, buf_size, "<anonymous>");
         else
             pstrcat(buf, buf_size, get_tok_str(v, NULL));
@@ -3512,9 +3510,9 @@ static void post_type(CType *type, AttributeDef *ad)
     Sym **plast, *s, *first;
     AttributeDef ad1;
     CType pt;
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
     pt.ref = NULL;
-#endif
+/* #endif */
 
     if (tok == '(') {
         /* function declaration */
@@ -4320,9 +4318,9 @@ ST_FUNC void unary(void)
             s = vtop->type.ref;
             /* find field */
             tok |= SYM_FIELD;
-#ifdef CONFIG_TCC_EXSYMTAB
+/* #ifdef CONFIG_TCC_EXSYMTAB */
             tok &= ~SYM_EXTENDED;
-#endif
+/* #endif */
             while ((s = s->next) != NULL) {
                 if (s->v == tok)
                     break;
