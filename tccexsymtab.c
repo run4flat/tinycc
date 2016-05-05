@@ -19,14 +19,9 @@
 #include "tcc.h"
 
 /* tccgen: asm_label cleanu */
-//#define BEFORE_grishka
 //#define BEFORE_hash_opt
 
-#ifdef BEFORE_grishka
-  #define FUNC_STR token_str
-#else
-  #define FUNC_STR func_str.str
-#endif
+#define FUNC_STR func_str.str
 
 /*****************************************************************************/
 /*                            exsymtab_token_hash                            */
@@ -655,20 +650,10 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
      * things simple for now and simply strip out the extended flag. */
     to_return->v = old->v & ~SYM_EXTENDED;
  
-#ifdef BEFORE_grishka
-    /* Copy the assembler label */
-    if (old->asm_label != NULL) {
-        int asm_label_len = strlen(old->asm_label) + 1;
-        to_return->asm_label = tcc_malloc(asm_label_len);
-        memcpy(to_return->asm_label, old->asm_label,
-            asm_label_len);
-    }
-#else
-    /* Copy the assembler label */
-    if (old->asm_label != 0) {
-        to_return->asm_label = old->asm_label;
-    }
-#endif
+    /* Copy the assembler label token id. Just like the v field, we copy
+     * this unmodified. */
+    /* XXX do we need to strip out SYM_EXTENDED? It seems unlikely. */
+    to_return->asm_label = old->asm_label;
 
     /* associated register. For variables, I believe that the low bits
      * specify the register size that can hold the value while high bits
@@ -836,7 +821,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
     to_return->tok_start = tok_start;
     to_return->tok_start_offset = tok_start_offset;
 
-    /* Allocate the trie and ram_hashs */
+    /* Allocate the token string and ram hashes */
     to_return->tsh = token_string_hash_new();
     sym_rh = to_return->sym_rh = ram_hash_new();
     def_rh = to_return->def_rh = ram_hash_new();
@@ -852,8 +837,8 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
         TokenSym * tok_sym;
 
         if (!should_copy_TokenSym(tok_copy, tok_start)) continue;
-            tokensym_size = sizeof(TokenSym) + tok_copy->len;
-            tok_sym = to_return->tokenSym_list[curr_tok_idx++]
+        tokensym_size = sizeof(TokenSym) + tok_copy->len;
+        tok_sym = to_return->tokenSym_list[curr_tok_idx++]
                 = tcc_malloc(tokensym_size);
 
         /* Follow the code from tok_alloc_new in tccpp.c */
@@ -922,23 +907,9 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
 
 void exsymtab_free_sym (Sym * to_delete, int is_def)
 {
-#ifdef BEFORE_grishka
     if (to_delete == NULL) return;
-    if (is_def) {
-        /* If it's a define Sym, delete the token stream */
-        tcc_free(to_delete->d);
-    }
-    else {
-        /* otherwise, clear the assembler label */
-        tcc_free(to_delete->asm_label);
-    }
-#else
-    if (to_delete == NULL) return;
-    if (is_def) {
-        /* If it's a define Sym, delete the token stream */
-        tcc_free(to_delete->d);
-    }
-#endif
+    /* If it's a define Sym, delete the token stream */
+    if (is_def) tcc_free(to_delete->d);
 }
 
 /* Frees memory associated with a copied extended symbol table. For a
@@ -1425,18 +1396,8 @@ Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok)
     copy_ctype(to_type, from, symtab);
     s = sym_push(to_tok, &to_type, from->r, from->c);
 
-#ifdef BEFORE_grishka
     /* Copy the assembler label, if present */
-    if (from->asm_label != NULL) {
-        int asm_label_len = strlen(from->asm_label) + 1;
-        s->asm_label = tcc_malloc(asm_label_len);
-        memcpy(s->asm_label, from->asm_label, asm_label_len);
-    }
-#else
-    if (from->asm_label != 0) {
-        s->asm_label = from->asm_label;
-    }
-#endif
+	s->asm_label = get_local_tok_for_extended_tok(from->asm_label, symtab);
 
     /* All done unless we have a next field to copy as well. */
     if (from->next == NULL) return s;
@@ -1797,145 +1758,26 @@ int exsymtab_deserialize_c(FILE * in_fh, Sym * curr_sym, int i)
 
 int exsymtab_serialize_asm_label(FILE * out_fh, Sym * curr_sym)
 {
-#ifdef BEFORE_grishka
-    int asm_label_len;
-
-    /* no label? */
-    if (curr_sym->asm_label == NULL)
-    {
-        int asm_label_len = 0;
-        if (fwrite(&asm_label_len, sizeof(int), 1, out_fh) == 1)
-            return 1; /* success! */
-
-        /* failure, indicate as much */
-        printf("Serialization failed: Unable to write assembler "
-            "label length of zero for token %d\n", curr_sym->v);
+    if (fwrite(&curr_sym->asm_label, sizeof(curr_sym->asm_label), 1,
+		out_fh) != 1)
+	{
+        printf("Serialization failed: Unable to write "
+            "assembler label for Sym %d\n", curr_sym->v);
         return 0;
-    }
-
-    /* we have a label. Write out its length */
-    asm_label_len = strlen(curr_sym->asm_label);
-    if (fwrite(&asm_label_len, sizeof(int), 1, out_fh) != 1) {
-        printf("Serialization failed: Unable to write assembler "
-            "label length for token %d\n", curr_sym->v);
-        return 0;
-    }
-
-    if (fwrite(curr_sym->asm_label, sizeof(char), asm_label_len, out_fh) != asm_label_len) {
-        printf("Serialization failed: Unable to write assembler "
-            "label for token %d\n", curr_sym->v);
-        return 0;
-    }
-    return 1;
-#else
-    int asm_label_len;
-    const char* name;
-
-    /* no label? */
-    if (curr_sym->asm_label == 0)
-    {
-        int asm_label_len = 0;
-        if (fwrite(&asm_label_len, sizeof(int), 1, out_fh) == 1)
-            return 1; /* success! */
-
-        /* failure, indicate as much */
-        printf("Serialization failed: Unable to write assembler "
-            "label length of zero for token %d\n", curr_sym->v);
-        return 0;
-    }
-
-    /* we have a label. Write out its length */
-    name = get_tok_str(curr_sym->asm_label, NULL);
-    asm_label_len = strlen(name);
-    if (fwrite(&asm_label_len, sizeof(int), 1, out_fh) != 1) {
-        printf("Serialization failed: Unable to write assembler "
-            "label length for token %d\n", curr_sym->v);
-        return 0;
-    }
-
-    if (fwrite(name, sizeof(char), asm_label_len, out_fh) != asm_label_len) {
-        printf("Serialization failed: Unable to write assembler "
-            "label for token %d\n", curr_sym->v);
-        return 0;
-    }
-    return 1;
-#endif
+	}
+	return 1;
 }
 
 int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i)
 {
-#ifdef BEFORE_grishka
-    int asm_label_length;
-    if (fread(&asm_label_length, sizeof(int), 1, in_fh) != 1) {
-        printf("Deserialization failed: Unable to get assembler label length for Sym number %d\n", i);
+    if (fread(&(curr_sym->asm_label), sizeof(curr_sym->asm_label), 1,
+		in_fh) != 1)
+	{
+        printf("Deserialization failed: Unable to read assembler label "
+            "for Sym number %d\n", i);
         return 0;
     }
-    if (asm_label_length == 0) {
-        curr_sym->asm_label = NULL;
-        return 1;
-    }
-
-    /* Allocate memory for the assembler label length, INCLUDING an
-     * extra byte for the null byte. */
-
-    curr_sym->asm_label = tcc_malloc(asm_label_length + 1);
-    if (curr_sym->asm_label == NULL) {
-        printf("Deserialization failed: Unable to allocate "
-            "memory for assembler label for Sym number %d\n", i);
-        return 0;
-    }
-
-    /* Read it in */
-    if (fread(curr_sym->asm_label, 1, asm_label_length, in_fh) != asm_label_length) {
-        printf("Deserialization failed: Unable to read "
-            "assembler label for Sym number %d\n", i);
-        tcc_free(curr_sym->asm_label);
-        return 0;
-    }
-
-    /* Add null byte */
-    curr_sym->asm_label[asm_label_length] = '\0';
-
-    /* Success! */
     return 1;
-#else
-    int asm_label_length;
-    char* name;
-
-    if (fread(&asm_label_length, sizeof(int), 1, in_fh) != 1) {
-        printf("Deserialization failed: Unable to get assembler label length for Sym number %d\n", i);
-        return 0;
-    }
-    if (asm_label_length == 0) {
-        curr_sym->asm_label = 0;
-        return 1;
-    }
-
-    /* Allocate memory for the assembler label length, INCLUDING an
-     * extra byte for the null byte. */
-
-    name = tcc_malloc(asm_label_length + 1);
-    if (name == NULL) {
-        printf("Deserialization failed: Unable to allocate "
-            "memory for assembler label for Sym number %d\n", i);
-        return 0;
-    }
-
-    /* Read it in */
-    if (fread(name, 1, asm_label_length, in_fh) != asm_label_length) {
-        printf("Deserialization failed: Unable to read "
-            "assembler label for Sym number %d\n", i);
-        tcc_free(name);
-        return 0;
-    }
-
-    name [asm_label_length] = '\0';
-    curr_sym->asm_label = tok_alloc(name, asm_label_length)->tok;
-    tcc_free (name);
-
-    /* Success! */
-    return 1;
-#endif
 }
 
 /**** Serialize/deserialize a full Sym ****/
