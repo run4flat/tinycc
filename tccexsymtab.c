@@ -1122,7 +1122,7 @@ int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab)
             case TOK_LCHAR: case TOK_CFLOAT: case TOK_LINENUM:
                 len++;
                 break;
-            case TOK_PPNUM: case TOK_STR: case TOK_LSTR:
+            case TOK_PPNUM: case TOK_PPSTR: case TOK_STR: case TOK_LSTR:
                 {
                     CString *cstr = (CString *)(stream + len);
                     len += 1 + (cstr->size + sizeof(int) - 1) / sizeof(int);
