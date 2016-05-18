@@ -1308,6 +1308,7 @@ ST_INLN void define_push_old(int v, int macro_type, int *str, Sym *first_arg)
 {
     Sym *s;
 
+    v &= ~SYM_EXTENDED;
     s = define_find(v);
     if (s && !macro_is_equal(s->d, str))
         tcc_warning("%s redefined", get_tok_str(v, NULL));
