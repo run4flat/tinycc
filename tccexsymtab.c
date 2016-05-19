@@ -1190,15 +1190,14 @@ int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab)
 {
     TokenSym* orig_ts;
     TokenSym* local_ts;
-    int tok_start_offset;
-    int orig_tok_offset;
+    int tok_start, tok_start_offset, orig_tok_no_fields, orig_tok_offset;
 
     /* Remove SYM_EXTEDED bit */
     orig_tok &= ~SYM_EXTENDED;
     /* Calculate the original token id without fields, storing them for
      * later re-application */
-    int tok_start = symtab->tok_start;
-    int orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD); /* strip flags  */
+    tok_start = symtab->tok_start;
+    orig_tok_no_fields = orig_tok & ~(SYM_STRUCT | SYM_FIELD); /* strip flags  */
 
     /* special case for ordinary tokens that exist in all compiler contexts,
      * including "data", "string", and others. */
