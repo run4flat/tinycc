@@ -1290,6 +1290,9 @@ ST_INLN void define_push(int v, int macro_type, TokenString *str, Sym *first_arg
 {
     Sym *s, *o;
 
+/* #ifdef CONFIG_TCC_EXSYMTAB */
+    v &= ~SYM_EXTENDED;
+/* #endif */
     o = define_find(v);
     s = sym_push2(&define_stack, v, macro_type, 0);
     s->d = str ? tok_str_dup(str) : NULL;
