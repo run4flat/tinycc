@@ -212,7 +212,8 @@ static int tcc_relocate_ex(TCCState *s1, void *ptr)
     }
 
 #ifdef _WIN64
-    win64_add_function_table(s1);
+// XXX how badly does this removal break Windows things?
+//    win64_add_function_table(s1);
 #endif
 
 /* #ifdef CONFIG_TCC_EXSYMTAB */
