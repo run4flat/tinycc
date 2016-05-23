@@ -164,6 +164,8 @@ for opt do
   ;;
   --elfinterp=*) tcc_elfinterp=`echo $opt | cut -d '=' -f 2`
   ;;
+  --ar=*) ar=`echo $opt | cut -d '=' -f 2`
+  ;;
   --cc=*) cc=`echo $opt | cut -d '=' -f 2`
   ;;
   --extra-cflags=*) CFLAGS="${opt#--extra-cflags=}"
@@ -270,7 +272,7 @@ else
     bindir="${execprefix}/bin"
     fi
     if test x"$docdir" = x""; then
-    docdir="${sharedir}/doc/${tccdir}"
+    docdir="${sharedir}/doc"
     fi
     if test x"$mandir" = x""; then
     mandir="${sharedir}/man"
@@ -308,6 +310,7 @@ Advanced options (experts only):
   --cross-prefix=PREFIX    use PREFIX for compile tools [$cross_prefix]
   --sysroot=PREFIX         prepend PREFIX to library/include paths []
   --cc=CC                  use C compiler CC [$cc]
+  --ar=AR                  create archives using AR [$ar]
   --extra-cflags=          specify compiler flags [$CFLAGS]
   --extra-ldflags=         specify linker options []
   --cpu=CPU                CPU [$cpu]
@@ -417,6 +420,7 @@ echo "Doc directory       $docdir"
 echo "Target root prefix  $sysroot"
 echo "Source path      $source_path"
 echo "C compiler       $cc"
+echo "ar               $ar"
 echo "cross compilers  $build_cross"
 if test "$build_cross" = "no"; then
 echo "Target CPU       $cpu"
@@ -522,8 +526,13 @@ if test "$noldl" = "yes" ; then
   echo "CONFIG_NOLDL=yes" >> config.mak
 fi
 if test "$mingw32" = "yes" ; then
-  echo "CONFIG_WIN32=yes" >> config.mak
-  echo "#define CONFIG_WIN32 1" >> $TMPH
+  if test "$cpu" = "x86-64"; then
+    echo "CONFIG_WIN64=yes" >> config.mak
+    echo "#define CONFIG_WIN64 1" >> $TMPH
+  else
+    echo "CONFIG_WIN32=yes" >> config.mak
+    echo "#define CONFIG_WIN32 1" >> $TMPH
+  fi
 fi
 if test "$cygwin" = "yes" ; then
   echo "#ifndef _WIN32" >> $TMPH
@@ -599,24 +608,17 @@ rm -f $TMPN* $CONFTEST
 
 fn_makelink()
 {
-    tgt=$1/$2
-    case $2 in
-    */*) dn=${2%/*}
-         test -d $dn || mkdir -p $dn
-         case $1 in
-         /*) ;;
-          *) while test $dn ; do
-                tgt=../$tgt; dn=${dn#${dn%%/*}}; dn=${dn#/}
-             done
-             ;;
-         esac
-         ;;
-    esac
-    ln -sfn $tgt $2
+    SRCDIR=$(realpath $1)
+    DIR=$(dirname $2)
+    FILE=$(basename $2)
+    if test ! -d "$DIR"; then
+        mkdir -p "$DIR"
+    fi
+    ln -s $SRCDIR/$DIR/$FILE $DIR/
 }
 
 if test "$source_path_used" = "yes" ; then
-  FILES="Makefile lib/Makefile tests/Makefile tests/tests2/Makefile"
+  FILES="Makefile lib/Makefile tests/Makefile tests/tests2/* tests/pp/* tests/exsymtab/*"
   for f in $FILES ; do
     fn_makelink $source_path $f
   done
