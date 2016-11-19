@@ -96,7 +96,7 @@ static void help(void)
            "  -bench      show compilation statistics\n"
            "  -xc -xa     specify type of the next infile\n"
            "  -           use stdin pipe as infile\n"
-           "  @listfile   read line separated arguments from 'listfile'\n"
+           "  @listfile   read arguments from listfile\n"
            "Preprocessor options:\n"
            "  -Idir       add include path 'dir'\n"
            "  -Dsym[=val] define 'sym' with value 'val'\n"
@@ -260,9 +260,6 @@ int main(int argc, char **argv)
 
     optind = tcc_parse_args(s, argc - 1, argv + 1);
 
-    if (s->do_bench)
-        start_time = getclock_us();
-
     tcc_set_environment(s);
 
     if (optind == 0) {
@@ -276,17 +273,18 @@ int main(int argc, char **argv)
     if (s->verbose)
         display_info(s, 0);
 
-    if (s->print_search_dirs || (s->verbose == 2 && optind == 1)) {
-        tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
-        display_info(s, 1);
-        return 0;
-    }
-
-    if (s->verbose && optind == 1)
-        return 0;
-
-    if (s->nb_files == 0)
+    if (s->nb_files == 0) {
+        if (optind == 1) {
+            if (s->print_search_dirs || s->verbose == 2) {
+                tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+                display_info(s, 1);
+                return 1;
+            }
+            if (s->verbose)
+                return 1;
+        }
         tcc_error("no input files\n");
+    }
 
     /* check -c consistency : only single file handled. XXX: checks file type */
     if (s->output_type == TCC_OUTPUT_OBJ && !s->option_r) {
@@ -297,6 +295,8 @@ int main(int argc, char **argv)
             tcc_error("cannot specify multiple files with -c");
     }
 
+    if (s->output_type == 0)
+        s->output_type = TCC_OUTPUT_EXE;
     tcc_set_output_type(s, s->output_type);
 
     if (s->output_type == TCC_OUTPUT_PREPROCESS) {
@@ -308,6 +308,9 @@ int main(int argc, char **argv)
 		tcc_error("could not write '%s'", s->outfile);
 	}
     }
+
+    if (s->do_bench)
+        start_time = getclock_us();
 
     /* compile or add each files or library */
     for(i = ret = 0; i < s->nb_files && ret == 0; i++) {
@@ -326,6 +329,8 @@ int main(int argc, char **argv)
     }
 
     if (0 == ret) {
+        if (s->do_bench)
+            tcc_print_stats(s, getclock_us() - start_time);
         if (s->output_type == TCC_OUTPUT_MEMORY) {
 #ifdef TCC_IS_NATIVE
             ret = tcc_run(s, argc - 1 - optind, argv + 1 + optind);
@@ -346,9 +351,6 @@ int main(int argc, char **argv)
                 gen_makedeps(s, s->outfile, s->deps_outfile);
         }
     }
-
-    if (s->do_bench)
-        tcc_print_stats(s, getclock_us() - start_time);
 
     tcc_delete(s);
     return ret;

@@ -36,13 +36,6 @@
 #include <time.h>
 #include <sys/stat.h>          /* stat() */
 
-#ifdef CONFIG_TCCASSERT
-#include <assert.h>
-#define TCC_ASSERT(ex) assert(ex)
-#else
-#define TCC_ASSERT(ex)
-#endif
-
 #ifndef _WIN32
 # include <unistd.h>
 # include <sys/time.h>
@@ -137,51 +130,6 @@
 
 #include "stab.h"
 #include "libtcc.h"
-
-static inline uint16_t read16le(unsigned char *p)
-{
-    return p[0] | (uint16_t)p[1] << 8;
-}
-
-static inline void write16le(unsigned char *p, uint16_t x)
-{
-    p[0] = x & 255;
-    p[1] = x >> 8 & 255;
-}
-
-static inline uint32_t read32le(unsigned char *p)
-{
-  return (p[0] | (uint32_t)p[1] << 8 |
-          (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24);
-}
-
-static inline void write32le(unsigned char *p, uint32_t x)
-{
-    p[0] = x & 255;
-    p[1] = x >> 8 & 255;
-    p[2] = x >> 16 & 255;
-    p[3] = x >> 24 & 255;
-}
-
-static inline uint64_t read64le(unsigned char *p)
-{
-  return (p[0] | (uint64_t)p[1] << 8 |
-          (uint64_t)p[2] << 16 | (uint64_t)p[3] << 24 |
-          (uint64_t)p[4] << 32 | (uint64_t)p[5] << 40 |
-          (uint64_t)p[6] << 48 | (uint64_t)p[7] << 56);
-}
-
-static inline void write64le(unsigned char *p, uint64_t x)
-{
-    p[0] = x & 255;
-    p[1] = x >> 8 & 255;
-    p[2] = x >> 16 & 255;
-    p[3] = x >> 24 & 255;
-    p[4] = x >> 32 & 255;
-    p[5] = x >> 40 & 255;
-    p[6] = x >> 48 & 255;
-    p[7] = x >> 56 & 255;
-}
 
 /* parser debug */
 /* #define PARSE_DEBUG */
@@ -401,7 +349,6 @@ typedef struct CString {
     int size; /* size in bytes */
     void *data; /* either 'char *' or 'nwchar_t *' */
     int size_allocated;
-    void *data_allocated; /* if non NULL, data has been malloced */
 } CString;
 
 /* type definition */
@@ -419,7 +366,6 @@ typedef union CValue {
     struct {
         int size;
         const void *data;
-        void *data_allocated;
     } str;
     int tab[LDOUBLE_SIZE/4];
 } CValue;
@@ -648,50 +594,6 @@ struct sym_attr {
 #endif
 };
 
-typedef struct ParseArgsState
-{
-    int run;
-    int pthread;
-    int filetype;
-    CString linker_arg; /* collect -Wl options for input such as "-Wl,-rpath -Wl,<path>" */
-} ParseArgsState;
-
-#if !defined(MEM_DEBUG)
-#define tal_free(al, p) tal_free_impl(al, p)
-#define tal_realloc(al, p, size) tal_realloc_impl(&al, p, size)
-#define TAL_DEBUG_PARAMS
-#else
-#define TAL_DEBUG 1
-#define tal_free(al, p) tal_free_impl(al, p, __FILE__, __LINE__)
-#define tal_realloc(al, p, size) tal_realloc_impl(&al, p, size, __FILE__, __LINE__)
-#define TAL_DEBUG_PARAMS , const char *file, int line
-#define TAL_DEBUG_FILE_LEN 15
-#endif
-//#define TAL_INFO 1 /* collect and dump allocators stats */
-
-typedef struct TinyAlloc {
-    size_t  limit;
-    size_t  size;
-    uint8_t *buffer;
-    uint8_t *p;
-    size_t  nb_allocs;
-    struct TinyAlloc *next, *top;
-#ifdef TAL_INFO
-    size_t  nb_peak;
-    size_t  nb_total;
-    size_t  nb_missed;
-    uint8_t *peak_p;
-#endif
-} TinyAlloc;
-
-typedef struct tal_header_t {
-    size_t  size;
-#ifdef TAL_DEBUG
-    int     line_num; /* negative line_num used for double free check */
-    char    file_name[TAL_DEBUG_FILE_LEN + 1];
-#endif
-} tal_header_t;
-
 struct TCCState {
 
     int verbose; /* if true, display some information during compilation */
@@ -870,7 +772,6 @@ struct TCCState {
     int do_bench; /* option -bench */
     int gen_deps; /* option -MD  */
     char *deps_outfile; /* option -MF */
-    ParseArgsState *parse_args_state;
 
 /* #ifdef CONFIG_TCC_EXSYMTAB */
     /* ---- Extended symbol table handling ---- */
@@ -883,6 +784,9 @@ struct TCCState {
     char * dump_identifier_names_outfile; /* option -dump-identifier-names */
 /* #endif */
 
+    int args_pthread; /* -pthread option */
+    CString linker_arg; /* collect -Wl options for input such as "-Wl,-rpath -Wl,<path>" */
+    int args_ref; /* tcc_parse_args recursive counter */
 };
 
 struct filespec {
@@ -1230,7 +1134,7 @@ PUB_FUNC void tcc_warning(const char *fmt, ...);
 /* other utilities */
 ST_FUNC void dynarray_add(void ***ptab, int *nb_ptr, void *data);
 ST_FUNC void dynarray_reset(void *pp, int *n);
-ST_FUNC void cstr_ccat(CString *cstr, int ch);
+ST_INLN void cstr_ccat(CString *cstr, int ch);
 ST_FUNC void cstr_cat(CString *cstr, const char *str, int len);
 ST_FUNC void cstr_wccat(CString *cstr, int ch);
 ST_FUNC void cstr_new(CString *cstr);
@@ -1313,13 +1217,14 @@ ST_FUNC void end_macro(void);
 ST_FUNC void save_parse_state(ParseState *s);
 ST_FUNC void restore_parse_state(ParseState *s);
 ST_INLN void tok_str_new(TokenString *s);
+ST_FUNC TokenString *tok_str_alloc(void);
 ST_FUNC void tok_str_free(int *str);
 ST_FUNC void tok_str_add(TokenString *s, int t);
 ST_FUNC void tok_str_add_tok(TokenString *s);
-ST_INLN void define_push(int v, int macro_type, TokenString *str, Sym *first_arg);
 /* #ifdef CONFIG_TCC_EXSYMTAB */
   ST_INLN void define_push_old(int v, int macro_type, int *str, Sym *first_arg);
 /* #endif */
+ST_INLN void define_push(int v, int macro_type, int *str, Sym *first_arg);
 ST_FUNC void define_undef(Sym *s);
 ST_INLN Sym *define_find(int v);
 ST_FUNC void free_defines(Sym *b);
@@ -1337,8 +1242,6 @@ ST_FUNC void preprocess_delete(void);
 ST_FUNC int tcc_preprocess(TCCState *s1);
 ST_FUNC void skip(int c);
 ST_FUNC NORETURN void expect(const char *msg);
-ST_FUNC char *trimfront(char *p);
-ST_FUNC char *trimback(char *a, char *e);
 
 /* ------------ tccgen.c ------------ */
 
@@ -1519,6 +1422,51 @@ ST_FUNC void gen_cvt_itof(int t);
 ST_FUNC void gen_vla_sp_save(int addr);
 ST_FUNC void gen_vla_sp_restore(int addr);
 ST_FUNC void gen_vla_alloc(CType *type, int align);
+
+static inline uint16_t read16le(unsigned char *p)
+{
+    return p[0] | (uint16_t)p[1] << 8;
+}
+
+static inline void write16le(unsigned char *p, uint16_t x)
+{
+    p[0] = x & 255;
+    p[1] = x >> 8 & 255;
+}
+
+static inline uint32_t read32le(unsigned char *p)
+{
+  return (p[0] | (uint32_t)p[1] << 8 |
+	  (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24);
+}
+
+static inline void write32le(unsigned char *p, uint32_t x)
+{
+    p[0] = x & 255;
+    p[1] = x >> 8 & 255;
+    p[2] = x >> 16 & 255;
+    p[3] = x >> 24 & 255;
+}
+
+static inline uint64_t read64le(unsigned char *p)
+{
+  return (p[0] | (uint64_t)p[1] << 8 |
+	  (uint64_t)p[2] << 16 | (uint64_t)p[3] << 24 |
+	  (uint64_t)p[4] << 32 | (uint64_t)p[5] << 40 |
+	  (uint64_t)p[6] << 48 | (uint64_t)p[7] << 56);
+}
+
+static inline void write64le(unsigned char *p, uint64_t x)
+{
+    p[0] = x & 255;
+    p[1] = x >> 8 & 255;
+    p[2] = x >> 16 & 255;
+    p[3] = x >> 24 & 255;
+    p[4] = x >> 32 & 255;
+    p[5] = x >> 40 & 255;
+    p[6] = x >> 48 & 255;
+    p[7] = x >> 56 & 255;
+}
 
 /* ------------ i386-gen.c ------------ */
 #if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
