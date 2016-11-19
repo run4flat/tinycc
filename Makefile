@@ -183,8 +183,14 @@ endif
 
 all: $(PROGS) $(TCCLIBS) $(TCCDOCS)
 
+ifdef ONE_SOURCE
+NATIVE_TCC_REQUISITES=tcc.o
+else
+NATIVE_TCC_REQUISITES=tcc.o $(LIBTCC)
+endif
+
 # Host Tiny C Compiler
-tcc$(EXESUF): tcc.o $(LIBTCC)
+tcc$(EXESUF): $(NATIVE_TCC_REQUISITES)
 	$(CC) -o $@ $^ $(LIBS) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $(LINK_LIBTCC)
 
 # Cross Tiny C Compilers
@@ -231,6 +237,7 @@ else
 LIBTCC_OBJ = libtcc.o
 LIBTCC_INC = $(NATIVE_FILES)
 libtcc.o : NATIVE_DEFINES += -DONE_SOURCE
+tcc.o : NATIVE_DEFINES += -DONE_SOURCE
 endif
 
 $(LIBTCC_OBJ) tcc.o : %.o : %.c $(LIBTCC_INC)
@@ -410,7 +417,7 @@ tags:
 	ctags $(top_srcdir)/*.[ch] $(top_srcdir)/include/*.h $(top_srcdir)/lib/*.[chS]
 
 TAGS:
-	ctags -e $(top_srcdir)/*.[ch] $(top_srcdir)/include/*.h $(top_srcdir)/lib/*.[chS]
+	etags $(top_srcdir)/*.[ch] $(top_srcdir)/include/*.h $(top_srcdir)/lib/*.[chS]
 
 # create release tarball from *current* git branch (including tcc-doc.html
 # and converting two files to CRLF)

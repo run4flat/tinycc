@@ -1189,9 +1189,9 @@ ST_DATA struct TCCState *tcc_state;
 #define AFF_PREPROCESS      0x0004 /* preprocess file */
 
 /* public functions currently used by the tcc main function */
-PUB_FUNC char *pstrcpy(char *buf, int buf_size, const char *s);
-PUB_FUNC char *pstrcat(char *buf, int buf_size, const char *s);
-PUB_FUNC char *pstrncpy(char *out, const char *in, size_t num);
+ST_FUNC char *pstrcpy(char *buf, int buf_size, const char *s);
+ST_FUNC char *pstrcat(char *buf, int buf_size, const char *s);
+ST_FUNC char *pstrncpy(char *out, const char *in, size_t num);
 PUB_FUNC char *tcc_basename(const char *name);
 PUB_FUNC char *tcc_fileextension (const char *name);
 
@@ -1497,6 +1497,11 @@ ST_FUNC void gfunc_epilog(void);
 ST_FUNC int gjmp(int t);
 ST_FUNC void gjmp_addr(int a);
 ST_FUNC int gtst(int inv, int t);
+#if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
+ST_FUNC void gtst_addr(int inv, int a);
+#else
+#define gtst_addr(inv, a) gsym_addr(gtst(inv, 0), a)
+#endif
 ST_FUNC void gen_opi(int op);
 ST_FUNC void gen_opf(int op);
 ST_FUNC void gen_cvt_ftoi(int t);

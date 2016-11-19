@@ -120,7 +120,7 @@ static void tcc_add_systemdir(TCCState *s)
 #endif
 
 #ifndef CONFIG_TCC_STATIC
-void dlclose(void *p)
+static void dlclose(void *p)
 {
     FreeLibrary((HMODULE)p);
 }
@@ -138,7 +138,7 @@ BOOL WINAPI DllMain (HINSTANCE hDll, DWORD dwReason, LPVOID lpReserved)
 
 /********************************************************/
 /* copy a string and truncate it. */
-PUB_FUNC char *pstrcpy(char *buf, int buf_size, const char *s)
+ST_FUNC char *pstrcpy(char *buf, int buf_size, const char *s)
 {
     char *q, *q_end;
     int c;
@@ -158,7 +158,7 @@ PUB_FUNC char *pstrcpy(char *buf, int buf_size, const char *s)
 }
 
 /* strcat and truncate. */
-PUB_FUNC char *pstrcat(char *buf, int buf_size, const char *s)
+ST_FUNC char *pstrcat(char *buf, int buf_size, const char *s)
 {
     int len;
     len = strlen(buf);
@@ -167,7 +167,7 @@ PUB_FUNC char *pstrcat(char *buf, int buf_size, const char *s)
     return buf;
 }
 
-PUB_FUNC char *pstrncpy(char *out, const char *in, size_t num)
+ST_FUNC char *pstrncpy(char *out, const char *in, size_t num)
 {
     memcpy(out, in, num);
     out[num] = '\0';
@@ -1169,6 +1169,12 @@ LIBTCCAPI TCCState *tcc_new(void)
     tcc_define_symbol(s, "_WIN32", NULL);
 # ifdef TCC_TARGET_X86_64
     tcc_define_symbol(s, "_WIN64", NULL);
+    /* Those are defined by Visual Studio */
+    tcc_define_symbol(s, "_M_X64", "100");
+    tcc_define_symbol(s, "_M_AMD64", "100");
+# else
+    /* Defined by Visual Studio. 300 == 80386. */
+    tcc_define_symbol(s, "_M_IX86", "300");
 # endif
 #else
     tcc_define_symbol(s, "__unix__", NULL);
@@ -1190,14 +1196,21 @@ LIBTCCAPI TCCState *tcc_new(void)
 # endif
 
     /* TinyCC & gcc defines */
-#if defined TCC_TARGET_PE && defined TCC_TARGET_X86_64
+#if defined(TCC_TARGET_PE) && defined(TCC_TARGET_X86_64)
+    /* 64bit Windows. */
     tcc_define_symbol(s, "__SIZE_TYPE__", "unsigned long long");
     tcc_define_symbol(s, "__PTRDIFF_TYPE__", "long long");
     tcc_define_symbol(s, "__LLP64__", NULL);
-#else
+#elif defined(TCC_TARGET_X86_64) || defined(TCC_TARGET_ARM64)
+    /* Other 64bit systems. */
     tcc_define_symbol(s, "__SIZE_TYPE__", "unsigned long");
     tcc_define_symbol(s, "__PTRDIFF_TYPE__", "long");
     tcc_define_symbol(s, "__LP64__", NULL);
+#else
+    /* Other 32bit systems. */
+    tcc_define_symbol(s, "__SIZE_TYPE__", "unsigned long");
+    tcc_define_symbol(s, "__PTRDIFF_TYPE__", "long");
+    tcc_define_symbol(s, "__ILP32__", NULL);
 #endif
 
 #ifdef TCC_TARGET_PE
@@ -1598,7 +1611,7 @@ typedef struct stat                file_info_t;
 typedef BY_HANDLE_FILE_INFORMATION file_info_t;
 #endif
 
-int get_file_info(const char *fname, file_info_t *out_info)
+static  int get_file_info(const char *fname, file_info_t *out_info)
 {
 #ifndef _WIN32
     return stat(fname, out_info);
@@ -1615,7 +1628,7 @@ int get_file_info(const char *fname, file_info_t *out_info)
 #endif
 }
 
-int is_dir(file_info_t *info)
+static int is_dir(file_info_t *info)
 {
 #ifndef _WIN32
     return S_ISDIR(info->st_mode);
@@ -1625,7 +1638,7 @@ int is_dir(file_info_t *info)
 #endif
 }
 
-int is_same_file(const file_info_t *fi1, const file_info_t *fi2)
+static int is_same_file(const file_info_t *fi1, const file_info_t *fi2)
 {
 #ifndef _WIN32
     return fi1->st_dev == fi2->st_dev &&
@@ -2486,8 +2499,10 @@ PUB_FUNC int tcc_parse_args(TCCState *s, int argc, char **argv)
     if (s->output_type == 0)
         s->output_type = TCC_OUTPUT_EXE;
 
-    if (pas->pthread && s->output_type != TCC_OUTPUT_OBJ)
-        tcc_set_options(s, "-lpthread");
+    if (pas->pthread && s->output_type != TCC_OUTPUT_OBJ) {
+      args_parser_add_file(s, "-lpthread", TCC_FILETYPE_BINARY);
+      s->nb_libraries++;
+    }
 
     if (s->output_type == TCC_OUTPUT_EXE)
         tcc_set_linker(s, (const char *)pas->linker_arg.data);
