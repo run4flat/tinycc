@@ -79,6 +79,8 @@ enum {
     TREG_F6,
     TREG_F7,
 #endif
+    TREG_SP = 13,
+    TREG_LR,
 };
 
 #ifdef TCC_ARM_VFP
@@ -406,24 +408,26 @@ static uint32_t vfpr(int r)
 {
   if(r<TREG_F0 || r>TREG_F7)
     tcc_error("compiler error! register %i is no vfp register",r);
-  return r-5;
+  return r - TREG_F0;
 }
 #else
 static uint32_t fpr(int r)
 {
   if(r<TREG_F0 || r>TREG_F3)
     tcc_error("compiler error! register %i is no fpa register",r);
-  return r-5;
+  return r - TREG_F0;
 }
 #endif
 
 static uint32_t intr(int r)
 {
-  if(r==4)
+  if(r == TREG_R12)
     return 12;
-  if((r<0 || r>4) && r!=14)
-    tcc_error("compiler error! register %i is no int register",r);
-  return r;
+  if(r >= TREG_R0 && r <= TREG_R3)
+    return r - TREG_R0;
+  if (r >= TREG_SP && r <= TREG_LR)
+    return r + (13 - TREG_SP);
+  tcc_error("compiler error! register %i is no int register",r);
 }
 
 static void calcaddr(uint32_t *base, int *off, int *sgn, int maxoff, unsigned shift)
@@ -544,7 +548,8 @@ void load(int r, SValue *sv)
       v1.type.t = VT_PTR;
       v1.r = VT_LOCAL | VT_LVAL;
       v1.c.i = sv->c.i;
-      load(base=14 /* lr */, &v1);
+      load(TREG_LR, &v1);
+      base = 14; /* lr */
       fc=sign=0;
       v=VT_LOCAL;
     } else if(v == VT_CONST) {
@@ -552,7 +557,8 @@ void load(int r, SValue *sv)
       v1.r = fr&~VT_LVAL;
       v1.c.i = sv->c.i;
       v1.sym=sv->sym;
-      load(base=14, &v1);
+      load(TREG_LR, &v1);
+      base = 14; /* lr */
       fc=sign=0;
       v=VT_LOCAL;
     } else if(v < VT_CONST) {
@@ -678,7 +684,7 @@ void store(int r, SValue *sv)
 
   v = fr & VT_VALMASK;
   if (fr & VT_LVAL || fr == VT_LOCAL) {
-    uint32_t base = 0xb;
+    uint32_t base = 0xb; /* fp */
     if(v < VT_CONST) {
       base=intr(v);
       v=VT_LOCAL;
@@ -688,7 +694,8 @@ void store(int r, SValue *sv)
       v1.r = fr&~VT_LVAL;
       v1.c.i = sv->c.i;
       v1.sym=sv->sym;
-      load(base=14, &v1);
+      load(TREG_LR, &v1);
+      base = 14; /* lr */
       fc=sign=0;
       v=VT_LOCAL;
     }
@@ -776,6 +783,15 @@ static void gcall_or_jmp(int is_jmp)
   }
 }
 
+static int unalias_ldbl(int btype)
+{
+#if LDOUBLE_SIZE == 8
+    if (btype == VT_LDOUBLE)
+      btype = VT_DOUBLE;
+#endif
+    return btype;
+}
+
 /* Return whether a structure is an homogeneous float aggregate or not.
    The answer is true if all the elements of the structure are of the same
    primitive float type and there is less than 4 elements.
@@ -788,9 +804,9 @@ static int is_hgen_float_aggr(CType *type)
     int btype, nb_fields = 0;
 
     ref = type->ref->next;
-    btype = ref->type.t & VT_BTYPE;
+    btype = unalias_ldbl(ref->type.t & VT_BTYPE);
     if (btype == VT_FLOAT || btype == VT_DOUBLE) {
-      for(; ref && btype == (ref->type.t & VT_BTYPE); ref = ref->next, nb_fields++);
+      for(; ref && btype == unalias_ldbl(ref->type.t & VT_BTYPE); ref = ref->next, nb_fields++);
       return !ref && nb_fields <= 4;
     }
   }
@@ -2106,17 +2122,37 @@ void ggoto(void)
 
 /* Save the stack pointer onto the stack and return the location of its address */
 ST_FUNC void gen_vla_sp_save(int addr) {
-    tcc_error("variable length arrays unsupported for this target");
+    SValue v;
+    v.type.t = VT_PTR;
+    v.r = VT_LOCAL | VT_LVAL;
+    v.c.i = addr;
+    store(TREG_SP, &v);
 }
 
 /* Restore the SP from a location on the stack */
 ST_FUNC void gen_vla_sp_restore(int addr) {
-    tcc_error("variable length arrays unsupported for this target");
+    SValue v;
+    v.type.t = VT_PTR;
+    v.r = VT_LOCAL | VT_LVAL;
+    v.c.i = addr;
+    load(TREG_SP, &v);
 }
 
 /* Subtract from the stack pointer, and push the resulting value onto the stack */
 ST_FUNC void gen_vla_alloc(CType *type, int align) {
-    tcc_error("variable length arrays unsupported for this target");
+    int r = intr(gv(RC_INT));
+    o(0xE04D0000|(r<<12)|r); /* sub r, sp, r */
+#ifdef TCC_ARM_EABI
+    if (align < 8)
+        align = 8;
+#else
+    if (align < 4)
+        align = 4;
+#endif
+    if (align & (align - 1))
+        tcc_error("alignment is not a power of 2: %i", align);
+    o(stuff_const(0xE3C0D000|(r<<16), align - 1)); /* bic sp, r, #align-1 */
+    vpop();
 }
 
 /* end of ARM code generator */

@@ -24,7 +24,6 @@ LINK_LIBTCC =
 LIBS =
 
 ifdef CONFIG_WIN32
- STRIP_BINARIES = yes
  LIBTCC = libtcc.dll
 else
  LIBS=-lm
@@ -233,7 +232,10 @@ else
 endif
 
 install-strip: install
-	strip $(foreach PROG,$(PROGS),"$(bindir)"/$(PROG))
+	$(STRIP) $(foreach PROG,$(PROGS),"$(bindir)"/$(PROG))
+ifdef CONFIG_WIN32
+	$(STRIP) "$(bindir)/$(LIBTCC)"
+endif
 
 ifndef CONFIG_WIN32
 install: $(PROGS) $(TCCLIBS) $(TCCDOCS)
@@ -307,7 +309,7 @@ tcc-doc.html: tcc-doc.texi
 	-makeinfo --no-split --html --number-sections -o $@ $<
 
 tcc.1: tcc-doc.texi
-	-./texi2pod.pl $< tcc.pod
+	-$(TOPSRC)/texi2pod.pl $< tcc.pod
 	-pod2man --section=1 --center="Tiny C Compiler" --release="$(VERSION)" tcc.pod > $@
 
 tcc-doc.info: tcc-doc.texi

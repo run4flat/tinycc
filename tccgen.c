@@ -2316,6 +2316,7 @@ ST_FUNC int type_size(CType *type, int *a)
 ST_FUNC void vla_runtime_type_size(CType *type, int *a)
 {
     if (type->t & VT_VLA) {
+        type_size(&type->ref->type, a);
         vset(&int_type, VT_LOCAL|VT_LVAL, type->ref->c);
     } else {
         vpushi(type_size(type, a));
@@ -4989,50 +4990,63 @@ static int case_cmp(const void *pa, const void *pb)
     return a < b ? -1 : a > b;
 }
 
-static void gcase(struct case_t **base, int len, int case_reg, int *bsym)
+static int gcase(struct case_t **base, int len, int case_reg, int *bsym)
 {
     struct case_t *p;
     int e;
-    if (len <= 4) {
-        while (len--) {
-            p = *base++;
-            vseti(case_reg, 0);
-            vpushi(p->v2);
-            if (p->v1 == p->v2) {
-                gen_op(TOK_EQ);
-                gtst_addr(0, p->sym);
-            } else {
-                gen_op(TOK_LE);
-                e = gtst(1, 0);
-                vseti(case_reg, 0);
-                vpushi(p->v1);
-                gen_op(TOK_GE);
-                gtst_addr(0, p->sym);
-                gsym(e);
-            }
-        }
-    } else {
+    while (len > 4) {
+        /* binary search */
         p = base[len/2];
-        /* mid */
         vseti(case_reg, 0);
+        vdup();
         vpushi(p->v2);
         gen_op(TOK_LE);
         e = gtst(1, 0);
+        case_reg = gv(RC_INT);
+        vpop();
         vseti(case_reg, 0);
+        vdup();
         vpushi(p->v1);
         gen_op(TOK_GE);
-        gtst_addr(0, p->sym);
-        /* left */
-        gcase(base, len/2, case_reg, bsym);
+        gtst_addr(0, p->sym); /* v1 <= x <= v2 */
+        case_reg = gv(RC_INT);
+        vpop();
+        /* x < v1 */
+        case_reg = gcase(base, len/2, case_reg, bsym);
         if (cur_switch->def_sym)
             gjmp_addr(cur_switch->def_sym);
         else
             *bsym = gjmp(*bsym);
-        /* right */
+        /* x > v2 */
         gsym(e);
         e = len/2 + 1;
-        gcase(base + e, len - e, case_reg, bsym);
+        base += e; len -= e;
     }
+    /* linear scan */
+    while (len--) {
+        p = *base++;
+        vseti(case_reg, 0);
+        vdup();
+        vpushi(p->v2);
+        if (p->v1 == p->v2) {
+            gen_op(TOK_EQ);
+            gtst_addr(0, p->sym);
+        } else {
+            gen_op(TOK_LE);
+            e = gtst(1, 0);
+            case_reg = gv(RC_INT);
+            vpop();
+            vseti(case_reg, 0);
+            vdup();
+            vpushi(p->v1);
+            gen_op(TOK_GE);
+            gtst_addr(0, p->sym);
+            gsym(e);
+        }
+        case_reg = gv(RC_INT);
+        vpop();
+    }
+    return case_reg;
 }
 
 static void block(int *bsym, int *csym, int is_expr)
@@ -5199,16 +5213,21 @@ static void block(int *bsym, int *csym, int is_expr)
                     else
                         r = RC_IRET;
 
-                    for (;;) {
+                    if (ret_nregs == 1)
                         gv(r);
-                        if (--ret_nregs == 0)
-                            break;
-                        /* We assume that when a structure is returned in multiple
-                           registers, their classes are consecutive values of the
-                           suite s(n) = 2^n */
-                        r <<= 1;
-                        vtop->c.i += regsize;
-                        vtop->r = VT_LOCAL | VT_LVAL;
+                    else {
+                        for (;;) {
+                            vdup();
+                            gv(r);
+                            vpop();
+                            if (--ret_nregs == 0)
+                              break;
+                            /* We assume that when a structure is returned in multiple
+                               registers, their classes are consecutive values of the
+                               suite s(n) = 2^n */
+                            r <<= 1;
+                            vtop->c.i += regsize;
+                        }
                     }
                 }
             } else if (is_float(func_vt.t)) {
@@ -5312,7 +5331,8 @@ static void block(int *bsym, int *csym, int is_expr)
         b = gjmp(0); /* jump to first case */
         sw.p = NULL; sw.n = 0; sw.def_sym = 0;
         saved = cur_switch;
-        cur_switch = &sw; block(&a, csym, 0);
+        cur_switch = &sw;
+        block(&a, csym, 0);
         a = gjmp(a); /* add implicit break */
         /* case lookup */
         gsym(b);
@@ -5626,7 +5646,12 @@ static void init_putv(CType *type, Section *sec, unsigned long c,
             *(double *)ptr = vtop->c.d;
             break;
         case VT_LDOUBLE:
-            *(long double *)ptr = vtop->c.ld;
+            if (sizeof(long double) == LDOUBLE_SIZE)
+                *(long double *)ptr = vtop->c.ld;
+            else if (sizeof(double) == LDOUBLE_SIZE)
+                *(double *)ptr = vtop->c.ld;
+            else
+                tcc_error("can't cross compile long double constants");
             break;
         case VT_LLONG:
             *(long long *)ptr |= (vtop->c.i & bit_mask) << bit_pos;
@@ -6411,7 +6436,7 @@ static int decl0(int l, int is_for_loop_init)
             }
             /* special test for old K&R protos without explicit int
                type. Only accepted when defining global data */
-            if (l == VT_LOCAL || tok < TOK_DEFINE)
+            if (l == VT_LOCAL || tok < TOK_UIDENT)
                 break;
             btype.t = VT_INT;
         }

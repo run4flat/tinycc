@@ -50,7 +50,7 @@ cpu=
 # OS specific
 targetos=`uname`
 case $targetos in
-  MINGW32*)  mingw32=yes;;
+  MINGW*)    mingw32=yes;;
   MSYS*)     mingw32=yes;;
   DragonFly) noldl=yes;;
   OpenBSD)   noldl=yes;;
@@ -563,11 +563,8 @@ fn_makelink()
 	 esac
 	 ;;
     esac
-    if test "$mingw32" = "yes" ; then
-        cmd //c mklink `echo "$2 $tgt" | sed 's,/,\\\\,g'`
-    else
-        ln -sfn $tgt $2
-    fi
+
+    ln -sfn $tgt $2 || ( echo "ln failed. Using cp instead."; cp -f $1/$2 $2 )
 }
 
 if test "$source_path_used" = "yes" ; then
