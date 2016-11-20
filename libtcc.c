@@ -895,6 +895,8 @@ LIBTCCAPI TCCState *tcc_new(void)
 # endif
 # if defined(__FreeBSD__)
     tcc_define_symbol(s, "__FreeBSD__", "__FreeBSD__");
+    /* No 'Thread Storage Local' on FreeBSD with tcc */
+    tcc_define_symbol(s, "__NO_TLS", NULL);
 # endif
 # if defined(__FreeBSD_kernel__)
     tcc_define_symbol(s, "__FreeBSD_kernel__", NULL);
@@ -933,15 +935,27 @@ LIBTCCAPI TCCState *tcc_new(void)
     /* wint_t is unsigned int by default, but (signed) int on BSDs
        and unsigned short on windows.  Other OSes might have still
        other conventions, sigh.  */
-#if defined(__FreeBSD__) || defined (__FreeBSD_kernel__) || defined(__NetBSD__) || defined(__OpenBSD__)
+# if defined(__FreeBSD__) || defined (__FreeBSD_kernel__) \
+  || defined(__NetBSD__) || defined(__OpenBSD__)
     tcc_define_symbol(s, "__WINT_TYPE__", "int");
-#else
+#  ifdef __FreeBSD__
+    /* define __GNUC__ to have some useful stuff from sys/cdefs.h
+       that are unconditionally used in FreeBSDs other system headers :/ */
+    tcc_define_symbol(s, "__GNUC__", "2");
+    tcc_define_symbol(s, "__GNUC_MINOR__", "1");
+    tcc_define_symbol(s, "__builtin_alloca", "alloca");
+    tcc_define_symbol(s, "__builtin_memcpy", "memcpy");
+    tcc_define_symbol(s, "__USER_LABEL_PREFIX__", "");
+#  endif
+# else
     tcc_define_symbol(s, "__WINT_TYPE__", "unsigned int");
-#endif
     /* glibc defines */
-    tcc_define_symbol(s, "__REDIRECT(name, proto, alias)", "name proto __asm__ (#alias)");
-    tcc_define_symbol(s, "__REDIRECT_NTH(name, proto, alias)", "name proto __asm__ (#alias) __THROW");
-#endif
+    tcc_define_symbol(s, "__REDIRECT(name, proto, alias)",
+        "name proto __asm__ (#alias)");
+    tcc_define_symbol(s, "__REDIRECT_NTH(name, proto, alias)",
+        "name proto __asm__ (#alias) __THROW");
+# endif
+#endif /* ndef TCC_TARGET_PE */
 
 /* #ifdef CONFIG_TCC_EXSYMTAB */
     /* Extended symbol table API */

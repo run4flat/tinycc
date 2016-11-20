@@ -1282,19 +1282,25 @@ static int reg_fret(int t)
     return REG_FRET;
 }
 
-/* expand long long on stack in two int registers */
+/* expand 64bit on stack in two ints */
 static void lexpand(void)
 {
-    int u;
-
+    int u, v;
     u = vtop->type.t & (VT_DEFSIGN | VT_UNSIGNED);
-    gv(RC_INT);
-    vdup();
-    vtop[0].r = vtop[-1].r2;
-    vtop[0].r2 = VT_CONST;
-    vtop[-1].r2 = VT_CONST;
-    vtop[0].type.t = VT_INT | u;
-    vtop[-1].type.t = VT_INT | u;
+    v = vtop->r & (VT_VALMASK | VT_LVAL);
+    if (v == VT_CONST) {
+        vdup();
+        vtop[0].c.i >>= 32;
+    } else if (v == (VT_LVAL|VT_CONST) || v == (VT_LVAL|VT_LOCAL)) {
+        vdup();
+        vtop[0].c.i += 4;
+    } else {
+        gv(RC_INT);
+        vdup();
+        vtop[0].r = vtop[-1].r2;
+        vtop[0].r2 = vtop[-1].r2 = VT_CONST;
+    }
+    vtop[0].type.t = vtop[-1].type.t = VT_INT | u;
 }
 
 #ifdef TCC_TARGET_ARM
@@ -1325,6 +1331,7 @@ ST_FUNC void lexpand_nr(void)
 }
 #endif
 
+#if !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_ARM64)
 /* build a long long from two ints */
 static void lbuild(int t)
 {
@@ -1333,6 +1340,7 @@ static void lbuild(int t)
     vtop[-1].type.t = t;
     vpop();
 }
+#endif
 
 /* rotate n first stack elements to the bottom 
    I1 ... In -> I2 ... In I1 [top is right]
@@ -1396,6 +1404,7 @@ static void gv_dup(void)
     SValue sv;
 
     t = vtop->type.t;
+#if !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_ARM64)
     if ((t & VT_BTYPE) == VT_LLONG) {
         lexpand();
         gv_dup();
@@ -1410,7 +1419,9 @@ static void gv_dup(void)
         vswap();
         lbuild(t);
         vswap();
-    } else {
+    } else
+#endif
+    {
         /* duplicate value */
         rc = RC_INT;
         sv.type.t = VT_INT;
@@ -2387,7 +2398,7 @@ static void gen_cast(CType *type)
                 }
 #if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
             } else if ((dbt & VT_BTYPE) == VT_LLONG) {
-                if ((sbt & VT_BTYPE) != VT_LLONG && !nocode_wanted) {
+                if ((sbt & VT_BTYPE) != VT_LLONG) {
                     /* scalar to long long */
                     /* machine independent conversion */
                     gv(RC_INT);
@@ -2415,7 +2426,7 @@ static void gen_cast(CType *type)
                        (dbt & VT_BTYPE) == VT_FUNC) {
                 if ((sbt & VT_BTYPE) != VT_LLONG &&
                     (sbt & VT_BTYPE) != VT_PTR &&
-                    (sbt & VT_BTYPE) != VT_FUNC && !nocode_wanted) {
+                    (sbt & VT_BTYPE) != VT_FUNC) {
                     /* need to convert from 32bit to 64bit */
                     gv(RC_INT);
                     if (sbt != (VT_INT | VT_UNSIGNED)) {
@@ -2445,7 +2456,7 @@ static void gen_cast(CType *type)
                 force_charshort_cast(dbt);
             } else if ((dbt & VT_BTYPE) == VT_INT) {
                 /* scalar to int */
-                if (sbt == VT_LLONG && !nocode_wanted) {
+                if ((sbt & VT_BTYPE) == VT_LLONG) {
                     /* from long long: just take low order word */
                     lexpand();
                     vpop();
@@ -3185,10 +3196,14 @@ static void parse_attribute(AttributeDef *ad)
                 case TOK_MODE_DI:
                     ad->a.mode = VT_LLONG + 1;
                     break;
+                case TOK_MODE_QI:
+                    ad->a.mode = VT_BYTE + 1;
+                    break;
                 case TOK_MODE_HI:
                     ad->a.mode = VT_SHORT + 1;
                     break;
                 case TOK_MODE_SI:
+                case TOK_MODE_word:
                     ad->a.mode = VT_INT + 1;
                     break;
                 default:
