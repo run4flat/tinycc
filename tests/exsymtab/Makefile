@@ -1,10 +1,12 @@
 TOP = ../..
 include $(TOP)/Makefile
-VPATH = $(top_srcdir)/tests/exsymtab
+VPATH = $(TOPSRC)/tests/exsymtab $(TOPSRC) $(TOP)
+CFLAGS = -I$(TOPSRC) -I$(TOP)
 
-TCCFLAGS = -B$(TOP) -I$(top_srcdir)/include
+
+TCCFLAGS = -B$(TOP) -I$(TOPSRC)/include
 ifdef CONFIG_WIN32
- TCCFLAGS = -B$(top_srcdir)/win32 -I$(top_srcdir)/include -L$(TOP)
+ TCCFLAGS = -B$(TOPSRC)/win32 -I$(TOPSRC)/include -L$(TOP)
 endif
 
 ifeq ($(TARGETOS),Darwin)
@@ -92,21 +94,21 @@ PROVES =	\
 #  TESTS := $(filter-out test_name test_name,$(TESTS))
 #endif
 
-%.prove: %.c $(top_builddir)/$(LIBTCC)
-	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	prove --exec '' ./$@ :: lib_path=$(top_srcdir); rm $@
+%.prove: %.c $(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(TOPSRC)
+	prove --exec '' ./$@ :: lib_path=$(TOPSRC); rm $@
 
-%.test: %.c $(top_builddir)/$(LIBTCC)
-	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	./$@ lib_path=$(top_srcdir); rm $@
+%.test: %.c $(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(TOPSRC)
+	./$@ lib_path=$(TOPSRC); rm $@
 
-%.dbg: %.c $(top_builddir)/$(LIBTCC)
-	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	gdb --args $@ lib_path=$(top_srcdir); rm $@
+%.dbg: %.c $(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(TOPSRC)
+	gdb --args $@ lib_path=$(TOPSRC); rm $@
 
-%.valgrind: %.c $(top_builddir)/$(LIBTCC)
-	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(top_srcdir)
-	valgrind --track-origins=yes --leak-check=yes ./$@ lib_path=$(top_srcdir); rm $@
+%.valgrind: %.c $(LIBTCC)
+	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(NATIVE_DEFINES) $(LIBS) $(LINK_LIBTCC) $(LDFLAGS) -I$(TOPSRC)
+	valgrind --track-origins=yes --leak-check=yes ./$@ lib_path=$(TOPSRC); rm $@
 
 all test: $(TESTS)
 
