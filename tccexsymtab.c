@@ -21,7 +21,7 @@
 /* tccgen: asm_label cleanu */
 //#define BEFORE_hash_opt
 
-#define FUNC_STR func_str.str
+#define FUNC_STR func_str->str
 
 /*****************************************************************************/
 /*                            exsymtab_token_hash                            */
