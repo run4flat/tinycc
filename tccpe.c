@@ -1664,7 +1664,7 @@ ST_FUNC int pe_load_file(struct TCCState *s1, const char *filename, int fd)
         ret = pe_load_def(s1, fd);
     else if (pe_load_res(s1, fd) == 0)
         ret = 0;
-    else if (read_mem(fd, 0, buf, sizeof buf) && 0 == strncmp(buf, "MZ", 2))
+    else if (read_mem(fd, 0, buf, 4) && 0 == memcmp(buf, "MZ\220", 4))
         ret = pe_load_dll(s1, tcc_basename(filename), fd);
     return ret;
 }
@@ -1809,8 +1809,8 @@ ST_FUNC int pe_output_file(TCCState * s1, const char *filename)
     pe.filename = filename;
     pe.s1 = s1;
 
-    pe_add_runtime(s1, &pe);
     tcc_add_bcheck(s1);
+    pe_add_runtime(s1, &pe);
     relocate_common_syms(); /* assign bss adresses */
     tcc_add_linker_symbols(s1);
 

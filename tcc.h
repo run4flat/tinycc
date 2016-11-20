@@ -283,6 +283,11 @@
 # define DEFAULT_ELFINTERP(s) default_elfinterp(s)
 #endif
 
+/* target specific subdir for libtcc1.a */
+#ifndef TCC_ARCH_DIR
+# define TCC_ARCH_DIR ""
+#endif
+
 /* library to use with CONFIG_USE_LIBGCC instead of libtcc1.a */
 #define TCC_LIBGCC USE_MUADIR(CONFIG_SYSROOT "/" CONFIG_LDDIR) "/libgcc_s.so.1"
 
@@ -621,7 +626,6 @@ struct TCCState {
     int old_struct_init_code;	/* use old algorithm to init array in struct when there is no '{' used.
 				   Liuux 2.4.26 can't find initrd when compiled with a new algorithm */
     int dollars_in_identifiers;	/* allows '$' char in indentifiers */
-    int normalize_inc_dirs;	/* remove non-existent or duplicate directories from include paths */
 
     /* warning switches */
     int warn_write_strings;
@@ -632,7 +636,6 @@ struct TCCState {
 
     /* compile with debug symbol (and use them if error during execution) */
     int do_debug;
-    int do_strip;
 #ifdef CONFIG_TCC_BCHECK
     /* compile with built-in memory and bounds checker */
     int do_bounds_check;
@@ -765,6 +768,7 @@ struct TCCState {
     struct filespec **files; /* files seen on command line */
     int nb_files; /* number thereof */
     int nb_libraries; /* number of libs thereof */
+    int filetype;
     char *outfile; /* output filename */
     char *option_m; /* only -m32/-m64 handled */
     int print_search_dirs; /* option */
@@ -784,9 +788,7 @@ struct TCCState {
     char * dump_identifier_names_outfile; /* option -dump-identifier-names */
 /* #endif */
 
-    int args_pthread; /* -pthread option */
-    CString linker_arg; /* collect -Wl options for input such as "-Wl,-rpath -Wl,<path>" */
-    int args_ref; /* tcc_parse_args recursive counter */
+    int option_pthread; /* -pthread option */
 };
 
 struct filespec {
@@ -1091,14 +1093,10 @@ ST_DATA int tcc_ext;
 /* XXX: get rid of this ASAP */
 ST_DATA struct TCCState *tcc_state;
 
-#define AFF_PRINT_ERROR     0x0001 /* print error if file not found */
-#define AFF_REFERENCED_DLL  0x0002 /* load a referenced dll from another dll */
-#define AFF_PREPROCESS      0x0004 /* preprocess file */
-
 /* public functions currently used by the tcc main function */
-ST_FUNC char *pstrcpy(char *buf, int buf_size, const char *s);
-ST_FUNC char *pstrcat(char *buf, int buf_size, const char *s);
-ST_FUNC char *pstrncpy(char *out, const char *in, size_t num);
+PUB_FUNC char *pstrcpy(char *buf, int buf_size, const char *s);
+PUB_FUNC char *pstrcat(char *buf, int buf_size, const char *s);
+PUB_FUNC char *pstrncpy(char *out, const char *in, size_t num);
 PUB_FUNC char *tcc_basename(const char *name);
 PUB_FUNC char *tcc_fileextension (const char *name);
 
@@ -1165,7 +1163,26 @@ ST_FUNC void tcc_open_bf(TCCState *s1, const char *filename, int initlen);
 ST_FUNC int tcc_open(TCCState *s1, const char *filename);
 ST_FUNC void tcc_close(void);
 
-ST_FUNC int tcc_add_file_internal(TCCState *s1, const char *filename, int flags, int filetype);
+ST_FUNC int tcc_add_file_internal(TCCState *s1, const char *filename, int flags);
+/* flags: */
+#define AFF_PRINT_ERROR     0x10 /* print error if file not found */
+#define AFF_REFERENCED_DLL  0x20 /* load a referenced dll from another dll */
+#define AFF_PREPROCESS      0x40 /* preprocess file */
+/* combined with: */
+#define AFF_TYPE_NONE   0
+#define AFF_TYPE_C      1
+#define AFF_TYPE_ASM    2
+#define AFF_TYPE_ASMPP  3
+#define AFF_TYPE_BIN    4
+#define AFF_TYPE_LIB    5
+#define AFF_TYPE_LIBWH  6
+/* values from tcc_object_type(...) */
+#define AFF_BINTYPE_REL 1
+#define AFF_BINTYPE_DYN 2
+#define AFF_BINTYPE_AR  3
+#define AFF_BINTYPE_C67 4
+
+
 ST_FUNC int tcc_add_crt(TCCState *s, const char *filename);
 
 #ifndef TCC_TARGET_PE
@@ -1367,6 +1384,7 @@ ST_FUNC void relocate_section(TCCState *s1, Section *s);
 ST_FUNC void relocate_plt(TCCState *s1);
 
 ST_FUNC void tcc_add_linker_symbols(TCCState *s1);
+ST_FUNC int tcc_object_type(int fd, ElfW(Ehdr) *h);
 ST_FUNC int tcc_load_object_file(TCCState *s1, int fd, unsigned long file_offset);
 ST_FUNC int tcc_load_archive(TCCState *s1, int fd);
 ST_FUNC void tcc_add_bcheck(TCCState *s1);

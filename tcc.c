@@ -307,6 +307,9 @@ int main(int argc, char **argv)
 	    if (!s->ppfp)
 		tcc_error("could not write '%s'", s->outfile);
 	}
+    } else if (s->output_type != TCC_OUTPUT_OBJ) {
+	if (s->option_pthread)
+	    tcc_set_options(s, "-lpthread");
     }
 
     if (s->do_bench)
@@ -315,20 +318,28 @@ int main(int argc, char **argv)
     /* compile or add each files or library */
     for(i = ret = 0; i < s->nb_files && ret == 0; i++) {
         struct filespec *f = s->files[i];
-        if (f->type == 'l') {
+        if (f->type >= AFF_TYPE_LIB) {
+            s->alacarte_link = f->type == AFF_TYPE_LIB;
             if (tcc_add_library_err(s, f->name) < 0)
                 ret = 1;
         } else {
             if (1 == s->verbose)
                 printf("-> %s\n", f->name);
-            if (tcc_add_file(s, f->name, f->type) < 0)
+            s->filetype = f->type;
+            if (tcc_add_file(s, f->name) < 0)
                 ret = 1;
             if (!first_file)
                 first_file = f->name;
         }
+        s->filetype = AFF_TYPE_NONE;
+        s->alacarte_link = 1;
     }
 
-    if (0 == ret) {
+    if (s->output_type == TCC_OUTPUT_PREPROCESS) {
+        if (s->outfile)
+            fclose(s->ppfp);
+
+    } else if (0 == ret) {
         if (s->do_bench)
             tcc_print_stats(s, getclock_us() - start_time);
         if (s->output_type == TCC_OUTPUT_MEMORY) {

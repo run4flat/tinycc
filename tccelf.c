@@ -236,11 +236,14 @@ ST_FUNC int add_elf_sym(Section *s, addr_t value, unsigned long size,
                 /* keep first-found weak definition, ignore subsequents */
             } else if (sym_vis == STV_HIDDEN || sym_vis == STV_INTERNAL) {
                 /* ignore hidden symbols after */
-            } else if (esym->st_shndx == SHN_COMMON
-                    && (sh_num < SHN_LORESERVE || sh_num == SHN_COMMON)) {
-                /* gr: Happens with 'tcc ... -static tcctest.c' on e.g. Ubuntu 6.01
-                   No idea if this is the correct solution ... */
+            } else if ((esym->st_shndx == SHN_COMMON
+                            || esym->st_shndx == bss_section->sh_num)
+                        && (sh_num < SHN_LORESERVE
+                            && sh_num != bss_section->sh_num)) {
+                /* data symbol gets precedence over common/bss */
                 goto do_patch;
+            } else if (sh_num == SHN_COMMON || sh_num == bss_section->sh_num) {
+                /* data symbol keeps precedence over common/bss */
             } else if (s == tcc_state->dynsymtab_section) {
                 /* we accept that two DLL define the same symbol */
             } else {
@@ -248,7 +251,7 @@ ST_FUNC int add_elf_sym(Section *s, addr_t value, unsigned long size,
                 printf("new_bind=%x new_shndx=%x new_vis=%x old_bind=%x old_shndx=%x old_vis=%x\n",
                        sym_bind, sh_num, new_vis, esym_bind, esym->st_shndx, esym_vis);
 #endif
-                tcc_error_noabort("'%s' defined twice... may be -fcommon is needed?", name);
+                tcc_error_noabort("'%s' defined twice", name);
             }
         } else {
         do_patch:
@@ -1555,61 +1558,37 @@ static void add_init_array_defines(TCCState *s1, const char *section_name)
 static int tcc_add_support(TCCState *s1, const char *filename)
 {
     char buf[1024];
-    snprintf(buf, sizeof(buf), "%s/%s/%s", s1->tcc_lib_path,
-    /* an cpu specific path inside tcc_lib_path, mainly for keeping libtcc1.a */
-    #ifdef TCC_TARGET_I386
-	"i386"
-    #endif
-    #ifdef TCC_TARGET_X86_64
-        "x86-64"
-    #endif
-    #ifdef TCC_TARGET_ARM
-	"arm"
-    #endif
-    #ifdef TCC_TARGET_ARM64
-	"arm64"
-    #endif
-    #ifdef TCC_TARGET_C67
-	"C67"
-    #endif
-	,filename);
-
-    return tcc_add_file(s1, buf, TCC_FILETYPE_BINARY);
+    snprintf(buf, sizeof(buf), "%s/"TCC_ARCH_DIR"%s", s1->tcc_lib_path, filename);
+    return tcc_add_file(s1, buf);
 }
 
 ST_FUNC void tcc_add_bcheck(TCCState *s1)
 {
 #ifdef CONFIG_TCC_BCHECK
     addr_t *ptr;
+    int sym_index;
 
     if (0 == s1->do_bounds_check)
         return;
-
     /* XXX: add an object file to do that */
     ptr = section_ptr_add(bounds_section, sizeof(*ptr));
     *ptr = 0;
     add_elf_sym(symtab_section, 0, 0,
                 ELFW(ST_INFO)(STB_GLOBAL, STT_NOTYPE), 0,
                 bounds_section->sh_num, "__bounds_start");
+    /* pull bcheck.o from libtcc1.a */
+    sym_index = add_elf_sym(symtab_section, 0, 0,
+                ELFW(ST_INFO)(STB_GLOBAL, STT_NOTYPE), 0,
+                SHN_UNDEF, "__bound_init");
     if (s1->output_type != TCC_OUTPUT_MEMORY) {
         /* add 'call __bound_init()' in .init section */
-
-        /* XXX not called on MSYS, reason is unknown. For this
-           case a call to __bound_init is performed in bcheck.c
-           when __bound_ptr_add, __bound_new_region,
-           __bound_delete_region called */
-
-	int sym_index = find_elf_sym(symtab_section, "__bound_init");
-	if (sym_index) {
-    	    Section *init_section = find_section(s1, ".init");
-    	    unsigned char *pinit = section_ptr_add(init_section, 5);
-    	    pinit[0] = 0xe8;
-            write32le(pinit + 1, -4);
-    	    put_elf_reloc(symtab_section, init_section,
-                      init_section->data_offset - 4, R_386_PC32, sym_index);
-	}
-	else
-    	    tcc_warning("__bound_init not defined");
+        Section *init_section = find_section(s1, ".init");
+        unsigned char *pinit = section_ptr_add(init_section, 5);
+        pinit[0] = 0xe8;
+        write32le(pinit + 1, -4);
+        put_elf_reloc(symtab_section, init_section,
+            init_section->data_offset - 4, R_386_PC32, sym_index);
+            /* R_386_PC32 = R_X86_64_PC32 = 2 */
     }
 #endif
 }
@@ -1617,25 +1596,17 @@ ST_FUNC void tcc_add_bcheck(TCCState *s1)
 /* add tcc runtime libraries */
 ST_FUNC void tcc_add_runtime(TCCState *s1)
 {
+    tcc_add_bcheck(s1);
     tcc_add_pragma_libs(s1);
-
     /* add libc */
     if (!s1->nostdlib) {
         tcc_add_library(s1, "c");
 #ifdef CONFIG_USE_LIBGCC
         if (!s1->static_link) {
-            tcc_add_file(s1, TCC_LIBGCC, TCC_FILETYPE_BINARY);
+            tcc_add_file(s1, TCC_LIBGCC);
         }
 #endif
         tcc_add_support(s1, "libtcc1.a");
-    }
-
-    /* tcc_add_bcheck tries to relocate a call to __bound_init in _init so
-       libtcc1.a must be loaded before for __bound_init to be defined and
-       crtn.o must be loaded after to not finalize _init too early. */
-    tcc_add_bcheck(s1);
-
-    if (!s1->nostdlib) {
         /* add crt end if not memory output */
         if (s1->output_type != TCC_OUTPUT_MEMORY)
             tcc_add_crt(s1, "crtn.o");
@@ -2033,7 +2004,6 @@ static void alloc_sec_names(TCCState *s1, int file_type, Section *strsec)
                 s->sh_size = s->data_offset;
         } else if (s1->do_debug ||
             file_type == TCC_OUTPUT_OBJ ||
-            file_type == TCC_OUTPUT_EXE ||
             (s->sh_flags & SHF_ALLOC) ||
             i == (s1->nb_sections - 1)) {
             /* we output all sections if debug or object file */
@@ -2703,16 +2673,6 @@ static int elf_output_file(TCCState *s1, const char *filename)
 
     /* Create the ELF file with name 'filename' */
     ret = tcc_write_elf_file(s1, filename, phnum, phdr, file_offset, sec_order);
-    if (s1->do_strip) {
-	int rc;
-	const char *strip_cmd = "sstrip "; // super strip utility from ELFkickers
-	const char *null_dev = " 2> /dev/null";
-	char buf[1050];
-	snprintf(buf, sizeof(buf), "%s%s%s", strip_cmd, filename, null_dev);
-	rc = system(buf);
-	if (rc)
-	    system(buf+1);	// call a strip utility from binutils
-    }
  the_end:
     tcc_free(s1->symtab_to_dynsym);
     tcc_free(sec_order);
@@ -2751,6 +2711,25 @@ typedef struct SectionMergeInfo {
     uint8_t link_once;         /* true if link once section */
 } SectionMergeInfo;
 
+ST_FUNC int tcc_object_type(int fd, ElfW(Ehdr) *h)
+{
+    int size = read(fd, h, sizeof *h);
+    if (size == sizeof *h && 0 == memcmp(h, ELFMAG, 4)) {
+        if (h->e_type == ET_REL)
+            return AFF_BINTYPE_REL;
+        if (h->e_type == ET_DYN)
+            return AFF_BINTYPE_DYN;
+    } else if (size >= 8) {
+        if (0 == memcmp(h, ARMAG, 8))
+            return AFF_BINTYPE_AR;
+#ifdef TCC_TARGET_COFF
+        if (((struct filehdr*)h)->f_magic == COFF_C67_MAGIC)
+            return AFF_BINTYPE_C67;
+#endif
+    }
+    return 0;
+}
+
 /* load an object file and merge it with current files */
 /* XXX: handle correctly stab (debug) info */
 ST_FUNC int tcc_load_object_file(TCCState *s1,
@@ -2772,15 +2751,8 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
 
     stab_index = stabstr_index = 0;
 
-    if (read(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr))
-        goto fail1;
-    if (ehdr.e_ident[0] != ELFMAG0 ||
-        ehdr.e_ident[1] != ELFMAG1 ||
-        ehdr.e_ident[2] != ELFMAG2 ||
-        ehdr.e_ident[3] != ELFMAG3)
-        goto fail1;
-    /* test if object file */
-    if (ehdr.e_type != ET_REL)
+    lseek(fd, file_offset, SEEK_SET);
+    if (tcc_object_type(fd, &ehdr) != AFF_BINTYPE_REL)
         goto fail1;
     /* test CPU specific stuff */
     if (ehdr.e_ident[5] != ELFDATA2LSB ||
@@ -3078,7 +3050,6 @@ static int tcc_load_alacarte(TCCState *s1, int fd, int size)
                 if(sym->st_shndx == SHN_UNDEF) {
                     off = get_be32(ar_index + i * 4) + sizeof(ArchiveHeader);
                     ++bound;
-                    lseek(fd, off, SEEK_SET);
                     if(tcc_load_object_file(s1, fd, off) < 0) {
                     fail:
                         ret = -1;
@@ -3131,14 +3102,12 @@ ST_FUNC int tcc_load_archive(TCCState *s1, int fd)
             /* coff symbol table : we handle it */
             if(s1->alacarte_link)
                 return tcc_load_alacarte(s1, fd, size);
-        } else if (!strcmp(ar_name, "//") ||
-                   !strcmp(ar_name, "__.SYMDEF") ||
-                   !strcmp(ar_name, "__.SYMDEF/") ||
-                   !strcmp(ar_name, "ARFILENAMES/")) {
-            /* skip symbol table or archive names */
         } else {
-            if (tcc_load_object_file(s1, fd, file_offset) < 0)
-                return -1;
+            ElfW(Ehdr) ehdr;
+            if (tcc_object_type(fd, &ehdr) == AFF_BINTYPE_REL) {
+                if (tcc_load_object_file(s1, fd, file_offset) < 0)
+                    return -1;
+            }
         }
         lseek(fd, file_offset + size, SEEK_SET);
     }
@@ -3385,7 +3354,7 @@ static int ld_add_file(TCCState *s1, const char filename[])
 {
     int ret;
 
-    ret = tcc_add_file_internal(s1, filename, 0, TCC_FILETYPE_BINARY);
+    ret = tcc_add_file_internal(s1, filename, AFF_TYPE_BIN);
     if (ret)
         ret = tcc_add_dll(s1, filename, 0);
     return ret;

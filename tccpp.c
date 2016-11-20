@@ -1005,9 +1005,9 @@ redo_start:
                 else if (tok == TOK_LINEFEED)
                     goto redo_start;
                 else if (parse_flags & PARSE_FLAG_ASM_FILE)
-                    p = parse_line_comment(p);
+                    p = parse_line_comment(p - 1);
             } else if (parse_flags & PARSE_FLAG_ASM_FILE)
-                p = parse_line_comment(p);
+                p = parse_line_comment(p - 1);
             break;
 _default:
         default:
@@ -1849,7 +1849,6 @@ ST_FUNC void preprocess(int is_bof)
                 /* search in all the include paths */
                 int j = i - 2, k = j - s1->nb_include_paths;
                 path = k < 0 ? s1->include_paths[j] : s1->sysinclude_paths[k];
-                if (path == 0) continue;
                 pstrcpy(buf1, sizeof(buf1), path);
                 pstrcat(buf1, sizeof(buf1), "/");
             }
@@ -2021,7 +2020,7 @@ _line_num:
             goto ignore;
         tcc_warning("Ignoring unknown preprocessing directive #%s", get_tok_str(tok, &tokc));
     ignore:
-        file->buf_ptr = parse_line_comment(file->buf_ptr);
+        file->buf_ptr = parse_line_comment(file->buf_ptr - 1);
         goto the_end;
     }
     /* ignore other preprocess commands or #! for C scripts */
@@ -2759,21 +2758,26 @@ maybe_newline:
     case '0': case '1': case '2': case '3':
     case '4': case '5': case '6': case '7':
     case '8': case '9':
-        cstr_reset(&tokcstr);
+        t = c;
+        PEEKC(c, p);
         /* after the first digit, accept digits, alpha, '.' or sign if
            prefixed by 'eEpP' */
     parse_num:
+        cstr_reset(&tokcstr);
         for(;;) {
-            t = c;
-            cstr_ccat(&tokcstr, c);
-            PEEKC(c, p);
+            cstr_ccat(&tokcstr, t);
             if (!((isidnum_table[c - CH_EOF] & (IS_ID|IS_NUM))
                   || c == '.'
                   || ((c == '+' || c == '-')
-                      && (t == 'e' || t == 'E' || t == 'p' || t == 'P')
-                      && !(parse_flags & PARSE_FLAG_ASM_FILE)
-                      )))
+                      && (((t == 'e' || t == 'E')
+                            && !(parse_flags & PARSE_FLAG_ASM_FILE
+                                /* 0xe+1 is 3 tokens in asm */
+                                && ((char*)tokcstr.data)[0] == '0'
+                                && toup(((char*)tokcstr.data)[1]) == 'X'))
+                          || t == 'p' || t == 'P'))))
                 break;
+            t = c;
+            PEEKC(c, p);
         }
         /* We add a trailing '\0' to ease parsing */
         cstr_ccat(&tokcstr, '\0');
@@ -2786,8 +2790,7 @@ maybe_newline:
         /* special dot handling because it can also start a number */
         PEEKC(c, p);
         if (isnum(c)) {
-            cstr_reset(&tokcstr);
-            cstr_ccat(&tokcstr, '.');
+            t = '.';
             goto parse_num;
         } else if ((parse_flags & PARSE_FLAG_ASM_FILE)
                    && (isidnum_table[c - CH_EOF] & (IS_ID|IS_NUM))) {
@@ -3345,7 +3348,7 @@ static int macro_subst_tok(
 static int paste_tokens(int t1, CValue *v1, int t2, CValue *v2)
 {
     CString cstr;
-    int n;
+    int n, ret = 1;
 
     cstr_new(&cstr);
     if (t1 != TOK_PLCHLDR)
@@ -3363,15 +3366,15 @@ static int paste_tokens(int t1, CValue *v1, int t2, CValue *v2)
             break;
         if (is_space(tok))
             continue;
-        tcc_warning("pasting <%.*s> and <%s> does not give a valid preprocessing token",
-            n, cstr.data, (char*)cstr.data + n);
+        tcc_warning("pasting \"%.*s\" and \"%s\" does not give a valid"
+            " preprocessing token", n, cstr.data, (char*)cstr.data + n);
+        ret = 0;
         break;
     }
     tcc_close();
-
     //printf("paste <%s>\n", (char*)cstr.data);
     cstr_free(&cstr);
-    return 0;
+    return ret;
 }
 
 /* handle the '##' operator. Return NULL if no '##' seen. Otherwise
@@ -3410,13 +3413,15 @@ static inline int *macro_twosharps(const int *ptr0)
             /* given 'a##b', remove nosubsts preceding 'b' */
             while ((t1 = *++ptr) == TOK_NOSUBST)
                 ;
-            if (t1 && t1 != TOK_TWOSHARPS 
-                && t1 != ':') /* 'a##:' don't build a new token */
-            {
+            if (t1 && t1 != TOK_TWOSHARPS) {
                 TOK_GET(&t1, &ptr, &cv1);
                 if (t != TOK_PLCHLDR || t1 != TOK_PLCHLDR) {
-                    paste_tokens(t, &cval, t1, &cv1);
-                    t = tok, cval = tokc;
+                    if (paste_tokens(t, &cval, t1, &cv1)) {
+                        t = tok, cval = tokc;
+                    } else {
+                        tok_str_add2(&macro_str1, t, &cval);
+                        t = t1, cval = cv1;
+                    }
                 }
             }
         }
@@ -3770,52 +3775,22 @@ static void pp_debug_builtins(TCCState *s1)
         define_print(s1, v);
 }
 
-static int need_space(int prev_tok, int tok, const char *tokstr)
+/* Add a space between tokens a and b to avoid unwanted textual pasting */
+static int pp_need_space(int a, int b)
 {
-    const char *sp_chars = "";
-    if ((prev_tok >= TOK_IDENT || prev_tok == TOK_PPNUM) &&
-        (tok >= TOK_IDENT || tok == TOK_PPNUM))
-        return 1;
-    switch (prev_tok) {
-    case '+':
-        sp_chars = "+=";
-        break;
-    case '-':
-        sp_chars = "-=>";
-        break;
-    case '*':
-    case '/':
-    case '%':
-    case '^':
-    case '=':
-    case '!':
-    case TOK_A_SHL:
-    case TOK_A_SAR:
-        sp_chars = "=";
-        break;
-    case '&':
-        sp_chars = "&=";
-        break;
-    case '|':
-        sp_chars = "|=";
-        break;
-    case '<':
-        sp_chars = "<=";
-        break;
-    case '>':
-        sp_chars = ">=";
-        break;
-    case '.':
-        sp_chars = ".";
-        break;
-    case '#':
-        sp_chars = "#";
-        break;
-    case TOK_PPNUM:
-        sp_chars = "+-";
-        break;
-    }
-    return !!strchr(sp_chars, tokstr[0]);
+    return 'E' == a ? '+' == b || '-' == b
+        : '+' == a ? TOK_INC == b || '+' == b
+        : '-' == a ? TOK_DEC == b || '-' == b
+        : a >= TOK_IDENT ? b >= TOK_IDENT
+        : 0;
+}
+
+/* maybe hex like 0x1e */
+static int pp_check_he0xE(int t, const char *p)
+{
+    if (t == TOK_PPNUM && toup(strchr(p, 0)[-1]) == 'E')
+        return 'E';
+    return t;
 }
 
 /* Preprocess the current file */
@@ -3823,8 +3798,8 @@ ST_FUNC int tcc_preprocess(TCCState *s1)
 {
     BufferedFile **iptr;
     int token_seen, spcs, level;
+    const char *p;
     Sym *define_start;
-    const char *tokstr;
 
     preprocess_init(s1);
     ch = file->buf_ptr[0];
@@ -3886,16 +3861,14 @@ ST_FUNC int tcc_preprocess(TCCState *s1)
             pp_line(s1, file, 0);
         } else if (tok == TOK_LINEFEED) {
             ++file->line_ref;
+        } else {
+            spcs = pp_need_space(token_seen, tok);
         }
 
-        tokstr = get_tok_str(tok, &tokc);
-        if (!spcs && need_space(token_seen, tok, tokstr))
-            ++spcs;
         while (spcs)
             fputs(" ", s1->ppfp), --spcs;
-        fputs(tokstr, s1->ppfp);
-
-        token_seen = tok;
+        fputs(p = get_tok_str(tok, &tokc), s1->ppfp);
+        token_seen = pp_check_he0xE(tok, p);;
     }
     /* reset define stack, but keep -D and built-ins */
     free_defines(define_start);
