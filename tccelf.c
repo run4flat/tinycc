@@ -791,6 +791,9 @@ ST_FUNC void relocate_section(TCCState *s1, Section *s)
         case R_AARCH64_ABS32:
             write32le(ptr, val);
             break;
+	case R_AARCH64_PREL32:
+	    write32le(ptr, val - addr);
+	    break;
         case R_AARCH64_MOVW_UABS_G0_NC:
             write32le(ptr, ((read32le(ptr) & 0xffe0001f) |
                             (val & 0xffff) << 5));
@@ -823,7 +826,8 @@ ST_FUNC void relocate_section(TCCState *s1, Section *s)
         case R_AARCH64_CALL26:
 	    /* This check must match the one in build_got_entries, testing
 	       if we really need a PLT slot.  */
-	    if (sym->st_shndx == SHN_UNDEF)
+	    if (sym->st_shndx == SHN_UNDEF ||
+		s1->output_type == TCC_OUTPUT_MEMORY)
 	        /* We've put the PLT slot offset into r_addend when generating
 		   it, and that's what we must use as relocation value (adjusted
 		   by section offset of course).  */
@@ -1420,19 +1424,20 @@ ST_FUNC void build_got_entries(TCCState *s1)
 
 	    case R_AARCH64_JUMP26:
 	    case R_AARCH64_CALL26:
-                if (!s1->got)
-                    build_got(s1);
-                sym_index = ELFW(R_SYM)(rel->r_info);
-                sym = &((ElfW(Sym) *)symtab_section->data)[sym_index];
-                if (sym->st_shndx == SHN_UNDEF) {
+		if (!s1->got)
+		    build_got(s1);
+		sym_index = ELFW(R_SYM)(rel->r_info);
+		sym = &((ElfW(Sym) *)symtab_section->data)[sym_index];
+		if (sym->st_shndx == SHN_UNDEF ||
+		    s1->output_type == TCC_OUTPUT_MEMORY) {
 		    unsigned long ofs;
 		    reloc_type = R_AARCH64_JUMP_SLOT;
-                    ofs = put_got_entry(s1, reloc_type, sym->st_size,
+		    ofs = put_got_entry(s1, reloc_type, sym->st_size,
 					sym->st_info, sym_index);
 		    /* We store the place of the generated PLT slot
 		       in our addend.  */
 		    rel->r_addend += ofs;
-                }
+		}
 		break;
 #elif defined(TCC_TARGET_C67)
             case R_C60_GOT32:
@@ -3037,10 +3042,17 @@ static int get_be32(const uint8_t *b)
     return b[3] | (b[2] << 8) | (b[1] << 16) | (b[0] << 24);
 }
 
-/* load only the objects which resolve undefined symbols */
-static int tcc_load_alacarte(TCCState *s1, int fd, int size)
+static long get_be64(const uint8_t *b)
 {
-    int i, bound, nsyms, sym_index, off, ret;
+  long long ret = get_be32(b);
+  ret = (ret << 32) | (unsigned)get_be32(b+4);
+  return (long)ret;
+}
+
+/* load only the objects which resolve undefined symbols */
+static int tcc_load_alacarte(TCCState *s1, int fd, int size, int entrysize)
+{
+    long i, bound, nsyms, sym_index, off, ret;
     uint8_t *data;
     const char *ar_names, *p;
     const uint8_t *ar_index;
@@ -3049,9 +3061,9 @@ static int tcc_load_alacarte(TCCState *s1, int fd, int size)
     data = tcc_malloc(size);
     if (read(fd, data, size) != size)
         goto fail;
-    nsyms = get_be32(data);
-    ar_index = data + 4;
-    ar_names = (char *) ar_index + nsyms * 4;
+    nsyms = entrysize == 4 ? get_be32(data) : get_be64(data);
+    ar_index = data + entrysize;
+    ar_names = (char *) ar_index + nsyms * entrysize;
 
     do {
         bound = 0;
@@ -3060,7 +3072,10 @@ static int tcc_load_alacarte(TCCState *s1, int fd, int size)
             if(sym_index) {
                 sym = &((ElfW(Sym) *)symtab_section->data)[sym_index];
                 if(sym->st_shndx == SHN_UNDEF) {
-                    off = get_be32(ar_index + i * 4) + sizeof(ArchiveHeader);
+                    off = (entrysize == 4
+			   ? get_be32(ar_index + i * 4)
+			   : get_be64(ar_index + i * 8))
+			  + sizeof(ArchiveHeader);
                     ++bound;
                     if(tcc_load_object_file(s1, fd, off) < 0) {
                     fail:
@@ -3113,7 +3128,10 @@ ST_FUNC int tcc_load_archive(TCCState *s1, int fd)
         if (!strcmp(ar_name, "/")) {
             /* coff symbol table : we handle it */
             if(s1->alacarte_link)
-                return tcc_load_alacarte(s1, fd, size);
+                return tcc_load_alacarte(s1, fd, size, 4);
+	} else if (!strcmp(ar_name, "/SYM64/")) {
+            if(s1->alacarte_link)
+                return tcc_load_alacarte(s1, fd, size, 8);
         } else {
             ElfW(Ehdr) ehdr;
             if (tcc_object_type(fd, &ehdr) == AFF_BINTYPE_REL) {

@@ -593,12 +593,9 @@ ST_FUNC void store(int r, SValue *sv)
 static void arm64_gen_bl_or_b(int b)
 {
     if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
-        assert(!b);
-        if (vtop->r & VT_SYM)
-            greloc(cur_text_section, vtop->sym, ind, R_AARCH64_CALL26);
-        else
-            assert(0);
-        o(0x94000000); // bl .
+        assert(!b && (vtop->r & VT_SYM));
+	greloc(cur_text_section, vtop->sym, ind, R_AARCH64_CALL26);
+	o(0x94000000); // bl .
     }
     else
         o(0xd61f0000 | (uint32_t)!b << 21 | intr(gv(RC_R30)) << 5); // br/blr
