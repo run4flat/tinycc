@@ -542,7 +542,7 @@ typedef struct TokenString {
 
 /* inline functions */
 typedef struct InlineFunc {
-    TokenString func_str;
+    TokenString *func_str;
     Sym *sym;
     char filename[1];
 } InlineFunc;
@@ -1193,7 +1193,8 @@ ST_FUNC void save_parse_state(ParseState *s);
 ST_FUNC void restore_parse_state(ParseState *s);
 ST_INLN void tok_str_new(TokenString *s);
 ST_FUNC TokenString *tok_str_alloc(void);
-ST_FUNC void tok_str_free(int *str);
+ST_FUNC void tok_str_free(TokenString *s);
+ST_FUNC void tok_str_free_str(int *str);
 ST_FUNC void tok_str_add(TokenString *s, int t);
 ST_FUNC void tok_str_add_tok(TokenString *s);
 /* #ifdef CONFIG_TCC_EXSYMTAB */
@@ -1556,7 +1557,7 @@ ST_FUNC void pe_add_unwind_data(unsigned start, unsigned end, unsigned stack);
 ST_FUNC void *dlopen(const char *filename, int flag);
 ST_FUNC void dlclose(void *p);
 ST_FUNC const char *dlerror(void);
-ST_FUNC void *dlsym(int flag, const char *symbol);
+ST_FUNC void *dlsym(void *handle, const char *symbol);
 #endif
 #ifdef CONFIG_TCC_BACKTRACE
 ST_DATA int rt_num_callers;

@@ -1106,8 +1106,14 @@ ST_FUNC int *tok_str_dup(TokenString *s)
     return str;
 }
 
-ST_FUNC void tok_str_free(int *str)
+ST_FUNC void tok_str_free_str(int *str)
 {
+    tal_free(tokstr_alloc, str);
+}
+
+ST_FUNC void tok_str_free(TokenString *str)
+{
+    tok_str_free_str(str->str);
     tal_free(tokstr_alloc, str);
 }
 
@@ -1157,9 +1163,7 @@ ST_FUNC void end_macro(void)
     if (str->alloc == 2) {
         str->alloc = 3; /* just mark as finished */
     } else {
-        tok_str_free(str->str);
-        if (str->alloc == 1)
-            tal_free(tokstr_alloc, str);
+        tok_str_free(str);
     }
 }
 
@@ -1389,7 +1393,7 @@ ST_FUNC void free_defines(Sym *b)
     while (define_stack != b) {
         Sym *top = define_stack;
         define_stack = top->prev;
-        tok_str_free(top->d);
+        tok_str_free_str(top->d);
         define_undef(top);
         sym_free(top);
     }
@@ -3264,10 +3268,10 @@ static int macro_subst_tok(
                     for (i = 0; i < ws_str.len; i++)
                         tok_str_add(tok_str, ws_str.str[i]);
                 }
-                tok_str_free(ws_str.str);
+                tok_str_free_str(ws_str.str);
                 return 0;
             } else {
-                tok_str_free(ws_str.str);
+                tok_str_free_str(ws_str.str);
             }
             next_nomacro(); /* eat '(' */
 
@@ -3334,7 +3338,7 @@ static int macro_subst_tok(
             sa = args;
             while (sa) {
                 sa1 = sa->prev;
-                tok_str_free(sa->d);
+                tok_str_free_str(sa->d);
                 sym_free(sa);
                 sa = sa1;
             }
@@ -3349,7 +3353,7 @@ static int macro_subst_tok(
         *nested_list = sa1->prev;
         sym_free(sa1);
         if (mstr != s->d)
-            tok_str_free(mstr);
+            tok_str_free_str(mstr);
     }
     return 0;
 }
@@ -3526,7 +3530,7 @@ no_subst:
         }
     }
     if (macro_str1)
-        tok_str_free(macro_str1);
+        tok_str_free_str(macro_str1);
 
 }
 
@@ -3668,7 +3672,7 @@ ST_FUNC void tccpp_delete(TCCState *s)
     /* free static buffers */
     cstr_free(&tokcstr);
     cstr_free(&cstr_buf);
-    tok_str_free(tokstr_buf.str);
+    tok_str_free_str(tokstr_buf.str);
 
     /* free allocators */
     tal_delete(toksym_alloc);

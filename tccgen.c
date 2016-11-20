@@ -4576,7 +4576,7 @@ ST_FUNC void unary(void)
                 vtop->r |= lvalue_type(vtop->type.t);
 #ifdef CONFIG_TCC_BCHECK
                 /* if bound checking, the referenced pointer must be checked */
-                if (tcc_state->do_bounds_check)
+                if (tcc_state->do_bounds_check && (vtop->r & VT_VALMASK) != VT_LOCAL)
                     vtop->r |= VT_MUSTBOUND;
 #endif
             }
@@ -6611,7 +6611,7 @@ static void gen_inline_functions(TCCState *s)
                 sym->r = VT_SYM | VT_CONST;
                 sym->type.t &= ~VT_INLINE;
 
-                begin_macro(&fn->func_str, 0);
+                begin_macro(fn->func_str, 1);
                 next();
                 cur_text_section = text_section;
                 gen_function(sym);
@@ -6633,7 +6633,7 @@ ST_FUNC void free_inline_functions(TCCState *s)
     for (i = 0; i < s->nb_inline_fns; ++i) {
         struct InlineFunc *fn = s->inline_fns[i];
         if (fn->sym)
-            tok_str_free(fn->func_str.str);
+            tok_str_free(fn->func_str);
     }
     dynarray_reset(&s->inline_fns, &s->nb_inline_fns);
 }
@@ -6789,14 +6789,14 @@ static int decl0(int l, int is_for_loop_init)
                     fn = tcc_malloc(sizeof *fn + strlen(filename));
                     strcpy(fn->filename, filename);
                     fn->sym = sym;
-                    tok_str_new(&fn->func_str);
+                    fn->func_str = tok_str_alloc();
                     
                     block_level = 0;
                     for(;;) {
                         int t;
                         if (tok == TOK_EOF)
                             tcc_error("unexpected end of file");
-                        tok_str_add_tok(&fn->func_str);
+                        tok_str_add_tok(fn->func_str);
                         t = tok;
                         next();
                         if (t == '{') {
@@ -6807,8 +6807,8 @@ static int decl0(int l, int is_for_loop_init)
                                 break;
                         }
                     }
-                    tok_str_add(&fn->func_str, -1);
-                    tok_str_add(&fn->func_str, 0);
+                    tok_str_add(fn->func_str, -1);
+                    tok_str_add(fn->func_str, 0);
                     dynarray_add((void ***)&tcc_state->inline_fns, &tcc_state->nb_inline_fns, fn);
 
                 } else {

@@ -21,7 +21,7 @@
 #ifdef TARGET_DEFS_ONLY
 
 /* number of available registers */
-#define NB_REGS         4
+#define NB_REGS         5
 #define NB_ASM_REGS     8
 
 /* a register can belong to several classes. The classes must be
@@ -33,6 +33,8 @@
 #define RC_ST0     0x0008 
 #define RC_ECX     0x0010
 #define RC_EDX     0x0020
+#define RC_EBX     0x0040
+
 #define RC_IRET    RC_EAX /* function return: integer register */
 #define RC_LRET    RC_EDX /* function return: second integer register */
 #define RC_FRET    RC_ST0 /* function return: float register */
@@ -42,6 +44,7 @@ enum {
     TREG_EAX = 0,
     TREG_ECX,
     TREG_EDX,
+    TREG_EBX,
     TREG_ST0,
     TREG_ESP = 4
 };
@@ -89,10 +92,14 @@ enum {
 /******************************************************/
 #include "tcc.h"
 
+/* define to 1/0 to [not] have EBX as 4th register */
+#define USE_EBX 1
+
 ST_DATA const int reg_classes[NB_REGS] = {
     /* eax */ RC_INT | RC_EAX,
     /* ecx */ RC_INT | RC_ECX,
     /* edx */ RC_INT | RC_EDX,
+    /* ebx */ (RC_INT | RC_EBX) * USE_EBX,
     /* st0 */ RC_FLOAT | RC_ST0,
 };
 
@@ -100,6 +107,7 @@ static unsigned long func_sub_sp_offset;
 static int func_ret_sub;
 #ifdef CONFIG_TCC_BCHECK
 static addr_t func_bound_offset;
+static unsigned long func_bound_ind;
 #endif
 
 /* XXX: make it faster ? */
@@ -518,9 +526,9 @@ ST_FUNC void gfunc_call(int nb_args)
 }
 
 #ifdef TCC_TARGET_PE
-#define FUNC_PROLOG_SIZE 10
+#define FUNC_PROLOG_SIZE (10 + USE_EBX)
 #else
-#define FUNC_PROLOG_SIZE 9
+#define FUNC_PROLOG_SIZE (9 + USE_EBX)
 #endif
 
 /* generate function prolog of type 't' */
@@ -604,9 +612,10 @@ ST_FUNC void gfunc_prolog(CType *func_type)
 #ifdef CONFIG_TCC_BCHECK
     /* leave some room for bound checking code */
     if (tcc_state->do_bounds_check) {
+        func_bound_offset = lbounds_section->data_offset;
+        func_bound_ind = ind;
         oad(0xb8, 0); /* lbound section pointer */
         oad(0xb8, 0); /* call to function */
-        func_bound_offset = lbounds_section->data_offset;
     }
 #endif
 }
@@ -622,30 +631,31 @@ ST_FUNC void gfunc_epilog(void)
         addr_t saved_ind;
         addr_t *bounds_ptr;
         Sym *sym_data;
+
         /* add end of table info */
         bounds_ptr = section_ptr_add(lbounds_section, sizeof(addr_t));
         *bounds_ptr = 0;
+
         /* generate bound local allocation */
         saved_ind = ind;
-        ind = func_sub_sp_offset;
+        ind = func_bound_ind;
         sym_data = get_sym_ref(&char_pointer_type, lbounds_section, 
                                func_bound_offset, lbounds_section->data_offset);
         greloc(cur_text_section, sym_data,
                ind + 1, R_386_32);
         oad(0xb8, 0); /* mov %eax, xxx */
         gen_static_call(TOK___bound_local_new);
-
         ind = saved_ind;
+
         /* generate bound check local freeing */
         o(0x5250); /* save returned value, if any */
-        greloc(cur_text_section, sym_data,
-               ind + 1, R_386_32);
+        greloc(cur_text_section, sym_data, ind + 1, R_386_32);
         oad(0xb8, 0); /* mov %eax, xxx */
         gen_static_call(TOK___bound_local_delete);
-
         o(0x585a); /* restore returned value, if any */
     }
 #endif
+    o(0x5b * USE_EBX); /* pop ebx */
     o(0xc9); /* leave */
     if (func_ret_sub == 0) {
         o(0xc3); /* ret */
@@ -669,10 +679,11 @@ ST_FUNC void gfunc_epilog(void)
         o(0xe58955);  /* push %ebp, mov %esp, %ebp */
         o(0xec81);  /* sub esp, stacksize */
         gen_le32(v);
-#if FUNC_PROLOG_SIZE == 10
+#ifdef TCC_TARGET_PE
         o(0x90);  /* adjust to FUNC_PROLOG_SIZE */
 #endif
     }
+    o(0x53 * USE_EBX); /* push ebx */
     ind = saved_ind;
 }
 
