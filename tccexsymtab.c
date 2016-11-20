@@ -891,6 +891,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
              * for contrast) */
 
             ts_len = tokenstream_len(old_func->FUNC_STR);
+            new_func->func_str = tcc_malloc(sizeof(TokenString));
             new_func->FUNC_STR = tcc_malloc(ts_len * sizeof(int));
             memcpy(new_func->FUNC_STR, old_func->FUNC_STR, ts_len * sizeof(int));
             to_return->inline_funcs[i] = new_func;
@@ -997,6 +998,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
         int i;
         for (i = 0; i < symtab->N_inline_funcs; i++) {
             tcc_free(symtab->inline_funcs[i]->FUNC_STR);
+            tcc_free(symtab->inline_funcs[i]->func_str);
             tcc_free(symtab->inline_funcs[i]);
         }
         tcc_free(symtab->inline_funcs);
@@ -1288,6 +1290,7 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
              * for contrast) */
 
             ts_len = tokenstream_len(old_func->FUNC_STR);
+            new_func->func_str = tcc_malloc(sizeof(TokenString));
             new_func->FUNC_STR = tcc_malloc(ts_len * sizeof(int));
             memcpy(new_func->FUNC_STR, old_func->FUNC_STR, ts_len * sizeof(int));
             tokenstream_copy(old_func->FUNC_STR, new_func->FUNC_STR, symtab);
@@ -2218,14 +2221,23 @@ int exsymtab_deserialize_inline_func_token_stream(FILE * in_fh,
         return 0;
     }
 
+    curr_func->func_str = tcc_malloc(sizeof(InlineFunc));
+    if (curr_func->func_str == NULL) {
+        printf("Deserialization failed: Unable to allocate memory for "
+            "Inline function number %d\n", inline_offset);
+        return 0;
+	}
+    
     stream = tcc_malloc(sizeof(int) * len);
     if (stream == NULL) {
+		tcc_free(curr_func->func_str);
         printf("Deserialization failed: Unable to allocate memory for "
             "token stream for Inline function number %d\n", inline_offset);
         return 0;
     }
 
     if (fread(stream, sizeof(int), len, in_fh) != len) {
+		tcc_free(curr_func->func_str);
         tcc_free(stream);
         printf("Deserialization failed: Unable to get token stream for "
             "Inline function number %d\n", inline_offset);
