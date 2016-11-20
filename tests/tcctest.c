@@ -1554,6 +1554,9 @@ void switch_test()
         case 3:
             printf("b");
             break;
+        case 0xc33c6b9fU:
+        case 0x7c9eeeb9U:
+            break;
         }
     }
     printf("\n");
@@ -1950,6 +1953,11 @@ long long int value(struct S *v)
     return ((long long int)v->item);
 }
 
+long long llfunc2(long long x, long long y, int z)
+{
+    return x * y * z;
+}
+
 void longlong_test(void)
 {
     long long a, b, c;
@@ -1996,20 +2004,27 @@ void longlong_test(void)
     }
     lloptest(0x80000000, 0);
 
-    /* another long long spill test */
     {
-        long long *p, v;
+        long long *p, v, **pp;
         v = 1;
         p = &v;
         p[0]++;
-        printf("%lld\n", *p);
-    }
+        printf("another long long spill test : %lld\n", *p);
+        pp = &p;
 
+        v = llfunc2(**pp, **pp, ia);
+        printf("a long long function (arm-)reg-args test : %lld\n", v);
+    }
     a = 68719476720LL;
     b = 4294967295LL;
     printf("%d %d %d %d\n", a > b, a < b, a >= b, a <= b);
 
     printf(LONG_LONG_FORMAT "\n", 0x123456789LLU);
+
+    /* long long pointer deref in argument passing test */
+    a = 0x123;
+    long long *p = &a;
+    llshift(*p, 5);
 }
 
 void manyarg_test(void)

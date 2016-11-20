@@ -119,7 +119,7 @@ static void tcc_add_systemdir(TCCState *s)
 }
 #endif
 
-#ifndef CONFIG_TCC_STATIC
+#if defined TCC_IS_NATIVE
 static void dlclose(void *p)
 {
     FreeLibrary((HMODULE)p);
@@ -415,7 +415,7 @@ PUB_FUNC void tcc_memstats(int bench)
             mem_cur_size, mem_max_size);
 
         while (header) {
-            fprintf(stderr, "  file %s, line %u: %u bytes\n",
+            fprintf(stderr, "%s:%u: error: %u bytes leaked\n",
                 header->file_name, header->line_num, header->size);
             header = header->next;
         }
@@ -484,8 +484,10 @@ static void tcc_split_path(TCCState *s, void ***p_ary, int *p_nb_ary, const char
                 cstr_ccat(&str, c);
             }
         }
-        cstr_ccat(&str, '\0');
-        dynarray_add(p_ary, p_nb_ary, tcc_strdup(str.data));
+        if (str.size) {
+            cstr_ccat(&str, '\0');
+            dynarray_add(p_ary, p_nb_ary, tcc_strdup(str.data));
+        }
         cstr_free(&str);
         in = p+1;
     } while (*p);
@@ -1400,13 +1402,11 @@ ST_FUNC int tcc_add_file_internal(TCCState *s1, const char *filename, int flags)
             tcc_strdup(filename));
 
     parse_flags = 0;
-#ifdef CONFIG_TCC_ASM
     /* if .S file, define __ASSEMBLER__ like gcc does */
     if (filetype == AFF_TYPE_ASM || filetype == AFF_TYPE_ASMPP) {
         tcc_define_symbol(s1, "__ASSEMBLER__", NULL);
         parse_flags = PARSE_FLAG_ASM_FILE;
     }
-#endif
 
     if (flags & AFF_PREPROCESS) {
         ret = tcc_preprocess(s1);
@@ -1572,14 +1572,21 @@ LIBTCCAPI int tcc_set_output_type(TCCState *s, int output_type)
 {
     s->output_type = output_type;
 
+    /* always elf for objects */
+    if (output_type == TCC_OUTPUT_OBJ)
+        s->output_format = TCC_OUTPUT_FORMAT_ELF;
+
+    if (s->char_is_unsigned)
+        tcc_define_symbol(s, "__CHAR_UNSIGNED__", NULL);
+
     if (!s->nostdinc) {
         /* default include paths */
         /* -isystem paths have already been handled */
         tcc_add_sysinclude_path(s, CONFIG_TCC_SYSINCLUDEPATHS);
     }
 
-    /* if bound checking, then add corresponding sections */
 #ifdef CONFIG_TCC_BCHECK
+    /* if bound checking, then add corresponding sections */
     if (s->do_bounds_check) {
         /* define symbol */
         tcc_define_symbol(s, "__BOUNDS_CHECKING_ON", NULL);
@@ -1590,11 +1597,6 @@ LIBTCCAPI int tcc_set_output_type(TCCState *s, int output_type)
                                       SHT_PROGBITS, SHF_ALLOC);
     }
 #endif
-
-    if (s->char_is_unsigned) {
-        tcc_define_symbol(s, "__CHAR_UNSIGNED__", NULL);
-    }
-
     /* add debug sections */
     if (s->do_debug) {
         /* stab symbols */
@@ -1608,9 +1610,11 @@ LIBTCCAPI int tcc_set_output_type(TCCState *s, int output_type)
     }
 
     tcc_add_library_path(s, CONFIG_TCC_LIBPATHS);
+
 #ifdef TCC_TARGET_PE
 # ifdef _WIN32
-    tcc_add_systemdir(s);
+    if (!s->nostdlib && output_type != TCC_OUTPUT_OBJ)
+        tcc_add_systemdir(s);
 # endif
 #else
     /* add libc crt1/crti objects */

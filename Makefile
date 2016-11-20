@@ -18,19 +18,12 @@ else
  endif
 endif
 
-CFLAGS_P = $(CFLAGS) -pg -static -DCONFIG_TCC_STATIC
-LIBS_P=
-LDFLAGS_P = $(LDFLAGS)
-
 LIBTCC = libtcc.a
 LIBTCC1 = libtcc1.a
 LINK_LIBTCC =
 LIBS =
 
 ifdef CONFIG_WIN32
- ifeq ($(ARCH),x86-64)
-  CONFIG_WIN64=yes
- endif
  STRIP_BINARIES = yes
  LIBTCC = libtcc.dll
 else
@@ -52,6 +45,10 @@ ifeq ($(TARGETOS),Darwin)
  CFLAGS += -Wl,-flat_namespace,-undefined,warning
  export MACOSX_DEPLOYMENT_TARGET:=10.2
 endif
+
+CFLAGS_P = $(CFLAGS) -pg -static -DCONFIG_TCC_STATIC -DTCC_PROFILE
+LIBS_P= $(LIBS)
+LDFLAGS_P = $(LDFLAGS)
 
 CONFIG_$(ARCH) = yes
 NATIVE_DEFINES_$(CONFIG_i386) += -DTCC_TARGET_I386
@@ -98,18 +95,18 @@ ARM_FILES = $(CORE_FILES) arm-gen.c
 ARM64_FILES = $(CORE_FILES) arm64-gen.c
 C67_FILES = $(CORE_FILES) c67-gen.c tcccoff.c
 
-ifdef CONFIG_WIN64
-PROGS+=tiny_impdef$(EXESUF)
-NATIVE_FILES=$(WIN64_FILES)
-PROGS_CROSS=$(WIN32_CROSS) $(I386_CROSS) $(X64_CROSS) $(ARM_CROSS) $(ARM64_CROSS) $(C67_CROSS) $(WINCE_CROSS)
-LIBTCC1_CROSS=lib/i386-win32/libtcc1.a
-
-else ifdef CONFIG_WIN32
-PROGS+=tiny_impdef$(EXESUF)
-NATIVE_FILES=$(WIN32_FILES)
-PROGS_CROSS=$(WIN64_CROSS) $(I386_CROSS) $(X64_CROSS) $(ARM_CROSS) $(ARM64_CROSS) $(C67_CROSS) $(WINCE_CROSS)
-LIBTCC1_CROSS=lib/x86_64-win32/libtcc1.a
-
+ifdef CONFIG_WIN32
+ PROGS+=tiny_impdef$(EXESUF) tiny_libmaker$(EXESUF)
+ifeq ($(ARCH),x86-64)
+ NATIVE_FILES=$(WIN64_FILES)
+ PROGS_CROSS=$(WIN32_CROSS)
+ LIBTCC1_CROSS=lib/i386-win32/libtcc1.a
+else
+ NATIVE_FILES=$(WIN32_FILES)
+ PROGS_CROSS=$(WIN64_CROSS)
+ LIBTCC1_CROSS=lib/x86_64-win32/libtcc1.a
+endif
+ PROGS_CROSS+=$(X64_CROSS) $(ARM_CROSS) $(ARM64_CROSS) $(C67_CROSS) $(WINCE_CROSS)
 else ifeq ($(ARCH),i386)
 NATIVE_FILES=$(I386_FILES)
 PROGS_CROSS=$(X64_CROSS) $(WIN32_CROSS) $(WIN64_CROSS) $(ARM_CROSS) $(ARM64_CROSS) $(C67_CROSS) $(WINCE_CROSS)
@@ -144,8 +141,8 @@ endif
 all: $(PROGS) $(TCCLIBS) $(TCCDOCS)
 
 # Host Tiny C Compiler
-tcc$(EXESUF): tcc.c $(LIBTCC)
-	$(CC) -o $@ $^ $(LIBS) $(NATIVE_DEFINES) $(CFLAGS) $(LDFLAGS) $(LINK_LIBTCC)
+tcc$(EXESUF): tcc.o $(LIBTCC)
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) $(LIBS) $(LINK_LIBTCC)
 
 # Cross Tiny C Compilers
 %-tcc$(EXESUF): tcc.c
@@ -165,7 +162,7 @@ $(WIN32_CROSS) : DEFINES = -DTCC_TARGET_I386 -DTCC_TARGET_PE \
 $(WIN64_CROSS) : DEFINES = -DTCC_TARGET_X86_64 -DTCC_TARGET_PE \
     -DCONFIG_TCCDIR="\"$(tccdir)/win32\"" \
     -DCONFIG_TCC_LIBPATHS="\"{B}/lib/64;{B}/lib\""
-$(WINCE_CROSS): DEFINES = -DTCC_TARGET_PE
+$(WINCE_CROSS): DEFINES = -DTCC_TARGET_ARM -DTCC_TARGET_PE
 $(C67_CROSS): DEFINES = -DTCC_TARGET_C67 -w # disable warnigs
 $(ARM_FPA_CROSS): DEFINES = -DTCC_TARGET_ARM
 $(ARM_FPA_LD_CROSS)$(EXESUF): DEFINES = -DTCC_TARGET_ARM -DLDOUBLE_SIZE=12
@@ -190,7 +187,6 @@ else
 LIBTCC_OBJ = libtcc.o
 LIBTCC_INC = $(NATIVE_FILES)
 libtcc.o : NATIVE_DEFINES += -DONE_SOURCE
-tcc.o : NATIVE_DEFINES += -DONE_SOURCE
 endif
 
 $(LIBTCC_OBJ) tcc.o : %.o : %.c $(LIBTCC_INC)
@@ -277,7 +273,7 @@ uninstall:
 	rm -fv "$(libdir)/$(LIBTCC)" "$(includedir)/libtcc.h"
 	rm -fv $(libdir)/libtcc.so*
 	rm -rv "$(tccdir)"
-	rm -rv "$(docdir)"
+	rm -fv "$(docdir)/tcc-doc.html"
 else
 # on windows
 install: $(PROGS) $(TCCLIBS) $(TCCDOCS)
@@ -311,7 +307,7 @@ tcc-doc.html: tcc-doc.texi
 	-makeinfo --no-split --html --number-sections -o $@ $<
 
 tcc.1: tcc-doc.texi
-	-texi2pod.pl $< tcc.pod
+	-./texi2pod.pl $< tcc.pod
 	-pod2man --section=1 --center="Tiny C Compiler" --release="$(VERSION)" tcc.pod > $@
 
 tcc-doc.info: tcc-doc.texi

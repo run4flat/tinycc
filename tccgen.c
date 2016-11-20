@@ -54,6 +54,7 @@ ST_DATA Sym *define_stack;
 ST_DATA Sym *global_label_stack;
 ST_DATA Sym *local_label_stack;
 static int local_scope;
+static int in_sizeof;
 
 ST_DATA int vlas_in_scope; /* number of VLAs that are currently in scope */
 ST_DATA int vla_sp_root_loc; /* vla_sp_loc for SP before any VLAs were pushed */
@@ -606,17 +607,35 @@ static void vdup(void)
     vpushv(vtop);
 }
 
+/* save registers up to (vtop - n) stack entry */
+ST_FUNC void save_regs(int n)
+{
+    SValue *p, *p1;
+    for(p = vstack, p1 = vtop - n; p <= p1; p++)
+        save_reg(p->r);
+}
+
 /* save r to the memory stack, and mark it as being free */
 ST_FUNC void save_reg(int r)
 {
+    save_reg_upstack(r, 0);
+}
+
+/* save r to the memory stack, and mark it as being free,
+   if seen up to (vtop - n) stack entry */
+ST_FUNC void save_reg_upstack(int r, int n)
+{
     int l, saved, size, align;
-    SValue *p, sv;
+    SValue *p, *p1, sv;
     CType *type;
+
+    if ((r &= VT_VALMASK) >= VT_CONST)
+        return;
 
     /* modify all stack values */
     saved = 0;
     l = 0;
-    for(p=vstack;p<=vtop;p++) {
+    for(p = vstack, p1 = vtop - n; p <= p1; p++) {
         if ((p->r & VT_VALMASK) == r ||
             ((p->type.t & VT_BTYPE) == VT_LLONG && (p->r2 & VT_VALMASK) == r)) {
             /* must save value on stack if not already done */
@@ -730,20 +749,6 @@ ST_FUNC int get_reg(int rc)
     }
     /* Should never comes here */
     return -1;
-}
-
-/* save registers up to (vtop - n) stack entry */
-ST_FUNC void save_regs(int n)
-{
-    int r;
-    SValue *p, *p1;
-    p1 = vtop - n;
-    for(p = vstack;p <= p1; p++) {
-        r = p->r & VT_VALMASK;
-        if (r < VT_CONST) {
-            save_reg(r);
-        }
-    }
 }
 
 /* move register 's' (of type 't') to 'r', and flush previous value of r to memory
@@ -932,13 +937,17 @@ ST_FUNC int gv(int rc)
                     vpushi(ll >> 32); /* second word */
                 } else
 #endif
-                if (r >= VT_CONST || /* XXX: test to VT_CONST incorrect ? */
-                           (vtop->r & VT_LVAL)) {
+                if (vtop->r & VT_LVAL) {
                     /* We do not want to modifier the long long
                        pointer here, so the safest (and less
                        efficient) is to save all the other registers
                        in the stack. XXX: totally inefficient. */
+               #if 0
                     save_regs(1);
+               #else
+                    /* lvalue_save: save only if used further down the stack */
+                    save_reg_upstack(vtop->r, 1);
+               #endif
                     /* load from memory */
                     vtop->type.t = load_type;
                     load(r, vtop);
@@ -2025,7 +2034,10 @@ static void force_charshort_cast(int t)
         vpushi((1 << bits) - 1);
         gen_op('&');
     } else {
-        bits = 32 - bits;
+        if ((vtop->type.t & VT_BTYPE) == VT_LLONG)
+            bits = 64 - bits;
+        else
+            bits = 32 - bits;
         vpushi(bits);
         gen_op(TOK_SHL);
         /* result must be signed or the SAR is converted to an SHL
@@ -3836,7 +3848,6 @@ ST_FUNC void unary(void)
     CType type;
     Sym *s;
     AttributeDef ad;
-    static int in_sizeof = 0;
 
     sizeof_caller = in_sizeof;
     in_sizeof = 0;
@@ -4971,8 +4982,58 @@ static void label_or_decl(int l)
     decl(l);
 }
 
-static int case_cmp(const void *a, const void *b)
-{ return (*(struct case_t**) a)->v1 - (*(struct case_t**) b)->v1; }
+static int case_cmp(const void *pa, const void *pb)
+{
+    int a = (*(struct case_t**) pa)->v1;
+    int b = (*(struct case_t**) pb)->v1;
+    return a < b ? -1 : a > b;
+}
+
+static void gcase(struct case_t **base, int len, int case_reg, int *bsym)
+{
+    struct case_t *p;
+    int e;
+    if (len <= 4) {
+        while (len--) {
+            p = *base++;
+            vseti(case_reg, 0);
+            vpushi(p->v2);
+            if (p->v1 == p->v2) {
+                gen_op(TOK_EQ);
+                gtst_addr(0, p->sym);
+            } else {
+                gen_op(TOK_LE);
+                e = gtst(1, 0);
+                vseti(case_reg, 0);
+                vpushi(p->v1);
+                gen_op(TOK_GE);
+                gtst_addr(0, p->sym);
+                gsym(e);
+            }
+        }
+    } else {
+        p = base[len/2];
+        /* mid */
+        vseti(case_reg, 0);
+        vpushi(p->v2);
+        gen_op(TOK_LE);
+        e = gtst(1, 0);
+        vseti(case_reg, 0);
+        vpushi(p->v1);
+        gen_op(TOK_GE);
+        gtst_addr(0, p->sym);
+        /* left */
+        gcase(base, len/2, case_reg, bsym);
+        if (cur_switch->def_sym)
+            gjmp_addr(cur_switch->def_sym);
+        else
+            *bsym = gjmp(*bsym);
+        /* right */
+        gsym(e);
+        e = len/2 + 1;
+        gcase(base + e, len - e, case_reg, bsym);
+    }
+}
 
 static void block(int *bsym, int *csym, int is_expr)
 {
@@ -5252,35 +5313,18 @@ static void block(int *bsym, int *csym, int is_expr)
         sw.p = NULL; sw.n = 0; sw.def_sym = 0;
         saved = cur_switch;
         cur_switch = &sw; block(&a, csym, 0);
-        cur_switch = saved;
         a = gjmp(a); /* add implicit break */
+        /* case lookup */
         gsym(b);
-
         qsort(sw.p, sw.n, sizeof(void*), case_cmp);
-        for (b = 0; b < sw.n; b++) {
-            int v = sw.p[b]->v1;
-            if (b && v <= d)
+        for (b = 1; b < sw.n; b++)
+            if (sw.p[b - 1]->v2 >= sw.p[b]->v1)
                 tcc_error("duplicate case value");
-            d = sw.p[b]->v2;
-
-            vseti(c, 0);
-            vpushi(v);
-            if (v == d) {
-                gen_op(TOK_EQ);
-                gtst_addr(0, sw.p[b]->sym);
-            } else {
-                int e;
-                gen_op(TOK_GE);
-                e = gtst(1, 0);
-                vseti(c, 0);
-                vpushi(d);
-                gen_op(TOK_LE);
-                gtst_addr(0, sw.p[b]->sym);
-                gsym(e);
-            }
-        }
+        gcase(sw.p, sw.n, c, &a);
         if (sw.def_sym)
             gjmp_addr(sw.def_sym);
+        dynarray_reset(&sw.p, &sw.n);
+        cur_switch = saved;
         /* break label */
         gsym(a);
     } else
