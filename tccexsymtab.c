@@ -691,9 +691,9 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
         to_return->type.t = old->type.t;
 
     /* The type.ref field contains something useful only if the basic type
-     * is a pointer, struct, or function. See code from tccgen's
+     * is a pointer, struct, enum, or function. See code from tccgen's
      * compare_types for details. */
-    if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+    if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_ENUM || btype == VT_FUNC) {
         to_return->type.ref = get_new_symtab_pointer(old->type.ref, rh);
     }
 
@@ -1359,13 +1359,14 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 }
 
 /* Copy the CType information from an extended sym into a local CType. The hard
- * part here is finding the local tokensym associated with the type.ref field,
- * which is only an issue if the type is a pointer, struct, or function. */
+ * part here is finding the local tokensym associated with the type.ref field.
+ * In principle this is only an issue if the type is a pointer, struct, enum,
+ * or function, but at this point checking non-null is sufficient. */
 
 #define copy_ctype(to_type, from, symtab) do { \
     int btype = from->type.t & VT_BTYPE; \
     to_type.t = from->type.t; \
-    if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) { \
+    if (from->type.ref != NULL) { \
         /* Get the from->type.ref's token and look for it here */ \
         if (from->type.ref->v & SYM_FIRST_ANOM) { \
             /* Anonymous symbol; just copy it. */ \
@@ -1696,10 +1697,10 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i)
 
 int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
 {
-    /* For details, see notes under copy_extended_symtab */
+    /* Get offset if non-null. */
     int btype = curr_sym->type.t & VT_BTYPE;
-    void * to_write;
-    if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_FUNC) {
+    void * to_write = NULL;
+	if (curr_sym->type.ref != NULL) {
         /* write the offset */
         void ** p_offset = ram_hash_get_ref(offset_rt, curr_sym->type.ref);
         to_write = *p_offset;
