@@ -1698,7 +1698,6 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i)
 int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
 {
     /* Get offset if non-null. */
-    int btype = curr_sym->type.t & VT_BTYPE;
     void * to_write = NULL;
 	if (curr_sym->type.ref != NULL) {
         /* write the offset */
