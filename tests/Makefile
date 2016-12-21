@@ -5,7 +5,7 @@
 TOP = ..
 include $(TOP)/Makefile
 VPATH = $(TOPSRC)/tests $(TOPSRC) $(TOP)
-CFLAGS = -I$(TOPSRC) -I$(TOP)
+CFLAGS := $(filter-out -W% -g% -O%,$(CFLAGS)) -I$(TOPSRC)
 
 # what tests to run
 TESTS = \
@@ -13,6 +13,8 @@ TESTS = \
  hello-run \
  libtest \
  test3 \
+ memtest \
+ dlltest \
  abitest \
  vla_test-run \
  tests2-dir \
@@ -39,6 +41,9 @@ ifeq (,$(filter arm64 i386 x86-64,$(ARCH)))
 endif
 ifeq ($(CONFIG_arm_eabi),yes)
  TESTS := $(filter-out test3,$(TESTS))
+endif
+ifeq (,$(filter i386 x86-64,$(ARCH)))
+ TESTS := $(filter-out dlltest,$(TESTS))
 endif
 
 # run local version of tcc with local libraries and includes
@@ -125,6 +130,28 @@ test4: tcctest.c test.ref
 	$(TCC) -static -o tcctest2 $<
 	./tcctest2 > test2.out
 	@if diff -u test.ref test2.out ; then echo "Static Auto Test OK"; fi
+
+# use tcc to create libtcc.so/.dll and the tcc(.exe) frontend and run them
+dlltest:
+	@echo ------------ $@ ------------
+	$(TCC) -DONE_SOURCE $(NATIVE_DEFINES) -DLIBTCC_AS_DLL $(TOPSRC)/libtcc.c $(LIBS) -shared -o libtcc2$(DLLSUF)
+	$(TCC) $(NATIVE_DEFINES) $(TOPSRC)/tcc.c libtcc2$(DLLSUF) $(LIBS) -Wl,-rpath=. -o tcc2$(EXESUF)
+	./tcc2$(EXESUF) $(TCCFLAGS) $(RUN_TCC) -run $(TOPSRC)/examples/ex1.c
+ifndef CONFIG_WIN32
+	@echo ------------ $@ with PIC ------------
+	$(CC) $(CFLAGS) -fPIC -DONE_SOURCE $(NATIVE_DEFINES) -DLIBTCC_AS_DLL -c $(TOPSRC)/libtcc.c
+	$(TCC) libtcc.o $(LIBS) -shared -o libtcc2$(DLLSUF)
+	$(TCC) $(NATIVE_DEFINES) $(TOPSRC)/tcc.c libtcc2$(DLLSUF) $(LIBS) -Wl,-rpath=. -o tcc2$(EXESUF)
+	./tcc2$(EXESUF) $(TCCFLAGS) $(RUN_TCC) -run $(TOPSRC)/examples/ex1.c
+endif
+	@rm tcc2$(EXESUF) libtcc2$(DLLSUF)
+
+memtest:
+	@echo ------------ $@ ------------
+	$(CC) $(CFLAGS) $(NATIVE_DEFINES) -DONE_SOURCE -DMEM_DEBUG=2 $(TOPSRC)/tcc.c $(LIBS) -o memtest-tcc$(EXESUF)
+	./memtest-tcc$(EXESUF) $(TCCFLAGS) $(NATIVE_DEFINES) -DONE_SOURCE $(TOPSRC)/tcc.c $(LIBS)
+	./memtest-tcc$(EXESUF) $(TCCFLAGS) $(NATIVE_DEFINES) -DONE_SOURCE -run $(TOPSRC)/tcc.c $(TCCFLAGS) $(TOPSRC)/tests/tcctest.c
+
 
 # memory and bound check auto test
 BOUNDS_OK  = 1 4 8 10 14

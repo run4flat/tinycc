@@ -70,22 +70,8 @@ enum {
 /* maximum alignment (for aligned attribute support) */
 #define MAX_ALIGN     8
 
-
-#define psym oad
-
-/******************************************************/
-/* ELF defines */
-
-#define EM_TCC_TARGET EM_386
-
-/* relocation type for 32 bit data relocation */
-#define R_DATA_32   R_386_32
-#define R_DATA_PTR  R_386_32
-#define R_JMP_SLOT  R_386_JMP_SLOT
-#define R_COPY      R_386_COPY
-
-#define ELF_START_ADDR 0x08048000
-#define ELF_PAGE_SIZE  0x1000
+/* generate jmp to a label */
+#define gjmp2(instr,lbl) oad(instr,lbl)
 
 /******************************************************/
 #else /* ! TARGET_DEFS_ONLY */
@@ -93,7 +79,7 @@ enum {
 #include "tcc.h"
 
 /* define to 1/0 to [not] have EBX as 4th register */
-#define USE_EBX 1
+#define USE_EBX 0
 
 ST_DATA const int reg_classes[NB_REGS] = {
     /* eax */ RC_INT | RC_EAX,
@@ -114,6 +100,8 @@ static unsigned long func_bound_ind;
 ST_FUNC void g(int c)
 {
     int ind1;
+    if (nocode_wanted)
+        return;
     ind1 = ind + 1;
     if (ind1 > cur_text_section->data_allocated)
         section_realloc(cur_text_section, ind1);
@@ -159,34 +147,27 @@ ST_FUNC void gsym(int t)
     gsym_addr(t, ind);
 }
 
-/* psym is used to put an instruction with a data field which is a
-   reference to a symbol. It is in fact the same as oad ! */
-#define psym oad
-
 /* instruction + 4 bytes data. Return the address of the data */
 ST_FUNC int oad(int c, int s)
 {
-    int ind1;
-
+    int t;
+    if (nocode_wanted)
+        return s;
     o(c);
-    ind1 = ind + 4;
-    if (ind1 > cur_text_section->data_allocated)
-        section_realloc(cur_text_section, ind1);
-    write32le(cur_text_section->data + ind, s);
-    s = ind;
-    ind = ind1;
-    return s;
+    t = ind;
+    gen_le32(s);
+    return t;
 }
 
 /* output constant with relocation if 'r & VT_SYM' is true */
-ST_FUNC void gen_addr32(int r, Sym *sym, int c)
+ST_FUNC void gen_addr32(int r, Sym *sym, long c)
 {
     if (r & VT_SYM)
         greloc(cur_text_section, sym, ind, R_386_32);
     gen_le32(c);
 }
 
-ST_FUNC void gen_addrpc32(int r, Sym *sym, int c)
+ST_FUNC void gen_addrpc32(int r, Sym *sym, long c)
 {
     if (r & VT_SYM)
         greloc(cur_text_section, sym, ind, R_386_PC32);
@@ -655,7 +636,15 @@ ST_FUNC void gfunc_epilog(void)
         o(0x585a); /* restore returned value, if any */
     }
 #endif
-    o(0x5b * USE_EBX); /* pop ebx */
+
+    /* align local size to word & save local variables */
+    v = (-loc + 3) & -4;
+
+#if USE_EBX
+    o(0x8b);
+    gen_modrm(TREG_EBX, VT_LOCAL, NULL, -(v+4));
+#endif
+
     o(0xc9); /* leave */
     if (func_ret_sub == 0) {
         o(0xc3); /* ret */
@@ -664,9 +653,6 @@ ST_FUNC void gfunc_epilog(void)
         g(func_ret_sub);
         g(func_ret_sub >> 8);
     }
-    /* align local size to word & save local variables */
-    
-    v = (-loc + 3) & -4; 
     saved_ind = ind;
     ind = func_sub_sp_offset - FUNC_PROLOG_SIZE;
 #ifdef TCC_TARGET_PE
@@ -690,7 +676,7 @@ ST_FUNC void gfunc_epilog(void)
 /* generate a jump to a label */
 ST_FUNC int gjmp(int t)
 {
-    return psym(0xe9, t);
+    return gjmp2(0xe9, t);
 }
 
 /* generate a jump to a fixed address */
@@ -708,14 +694,27 @@ ST_FUNC void gjmp_addr(int a)
 
 ST_FUNC void gtst_addr(int inv, int a)
 {
-    inv ^= (vtop--)->c.i;
-    a -= ind + 2;
-    if (a == (char)a) {
-        g(inv - 32);
-        g(a);
-    } else {
-        g(0x0f);
-        oad(inv - 16, a - 4);
+    int v = vtop->r & VT_VALMASK;
+    if (v == VT_CMP) {
+	inv ^= (vtop--)->c.i;
+	a -= ind + 2;
+	if (a == (char)a) {
+	    g(inv - 32);
+	    g(a);
+	} else {
+	    g(0x0f);
+	    oad(inv - 16, a - 4);
+	}
+    } else if ((v & ~1) == VT_JMP) {
+	if ((v & 1) != inv) {
+	    gjmp_addr(a);
+	    gsym(vtop->c.i);
+	} else {
+	    gsym(vtop->c.i);
+	    o(0x05eb);
+	    gjmp_addr(a);
+	}
+	vtop--;
     }
 }
 
@@ -723,10 +722,12 @@ ST_FUNC void gtst_addr(int inv, int a)
 ST_FUNC int gtst(int inv, int t)
 {
     int v = vtop->r & VT_VALMASK;
-    if (v == VT_CMP) {
+    if (nocode_wanted) {
+        ;
+    } else if (v == VT_CMP) {
         /* fast case : can jump directly since flags are set */
         g(0x0f);
-        t = psym((vtop->c.i - 16) ^ inv, t);
+        t = gjmp2((vtop->c.i - 16) ^ inv, t);
     } else if (v == VT_JMP || v == VT_JMPI) {
         /* && or || optimization */
         if ((v & 1) == inv) {

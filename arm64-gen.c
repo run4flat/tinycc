@@ -41,19 +41,6 @@
 #define CHAR_IS_UNSIGNED
 
 /******************************************************/
-/* ELF defines */
-
-#define EM_TCC_TARGET EM_AARCH64
-
-#define R_DATA_32  R_AARCH64_ABS32
-#define R_DATA_PTR R_AARCH64_ABS64
-#define R_JMP_SLOT R_AARCH64_JUMP_SLOT
-#define R_COPY     R_AARCH64_COPY
-
-#define ELF_START_ADDR 0x00400000
-#define ELF_PAGE_SIZE 0x1000
-
-/******************************************************/
 #else /* ! TARGET_DEFS_ONLY */
 /******************************************************/
 #include "tcc.h"
@@ -108,6 +95,8 @@ static uint32_t fltr(int r)
 ST_FUNC void o(unsigned int c)
 {
     int ind1 = ind + 4;
+    if (nocode_wanted)
+        return;
     if (ind1 > cur_text_section->data_allocated)
         section_realloc(cur_text_section, ind1);
     write32le(cur_text_section->data + ind, c);
@@ -1291,6 +1280,8 @@ ST_FUNC void gfunc_epilog(void)
 ST_FUNC int gjmp(int t)
 {
     int r = ind;
+    if (nocode_wanted)
+        return t;
     o(t);
     return r;
 }
@@ -1339,7 +1330,8 @@ static int arm64_iconst(uint64_t *val, SValue *sv)
         return 0;
     if (val) {
         int t = sv->type.t;
-        *val = ((t & VT_BTYPE) == VT_LLONG ? sv->c.i :
+	int bt = t & VT_BTYPE;
+        *val = ((bt == VT_LLONG || bt == VT_PTR) ? sv->c.i :
                 (uint32_t)sv->c.i |
                 (t & VT_UNSIGNED ? 0 : -(sv->c.i & 0x80000000)));
     }

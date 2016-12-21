@@ -43,6 +43,7 @@ ST_DATA TokenSym **table_ident;
 static TokenSym *hash_ident[TOK_HASH_SIZE];
 static char token_buf[STRING_MAX_SIZE + 1];
 static CString cstr_buf;
+static CString macro_equal_buf;
 static TokenString tokstr_buf;
 static unsigned char isidnum_table[256 - CH_EOF];
 static int pp_debug_tok, pp_debug_symv;
@@ -52,11 +53,6 @@ static void tok_print(const char *msg, const int *str);
 static struct TinyAlloc *toksym_alloc;
 static struct TinyAlloc *tokstr_alloc;
 static struct TinyAlloc *cstr_alloc;
-
-/* isidnum_table flags: */
-#define IS_SPC 1
-#define IS_ID  2
-#define IS_NUM 4
 
 static TokenString *macro_stack;
 
@@ -142,22 +138,22 @@ ST_FUNC void expect(const char *msg)
 #define CSTR_TAL_LIMIT      1024
 
 typedef struct TinyAlloc {
-    size_t  limit;
-    size_t  size;
+    unsigned  limit;
+    unsigned  size;
     uint8_t *buffer;
     uint8_t *p;
-    size_t  nb_allocs;
+    unsigned  nb_allocs;
     struct TinyAlloc *next, *top;
 #ifdef TAL_INFO
-    size_t  nb_peak;
-    size_t  nb_total;
-    size_t  nb_missed;
+    unsigned  nb_peak;
+    unsigned  nb_total;
+    unsigned  nb_missed;
     uint8_t *peak_p;
 #endif
 } TinyAlloc;
 
 typedef struct tal_header_t {
-    size_t  size;
+    unsigned  size;
 #ifdef TAL_DEBUG
     int     line_num; /* negative line_num used for double free check */
     char    file_name[TAL_DEBUG_FILE_LEN + 1];
@@ -166,7 +162,7 @@ typedef struct tal_header_t {
 
 /* ------------------------------------------------------------------------- */
 
-ST_FUNC TinyAlloc *tal_new(TinyAlloc **pal, size_t limit, size_t size)
+static TinyAlloc *tal_new(TinyAlloc **pal, unsigned limit, unsigned size)
 {
     TinyAlloc *al = tcc_mallocz(sizeof(TinyAlloc));
     al->p = al->buffer = tcc_malloc(size);
@@ -176,7 +172,7 @@ ST_FUNC TinyAlloc *tal_new(TinyAlloc **pal, size_t limit, size_t size)
     return al;
 }
 
-ST_FUNC void tal_delete(TinyAlloc *al)
+static void tal_delete(TinyAlloc *al)
 {
     TinyAlloc *next;
 
@@ -191,17 +187,20 @@ tail_call:
 #ifdef TAL_DEBUG
     if (al->nb_allocs > 0) {
         uint8_t *p;
-        fprintf(stderr, "TAL_DEBUG: mem leak %d chunks (limit= %d)\n",
+        fprintf(stderr, "TAL_DEBUG: memory leak %d chunk(s) (limit= %d)\n",
                 al->nb_allocs, al->limit);
         p = al->buffer;
         while (p < al->p) {
             tal_header_t *header = (tal_header_t *)p;
             if (header->line_num > 0) {
-                fprintf(stderr, "  file %s, line %u: %u bytes\n",
+                fprintf(stderr, "%s:%d: chunk of %d bytes leaked\n",
                         header->file_name, header->line_num, header->size);
             }
             p += header->size + sizeof(tal_header_t);
         }
+#if MEM_DEBUG-0 == 2
+        exit(2);
+#endif
     }
 #endif
     next = al->next;
@@ -211,7 +210,7 @@ tail_call:
     goto tail_call;
 }
 
-ST_FUNC void tal_free_impl(TinyAlloc *al, void *p TAL_DEBUG_PARAMS)
+static void tal_free_impl(TinyAlloc *al, void *p TAL_DEBUG_PARAMS)
 {
     if (!p)
         return;
@@ -220,10 +219,10 @@ tail_call:
 #ifdef TAL_DEBUG
         tal_header_t *header = (((tal_header_t *)p) - 1);
         if (header->line_num < 0) {
-            fprintf(stderr, "TAL_DEBUG: file %s, line %u double frees chunk from\n",
+            fprintf(stderr, "%s:%d: TAL_DEBUG: double frees chunk from\n",
                     file, line);
-            fprintf(stderr, "  file %s, line %u: %u bytes\n",
-                    header->file_name, -header->line_num, header->size);
+            fprintf(stderr, "%s:%d: %d bytes\n",
+                    header->file_name, (int)-header->line_num, (int)header->size);
         } else
             header->line_num = -header->line_num;
 #endif
@@ -238,12 +237,12 @@ tail_call:
         tcc_free(p);
 }
 
-ST_FUNC void *tal_realloc_impl(TinyAlloc **pal, void *p, size_t size TAL_DEBUG_PARAMS)
+static void *tal_realloc_impl(TinyAlloc **pal, void *p, unsigned size TAL_DEBUG_PARAMS)
 {
     tal_header_t *header;
     void *ret;
     int is_own;
-    size_t adj_size = (size + 3) & -4;
+    unsigned adj_size = (size + 3) & -4;
     TinyAlloc *al = *pal;
 
 tail_call:
@@ -853,6 +852,11 @@ ST_FUNC uint8_t *parse_comment(uint8_t *p)
     return p;
 }
 
+ST_FUNC void set_idnum(int c, int val)
+{
+    isidnum_table[c - CH_EOF] = val;
+}
+
 #define cinp minp
 
 static inline void skip_spaces(void)
@@ -1319,12 +1323,12 @@ static int macro_is_equal(const int *a, const int *b)
         return 1;
 
     while (*a && *b) {
-        /* first time preallocate static cstr_buf, next time only reset position to start */
-        cstr_reset(&cstr_buf);
+        /* first time preallocate macro_equal_buf, next time only reset position to start */
+        cstr_reset(&macro_equal_buf);
         TOK_GET(&t, &a, &cv);
-        cstr_cat(&cstr_buf, get_tok_str(t, &cv), 0);
+        cstr_cat(&macro_equal_buf, get_tok_str(t, &cv), 0);
         TOK_GET(&t, &b, &cv);
-        if (strcmp(cstr_buf.data, get_tok_str(t, &cv)))
+        if (strcmp(macro_equal_buf.data, get_tok_str(t, &cv)))
             return 0;
     }
     return !(*a || *b);
@@ -1518,13 +1522,15 @@ ST_FUNC void parse_define(void)
     /* XXX: should check if same macro (ANSI) */
     first = NULL;
     t = MACRO_OBJ;
+    /* We have to parse the whole define as if not in asm mode, in particular
+       no line comment with '#' must be ignored.  Also for function
+       macros the argument list must be parsed without '.' being an ID
+       character.  */
+    parse_flags = ((parse_flags & ~PARSE_FLAG_ASM_FILE) | PARSE_FLAG_SPACES);
     /* '(' must be just after macro definition for MACRO_FUNC */
-    parse_flags |= PARSE_FLAG_SPACES;
     next_nomacro_spc();
     if (tok == '(') {
-        /* must be able to parse TOK_DOTS (in asm mode '.' can be part of identifier) */
-        parse_flags &= ~PARSE_FLAG_ASM_FILE;
-        isidnum_table['.' - CH_EOF] = 0;
+        set_idnum('.', 0);
         next_nomacro();
         ps = &first;
         if (tok != ')') for (;;) {
@@ -1552,14 +1558,17 @@ ST_FUNC void parse_define(void)
         }
         next_nomacro_spc();
         t = MACRO_FUNC;
-        parse_flags |= (saved_parse_flags & PARSE_FLAG_ASM_FILE);
-        isidnum_table['.' - CH_EOF] =
-            (parse_flags & PARSE_FLAG_ASM_FILE) ? IS_ID : 0;
     }
 
     tokstr_buf.len = 0;
     spc = 2;
     parse_flags |= PARSE_FLAG_ACCEPT_STRAYS | PARSE_FLAG_SPACES | PARSE_FLAG_LINEFEED;
+    /* The body of a macro definition should be parsed such that identifiers
+       are parsed like the file mode determines (i.e. with '.' being an
+       ID character in asm mode).  But '#' should be retained instead of
+       regarded as line comment leader, so still don't set ASM_FILE
+       in parse_flags. */
+    set_idnum('.', (saved_parse_flags & PARSE_FLAG_ASM_FILE) ? IS_ID : 0);
     while (tok != TOK_LINEFEED && tok != TOK_EOF) {
         /* remove spaces around ## and after '#' */
         if (TOK_TWOSHARPS == tok) {
@@ -1568,6 +1577,7 @@ ST_FUNC void parse_define(void)
             if (1 == spc)
                 --tokstr_buf.len;
             spc = 3;
+	    tok = TOK_PPJOIN;
         } else if ('#' == tok) {
             spc = 4;
         } else if (check_space(tok, &spc)) {
@@ -1802,34 +1812,27 @@ ST_FUNC void preprocess(int is_bof)
                 inp();
 #endif
         } else {
-            /* computed #include : either we have only strings or
-               we have anything enclosed in '<>' */
+	    int len;
+            /* computed #include : concatenate everything up to linefeed,
+	       the result must be one of the two accepted forms.
+	       Don't convert pp-tokens to tokens here.  */
+	    parse_flags = (PARSE_FLAG_PREPROCESS
+			   | PARSE_FLAG_LINEFEED
+			   | (parse_flags & PARSE_FLAG_ASM_FILE));
             next();
             buf[0] = '\0';
-            if (tok == TOK_STR) {
-                while (tok != TOK_LINEFEED) {
-                    if (tok != TOK_STR) {
-                    include_syntax:
-                        tcc_error("'#include' expects \"FILENAME\" or <FILENAME>");
-                    }
-                    pstrcat(buf, sizeof(buf), (char *)tokc.str.data);
-                    next();
-                }
-                c = '\"';
-            } else {
-                int len;
-                while (tok != TOK_LINEFEED) {
-                    pstrcat(buf, sizeof(buf), get_tok_str(tok, &tokc));
-                    next();
-                }
-                len = strlen(buf);
-                /* check syntax and remove '<>' */
-                if (len < 2 || buf[0] != '<' || buf[len - 1] != '>')
-                    goto include_syntax;
-                memmove(buf, buf + 1, len - 2);
-                buf[len - 2] = '\0';
-                c = '>';
-            }
+	    while (tok != TOK_LINEFEED) {
+		pstrcat(buf, sizeof(buf), get_tok_str(tok, &tokc));
+		next();
+	    }
+	    len = strlen(buf);
+	    /* check syntax and remove '<>|""' */
+	    if ((len < 2 || ((buf[0] != '"' || buf[len-1] != '"') &&
+			     (buf[0] != '<' || buf[len-1] != '>'))))
+	        tcc_error("'#include' expects \"FILENAME\" or <FILENAME>");
+	    c = buf[len-1];
+	    memmove(buf, buf + 1, len - 2);
+	    buf[len - 2] = '\0';
         }
 
         if (s1->include_stack_ptr >= s1->include_stack + INCLUDE_STACK_SIZE)
@@ -2804,7 +2807,7 @@ maybe_newline:
         if (isnum(c)) {
             t = '.';
             goto parse_num;
-        } else if ((parse_flags & PARSE_FLAG_ASM_FILE)
+        } else if ((isidnum_table['.' - CH_EOF] & IS_ID)
                    && (isidnum_table[c - CH_EOF] & (IS_ID|IS_NUM))) {
             *--p = c = '.';
             goto parse_ident_fast;
@@ -3084,10 +3087,10 @@ static int *macro_arg_subst(Sym **nested_list, const int *macro_str, Sym *args)
                 int l0 = str.len;
                 st = s->d;
                 /* if '##' is present before or after, no arg substitution */
-                if (*macro_str == TOK_TWOSHARPS || t1 == TOK_TWOSHARPS) {
+                if (*macro_str == TOK_PPJOIN || t1 == TOK_PPJOIN) {
                     /* special case for var arg macros : ## eats the ','
                        if empty VA_ARGS variable. */
-                    if (t1 == TOK_TWOSHARPS && t0 == ',' && gnu_ext && s->type.t) {
+                    if (t1 == TOK_PPJOIN && t0 == ',' && gnu_ext && s->type.t) {
                         if (*st == 0) {
                             /* suppress ',' '##' */
                             str.len -= 2;
@@ -3403,7 +3406,7 @@ static inline int *macro_twosharps(const int *ptr0)
     /* we search the first '##' */
     for (ptr = ptr0;;) {
         TOK_GET(&t, &ptr, &cval);
-        if (t == TOK_TWOSHARPS)
+        if (t == TOK_PPJOIN)
             break;
         if (t == 0)
             return NULL;
@@ -3416,9 +3419,9 @@ static inline int *macro_twosharps(const int *ptr0)
         TOK_GET(&t, &ptr, &cval);
         if (t == 0)
             break;
-        if (t == TOK_TWOSHARPS)
+        if (t == TOK_PPJOIN)
             continue;
-        while (*ptr == TOK_TWOSHARPS) {
+        while (*ptr == TOK_PPJOIN) {
             int t1; CValue cv1;
             /* given 'a##b', remove nosubsts preceding 'a' */
             if (start_of_nosubsts >= 0)
@@ -3426,7 +3429,7 @@ static inline int *macro_twosharps(const int *ptr0)
             /* given 'a##b', remove nosubsts preceding 'b' */
             while ((t1 = *++ptr) == TOK_NOSUBST)
                 ;
-            if (t1 && t1 != TOK_TWOSHARPS) {
+            if (t1 && t1 != TOK_PPJOIN) {
                 TOK_GET(&t1, &ptr, &cv1);
                 if (t != TOK_PLCHLDR || t1 != TOK_PLCHLDR) {
                     if (paste_tokens(t, &cval, t1, &cv1)) {
@@ -3472,7 +3475,7 @@ static void macro_subst(
     spc = nosubst = 0;
 
     /* first scan for '##' operator handling */
-    if (can_read_stream & 1) {
+    if (can_read_stream) {
         macro_str1 = macro_twosharps(ptr);
         if (macro_str1)
             ptr = macro_str1;
@@ -3589,6 +3592,7 @@ ST_INLN void unget_tok(int last_tok)
 
 ST_FUNC void preprocess_start(TCCState *s1)
 {
+    char *buf;
     s1->include_stack_ptr = s1->include_stack;
     /* XXX: move that before to avoid having to initialize
        file->ifdef_stack_ptr ? */
@@ -3600,10 +3604,27 @@ ST_FUNC void preprocess_start(TCCState *s1)
     s1->pack_stack[0] = 0;
     s1->pack_stack_ptr = s1->pack_stack;
 
-    isidnum_table['$' - CH_EOF] =
-        s1->dollars_in_identifiers ? IS_ID : 0;
-    isidnum_table['.' - CH_EOF] =
-        (parse_flags & PARSE_FLAG_ASM_FILE) ? IS_ID : 0;
+    set_idnum('$', s1->dollars_in_identifiers ? IS_ID : 0);
+    set_idnum('.', (parse_flags & PARSE_FLAG_ASM_FILE) ? IS_ID : 0);
+    buf = tcc_malloc(3 + strlen(file->filename));
+    sprintf(buf, "\"%s\"", file->filename);
+    tcc_undefine_symbol(s1, "__BASE_FILE__");
+    tcc_define_symbol(s1, "__BASE_FILE__", buf);
+    tcc_free(buf);
+    if (s1->nb_cmd_include_files) {
+	CString cstr;
+	int i;
+	cstr_new(&cstr);
+	for (i = 0; i < s1->nb_cmd_include_files; i++) {
+	    cstr_cat(&cstr, "#include \"", -1);
+	    cstr_cat(&cstr, s1->cmd_include_files[i], -1);
+	    cstr_cat(&cstr, "\"\n", -1);
+	}
+        *s1->include_stack_ptr++ = file;
+	tcc_open_bf(s1, "<command line>", cstr.size);
+	memcpy(file->buffer, cstr.data, cstr.size);
+	cstr_free(&cstr);
+    }
 }
 
 ST_FUNC void tccpp_new(TCCState *s)
@@ -3616,14 +3637,14 @@ ST_FUNC void tccpp_new(TCCState *s)
 
     /* init isid table */
     for(i = CH_EOF; i<128; i++)
-        isidnum_table[i - CH_EOF]
-            = is_space(i) ? IS_SPC
+        set_idnum(i,
+            is_space(i) ? IS_SPC
             : isid(i) ? IS_ID
             : isnum(i) ? IS_NUM
-            : 0;
+            : 0);
 
     for(i = 128; i<256; i++)
-        isidnum_table[i - CH_EOF] = IS_ID;
+        set_idnum(i, IS_ID);
 
     /* init allocators */
     tal_new(&toksym_alloc, TOKSYM_TAL_LIMIT, TOKSYM_TAL_SIZE);
@@ -3672,6 +3693,7 @@ ST_FUNC void tccpp_delete(TCCState *s)
     /* free static buffers */
     cstr_free(&tokcstr);
     cstr_free(&cstr_buf);
+    cstr_free(&macro_equal_buf);
     tok_str_free_str(tokstr_buf.str);
 
     /* free allocators */
@@ -3834,7 +3856,9 @@ ST_FUNC int tcc_preprocess(TCCState *s1)
 
 #ifdef PP_BENCH
     /* for PP benchmarks */
-    do next(); while (tok != TOK_EOF); return 0;
+    do next(); while (tok != TOK_EOF);
+    free_defines(define_start);
+    return 0;
 #endif
 
     if (s1->dflag & 1) {
