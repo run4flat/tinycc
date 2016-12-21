@@ -657,25 +657,26 @@ static int tcc_compile(TCCState *s1)
         decl(VT_CONST);
         if (tok != TOK_EOF)
             expect("declaration");
+            
+/* #ifdef CONFIG_TCC_EXSYMTAB */
+        /* Make an extended copy of the symbol table, if requested */
+        if (s1->nb_errors == 0 && s1->exsymtab == (extended_symtab*)1)
+        {
+            copy_extended_symtab(s1, define_start, tok_start);
+            /* Output the symbol table to a cache if requested */
+            if (s1->symtab_serialize_outfile)
+                tcc_serialize_extended_symtab(s1->exsymtab, s1->symtab_serialize_outfile);
+            /* Output the symbol names */
+            if (s1->dump_identifier_names_outfile)
+                tcc_dump_identifier_names(s1->exsymtab, s1->dump_identifier_names_outfile);
+        }
+/* #endif */
+        
         /* reset define stack, but keep -D and built-ins */
         free_defines(define_start);
         tccgen_end(s1);
     }
     s1->error_set_jmp_enabled = 0;
-
-/* #ifdef CONFIG_TCC_EXSYMTAB */
-    /* Make an extended copy of the symbol table, if requested */
-    if (s1->nb_errors == 0 && s1->exsymtab == (extended_symtab*)1)
-    {
-        copy_extended_symtab(s1, define_start, tok_start);
-        /* Output the symbol table to a cache if requested */
-        if (s1->symtab_serialize_outfile)
-            tcc_serialize_extended_symtab(s1->exsymtab, s1->symtab_serialize_outfile);
-        /* Output the symbol names */
-        if (s1->dump_identifier_names_outfile)
-            tcc_dump_identifier_names(s1->exsymtab, s1->dump_identifier_names_outfile);
-    }
-/* #endif */
 
     free_inline_functions(s1);
     sym_pop(&global_stack, NULL, 0);
