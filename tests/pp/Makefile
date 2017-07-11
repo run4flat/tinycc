@@ -31,10 +31,10 @@ FILTER = 2>&1 | sed 's,$(SRC)/,,g'
 	    && rm -f $*.output
 
 # automatically generate .expect files with gcc:
-%.expect: %.c
+%.expect: # %.c
 	gcc -E -P $< >$*.expect 2>&1
 
-%.expect: %.S
+%.expect: # %.S
 	gcc -E -P $< >$*.expect 2>&1
 
 # tell make not to delete

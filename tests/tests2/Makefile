@@ -26,7 +26,7 @@ ifeq ($(ARCH),x86-64)
  SKIP += 73_arm64.test
 endif
 ifeq (,$(filter i386 x86-64,$(ARCH)))
- SKIP += 85-asm-outside-function.test
+ SKIP += 85_asm-outside-function.test
 endif
 
 # Some tests might need arguments
@@ -56,13 +56,13 @@ all test: $(filter-out $(SKIP),$(TESTS))
 	@if test -z "$(NORUN)"; then \
 	    $(TCC) -run $< $(ARGS) $(FILTER) >$*.output 2>&1 || true; \
 	  else \
-	    $(TCC) $< -o ./$*.exe $(FILTER) 2>&1 && \
-	    ./$*.exe $(ARGS) >$*.output 2>&1 || true; \
+	    $(TCC) $< -o ./$*.exe $(FILTER) >$*.output 2>&1; \
+	    ./$*.exe $(ARGS) >>$*.output 2>&1 || true; \
 	  fi
 	@diff -Nbu $(SRC)/$*.expect $*.output && rm -f $*.output $*.exe
 
 # automatically generate .expect files with gcc:
-%.expect : %.c
+%.expect : # %.c
 	(gcc -w $*.c -o a.exe && ./a.exe $(ARGS)) $(FILTER) >$*.expect 2>&1; rm -f a.exe
 
 # tell make not to delete

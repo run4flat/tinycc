@@ -70,9 +70,6 @@ enum {
 /* maximum alignment (for aligned attribute support) */
 #define MAX_ALIGN     8
 
-/* generate jmp to a label */
-#define gjmp2(instr,lbl) oad(instr,lbl)
-
 /******************************************************/
 #else /* ! TARGET_DEFS_ONLY */
 /******************************************************/
@@ -148,7 +145,7 @@ ST_FUNC void gsym(int t)
 }
 
 /* instruction + 4 bytes data. Return the address of the data */
-ST_FUNC int oad(int c, int s)
+static int oad(int c, int s)
 {
     int t;
     if (nocode_wanted)
@@ -158,6 +155,9 @@ ST_FUNC int oad(int c, int s)
     gen_le32(s);
     return t;
 }
+
+/* generate jmp to a label */
+#define gjmp2(instr,lbl) oad(instr,lbl)
 
 /* output constant with relocation if 'r & VT_SYM' is true */
 ST_FUNC void gen_addr32(int r, Sym *sym, long c)
@@ -396,21 +396,21 @@ ST_FUNC int gfunc_sret(CType *vt, int variadic, CType *ret, int *ret_align, int 
 {
 #ifdef TCC_TARGET_PE
     int size, align;
-
     *ret_align = 1; // Never have to re-align return values for x86
     *regsize = 4;
     size = type_size(vt, &align);
-    if (size > 8) {
+    if (size > 8 || (size & (size - 1)))
         return 0;
-    } else if (size > 4) {
-        ret->ref = NULL;
+    if (size == 8)
         ret->t = VT_LLONG;
-        return 1;
-    } else {
-        ret->ref = NULL;
+    else if (size == 4)
         ret->t = VT_INT;
-        return 1;
-    }
+    else if (size == 2)
+        ret->t = VT_SHORT;
+    else
+        ret->t = VT_BYTE;
+    ret->ref = NULL;
+    return 1;
 #else
     *ret_align = 1; // Never have to re-align return values for x86
     return 0;
@@ -547,7 +547,8 @@ ST_FUNC void gfunc_prolog(CType *func_type)
     func_var = (sym->c == FUNC_ELLIPSIS);
 #ifdef TCC_TARGET_PE
     size = type_size(&func_vt,&align);
-    if (((func_vt.t & VT_BTYPE) == VT_STRUCT) && (size > 8)) {
+    if (((func_vt.t & VT_BTYPE) == VT_STRUCT)
+        && (size > 8 || (size & (size - 1)))) {
 #else
     if ((func_vt.t & VT_BTYPE) == VT_STRUCT) {
 #endif
@@ -1037,15 +1038,6 @@ ST_FUNC void gen_cvt_itof(int t)
 /* convert fp to int 't' type */
 ST_FUNC void gen_cvt_ftoi(int t)
 {
-#if 1
-    gv(RC_FLOAT);
-    save_reg(TREG_EAX);
-    save_reg(TREG_EDX);
-    gen_static_call(TOK___tcc_cvt_ftol);
-    vtop->r = TREG_EAX; /* mark reg as used */
-    if (t == VT_LLONG)
-        vtop->r2 = TREG_EDX;
-#else
     int bt = vtop->type.t & VT_BTYPE;
     if (bt == VT_FLOAT)
         vpush_global_sym(&func_old_type, TOK___fixsfdi);
@@ -1058,7 +1050,6 @@ ST_FUNC void gen_cvt_ftoi(int t)
     vpushi(0);
     vtop->r = REG_IRET;
     vtop->r2 = REG_LRET;
-#endif
 }
 
 /* convert from one floating point type to another */

@@ -390,7 +390,7 @@ struct Attribute {
         func_export   : 1,
         func_import   : 1,
         func_args     : 5,
-        func_proto    : 1,
+        func_body     : 1,
         mode          : 4,
         weak          : 1,
         visibility    : 2,
@@ -754,6 +754,7 @@ struct TCCState {
 #ifdef TCC_TARGET_PE
     /* PE info */
     int pe_subsystem;
+    unsigned pe_characteristics;
     unsigned pe_file_align;
     unsigned pe_stack_size;
 # ifdef TCC_TARGET_X86_64
@@ -1081,9 +1082,9 @@ ST_DATA int tcc_ext;
 ST_DATA struct TCCState *tcc_state;
 
 /* public functions currently used by the tcc main function */
-PUB_FUNC char *pstrcpy(char *buf, int buf_size, const char *s);
-PUB_FUNC char *pstrcat(char *buf, int buf_size, const char *s);
-PUB_FUNC char *pstrncpy(char *out, const char *in, size_t num);
+ST_FUNC char *pstrcpy(char *buf, int buf_size, const char *s);
+ST_FUNC char *pstrcat(char *buf, int buf_size, const char *s);
+ST_FUNC char *pstrncpy(char *out, const char *in, size_t num);
 PUB_FUNC char *tcc_basename(const char *name);
 PUB_FUNC char *tcc_fileextension (const char *name);
 
@@ -1117,7 +1118,7 @@ PUB_FUNC NORETURN void tcc_error(const char *fmt, ...);
 PUB_FUNC void tcc_warning(const char *fmt, ...);
 
 /* other utilities */
-ST_FUNC void dynarray_add(void ***ptab, int *nb_ptr, void *data);
+ST_FUNC void dynarray_add(void *ptab, int *nb_ptr, void *data);
 ST_FUNC void dynarray_reset(void *pp, int *n);
 ST_INLN void cstr_ccat(CString *cstr, int ch);
 ST_FUNC void cstr_cat(CString *cstr, const char *str, int len);
@@ -1297,7 +1298,6 @@ ST_FUNC void check_vstack(void);
 ST_INLN int is_float(int t);
 ST_FUNC int ieee_finite(double d);
 ST_FUNC void test_lvalue(void);
-ST_FUNC void swap(int *p, int *q);
 ST_FUNC void vpushi(int v);
 ST_FUNC Sym *external_global_sym(int v, CType *type, int r);
 ST_FUNC void vset(CType *type, int r, long v);
@@ -1511,7 +1511,6 @@ static inline void add64le(unsigned char *p, int64_t x) {
 /* ------------ i386-gen.c ------------ */
 #if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
 ST_FUNC void g(int c);
-ST_FUNC int oad(int c, int s);
 ST_FUNC void gen_le16(int c);
 ST_FUNC void gen_le32(int c);
 ST_FUNC void gen_addr32(int r, Sym *sym, long c);
@@ -1535,7 +1534,6 @@ ST_FUNC void gen_opl(int op);
 ST_FUNC char *default_elfinterp(struct TCCState *s);
 #endif
 ST_FUNC void arm_init(struct TCCState *s);
-ST_FUNC uint32_t encbranch(int pos, int addr, int fail);
 ST_FUNC void gen_cvt_itof1(int t);
 #endif
 
@@ -1543,7 +1541,7 @@ ST_FUNC void gen_cvt_itof1(int t);
 #ifdef TCC_TARGET_ARM64
 ST_FUNC void gen_cvt_sxtw(void);
 ST_FUNC void gen_opl(int op);
-ST_FUNC void greturn(void);
+ST_FUNC void gfunc_return(CType *func_type);
 ST_FUNC void gen_va_start(void);
 ST_FUNC void gen_va_arg(CType *t);
 ST_FUNC void gen_clear_cache(void);

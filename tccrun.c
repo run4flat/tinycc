@@ -60,7 +60,7 @@ static void win64_del_function_table(void *);
 
 LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr)
 {
-    int size;  void *mem;
+    int size;
 
     if (TCC_RELOCATE_AUTO != ptr)
         return tcc_relocate_ex(s1, ptr);
@@ -70,35 +70,17 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr)
         return -1;
 
 #ifdef HAVE_SELINUX
-    {   /* Use mmap instead of malloc for Selinux.  Ref:
-           http://www.gnu.org/s/libc/manual/html_node/File-Size.html */
-
-        char tmpfname[] = "/tmp/.tccrunXXXXXX";
-        int fd = mkstemp (tmpfname);
-        void *wr_mem;
-
-        unlink (tmpfname);
-        ftruncate (fd, size);
-
-        wr_mem = mmap (NULL, size, PROT_READ|PROT_WRITE,
-            MAP_SHARED, fd, 0);
-        if (wr_mem == MAP_FAILED)
-            tcc_error("/tmp not writeable");
-        mem = mmap (NULL, size, PROT_READ|PROT_EXEC,
-            MAP_SHARED, fd, 0);
-        if (mem == MAP_FAILED)
-            tcc_error("/tmp not executable");
-
-        tcc_relocate_ex(s1, wr_mem);
-        dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, (void*)(addr_t)size);
-        dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, wr_mem);
-        dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, mem);
-    }
+    /* Use mmap instead of malloc for Selinux. */
+    ptr = mmap (NULL, size, PROT_READ|PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED)
+        tcc_error("tccrun: could not map memory");
+    dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, (void*)(addr_t)size);
 #else
-    mem = tcc_malloc(size);
-    tcc_relocate_ex(s1, mem); /* no more errors expected */
-    dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, mem);
+    ptr = tcc_malloc(size);
 #endif
+    tcc_relocate_ex(s1, ptr); /* no more errors expected */
+    dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, ptr);
     return 0;
 }
 
@@ -108,13 +90,12 @@ ST_FUNC void tcc_run_free(TCCState *s1)
 
     for (i = 0; i < s1->nb_runtime_mem; ++i) {
 #ifdef HAVE_SELINUX
-        int size = (int)(addr_t)s1->runtime_mem[i];
-        munmap(s1->runtime_mem[++i], size);
-        munmap(s1->runtime_mem[++i], size);
+        unsigned size = (unsigned)(addr_t)s1->runtime_mem[i++];
+        munmap(s1->runtime_mem[i], size);
 #else
-# ifdef _WIN64
+#ifdef _WIN64
         win64_del_function_table(*(void**)s1->runtime_mem[i]);
-# endif
+#endif
         tcc_free(s1->runtime_mem[i]);
 #endif
     }
@@ -174,14 +155,19 @@ LIBTCCAPI int tcc_run(TCCState *s1, int argc, char **argv)
     return (*prog_main)(argc, argv);
 }
 
+#if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
+ #define RUN_SECTION_ALIGNMENT 63
+#else
+ #define RUN_SECTION_ALIGNMENT 15
+#endif
+
 /* relocate code. Return -1 on error, required size if ptr is NULL,
    otherwise copy code into buffer passed by the caller */
 static int tcc_relocate_ex(TCCState *s1, void *ptr)
 {
     Section *s;
-    unsigned long offset, length;
+    unsigned offset, length, fill, i, k;
     addr_t mem;
-    int i;
 
     if (NULL == ptr) {
         s1->nb_errors = 0;
@@ -198,16 +184,33 @@ static int tcc_relocate_ex(TCCState *s1, void *ptr)
     }
 
     offset = 0, mem = (addr_t)ptr;
+    fill = -mem & RUN_SECTION_ALIGNMENT;
 #ifdef _WIN64
     offset += sizeof (void*);
 #endif
-    for(i = 1; i < s1->nb_sections; i++) {
-        s = s1->sections[i];
-        if (0 == (s->sh_flags & SHF_ALLOC))
-            continue;
-        offset = (offset + 15) & ~15;
-        s->sh_addr = mem ? mem + offset : 0;
-        offset += s->data_offset;
+    for (k = 0; k < 2; ++k) {
+        for(i = 1; i < s1->nb_sections; i++) {
+            s = s1->sections[i];
+            if (0 == (s->sh_flags & SHF_ALLOC))
+                continue;
+            if (k != !(s->sh_flags & SHF_EXECINSTR))
+                continue;
+            offset += fill;
+            s->sh_addr = mem ? mem + offset : 0;
+#if 0
+            if (mem)
+                printf("%-16s +%02lx %p %04x\n",
+                    s->name, fill, (void*)s->sh_addr, (unsigned)s->data_offset);
+#endif
+            offset += s->data_offset;
+            fill = -(mem + offset) & 15;
+        }
+#if RUN_SECTION_ALIGNMENT > 15
+        /* To avoid that x86 processors would reload cached instructions each time
+           when data is written in the near, we need to make sure that code and data
+           do not share the same 64 byte unit */
+        fill = -(mem + offset) & RUN_SECTION_ALIGNMENT;
+#endif
     }
 
     /* relocate symbols */
@@ -216,7 +219,7 @@ static int tcc_relocate_ex(TCCState *s1, void *ptr)
         return -1;
 
     if (0 == mem)
-        return offset;
+        return offset + RUN_SECTION_ALIGNMENT;
 
     /* relocate each section */
     for(i = 1; i < s1->nb_sections; i++) {
@@ -235,7 +238,6 @@ static int tcc_relocate_ex(TCCState *s1, void *ptr)
         if (0 == (s->sh_flags & SHF_ALLOC))
             continue;
         length = s->data_offset;
-        // printf("%-12s %08lx %04x\n", s->name, s->sh_addr, length);
         ptr = (void*)s->sh_addr;
         if (NULL == s->data || s->sh_type == SHT_NOBITS)
             memset(ptr, 0, length);
@@ -263,19 +265,19 @@ static void set_pages_executable(void *ptr, unsigned long length)
     unsigned long old_protect;
     VirtualProtect(ptr, length, PAGE_EXECUTE_READWRITE, &old_protect);
 #else
+    void __clear_cache(void *beginning, void *end);
+    addr_t start, end;
 #ifndef PAGESIZE
 # define PAGESIZE 4096
 #endif
-    addr_t start, end;
     start = (addr_t)ptr & ~(PAGESIZE - 1);
     end = (addr_t)ptr + length;
     end = (end + PAGESIZE - 1) & ~(PAGESIZE - 1);
     if (mprotect((void *)start, end - start, PROT_READ | PROT_WRITE | PROT_EXEC))
         tcc_error("mprotect failed: did you mean to configure --with-selinux?");
-#if defined TCC_TARGET_ARM || defined TCC_TARGET_ARM64
-    { extern void __clear_cache(void *beginning, void *end);
-      __clear_cache(ptr, (char *)ptr + length); }
-#endif
+# if defined TCC_TARGET_ARM || defined TCC_TARGET_ARM64
+    __clear_cache(ptr, (char *)ptr + length);
+# endif
 #endif
 }
 
