@@ -26,8 +26,8 @@ void compare_funcs(Sym * foo_decl, Sym * foo_def)
      * later redefinition for functions that have been defined in an earlier
      * context, so these are allowed (and encouraged) to differ.
      */
-    is_i(dec_ret->r, 0x11000, "declaration ret->r is 0x11000");
-    is_i(def_ret->r, 0x1000,  "definition  ret->r is 0x01000");
+    is_i(dec_ret->r, 0x1000, "declaration ret->r is 0x01000");
+    is_i(def_ret->r, 0x11000,  "definition  ret->r is 0x11000");
     is_i(def_ret->c, dec_ret->c, "ret->r agree");
     is_i(def_ret->type.t, dec_ret->type.t, "ret->type.t agree");
 
