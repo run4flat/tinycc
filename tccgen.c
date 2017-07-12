@@ -74,19 +74,17 @@ static void gen_cast(CType *type);
 static inline CType *pointed_type(CType *type);
 static int is_compatible_types(CType *type1, CType *type2);
 static int parse_btype(CType *type, AttributeDef *ad);
-static void type_decl(CType *type, AttributeDef *ad, int *v, int td);
+static CType *type_decl(CType *type, AttributeDef *ad, int *v, int td);
 static void parse_expr_type(CType *type);
 static void decl_initializer(CType *type, Section *sec, unsigned long c, int first, int size_only);
 static void block(int *bsym, int *csym, int is_expr);
 static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r, int has_init, int v, int scope);
 static int decl0(int l, int is_for_loop_init);
 static void expr_eq(void);
-static void unary_type(CType *type);
 static void vla_runtime_type_size(CType *type, int *a);
 static void vla_sp_restore(void);
 static void vla_sp_restore_root(void);
 static int is_compatible_parameter_types(CType *type1, CType *type2);
-static void expr_type(CType *type);
 static inline int64_t expr_const64(void);
 ST_FUNC void vpush64(int ty, unsigned long long v);
 ST_FUNC void vpush(CType *type);
@@ -3672,7 +3670,8 @@ static void struct_decl(CType *type, AttributeDef *ad, int u)
                     v = 0;
                     type1 = btype;
                     if (tok != ':') {
-                        type_decl(&type1, &ad1, &v, TYPE_DIRECT | TYPE_ABSTRACT);
+			if (tok != ';')
+                            type_decl(&type1, &ad1, &v, TYPE_DIRECT);
                         if (v == 0) {
                     	    if ((type1.t & VT_BTYPE) != VT_STRUCT)
                         	expect("identifier");
@@ -4050,7 +4049,7 @@ static int asm_label_instr(void)
     return v;
 }
 
-static void post_type(CType *type, AttributeDef *ad, int storage)
+static int post_type(CType *type, AttributeDef *ad, int storage, int td)
 {
     int n, l, t1, arg_size, align;
     Sym **plast, *s, *first;
@@ -4061,25 +4060,25 @@ static void post_type(CType *type, AttributeDef *ad, int storage)
 /* #endif */
 
     if (tok == '(') {
-        /* function declaration */
+        /* function type, or recursive declarator (return if so) */
         next();
-        l = 0;
+	if (td && !(td & TYPE_ABSTRACT))
+	  return 0;
+	if (tok == ')')
+	  l = 0;
+	else if (parse_btype(&pt, &ad1))
+	  l = FUNC_NEW;
+	else if (td)
+	  return 0;
+	else
+	  l = FUNC_OLD;
         first = NULL;
         plast = &first;
         arg_size = 0;
-        if (tok != ')') {
+        if (l) {
             for(;;) {
                 /* read param name and compute offset */
                 if (l != FUNC_OLD) {
-                    if (!parse_btype(&pt, &ad1)) {
-                        if (l) {
-                            tcc_error("invalid type");
-                        } else {
-                            l = FUNC_OLD;
-                            goto old_proto;
-                        }
-                    }
-                    l = FUNC_NEW;
                     if ((pt.t & VT_BTYPE) == VT_VOID && tok == ')')
                         break;
                     type_decl(&pt, &ad1, &n, TYPE_DIRECT | TYPE_ABSTRACT);
@@ -4087,7 +4086,6 @@ static void post_type(CType *type, AttributeDef *ad, int storage)
                         tcc_error("parameter declared as void");
                     arg_size += (type_size(&pt, &align) + PTR_SIZE - 1) / PTR_SIZE;
                 } else {
-                old_proto:
                     n = tok;
                     if (n < TOK_UIDENT)
                         expect("identifier");
@@ -4106,10 +4104,11 @@ static void post_type(CType *type, AttributeDef *ad, int storage)
                     next();
                     break;
                 }
+		if (l == FUNC_NEW && !parse_btype(&pt, &ad1))
+		    tcc_error("invalid type");
             }
-        }
-        /* if no parameters, then old type prototype */
-        if (l == 0)
+        } else
+            /* if no parameters, then old type prototype */
             l = FUNC_OLD;
         skip(')');
         /* NOTE: const is ignored in returned type as it has a special
@@ -4161,7 +4160,7 @@ static void post_type(CType *type, AttributeDef *ad, int storage)
         }
         skip(']');
         /* parse next post type */
-        post_type(type, ad, storage);
+        post_type(type, ad, storage, 0);
         if (type->t == VT_FUNC)
             tcc_error("declaration of an array of functions");
         t1 |= type->t & VT_VLA;
@@ -4187,20 +4186,25 @@ static void post_type(CType *type, AttributeDef *ad, int storage)
         type->t = (t1 ? VT_VLA : VT_ARRAY) | VT_PTR;
         type->ref = s;
     }
+    return 1;
 }
 
-/* Parse a type declaration (except basic type), and return the type
+/* Parse a type declarator (except basic type), and return the type
    in 'type'. 'td' is a bitmask indicating which kind of type decl is
    expected. 'type' should contain the basic type. 'ad' is the
    attribute definition of the basic type. It can be modified by
-   type_decl(). 
- */
-static void type_decl(CType *type, AttributeDef *ad, int *v, int td)
+   type_decl().  If this (possibly abstract) declarator is a pointer chain
+   it returns the innermost pointed to type (equals *type, but is a different
+   pointer), otherwise returns type itself, that's used for recursive calls.  */
+static CType *type_decl(CType *type, AttributeDef *ad, int *v, int td)
 {
-    Sym *s;
-    CType type1, *type2;
+    CType *post, *ret;
     int qualifiers, storage;
 
+    /* recursive type, remove storage bits first, apply them later again */
+    storage = type->t & VT_STORAGE;
+    type->t &= ~VT_STORAGE;
+    post = ret = type;
     while (tok == '*') {
         qualifiers = 0;
     redo:
@@ -4228,52 +4232,38 @@ static void type_decl(CType *type, AttributeDef *ad, int *v, int td)
         }
         mk_pointer(type);
         type->t |= qualifiers;
+	if (ret == type)
+	    /* innermost pointed to type is the one for the first derivation */
+	    ret = pointed_type(type);
     }
-    
-    /* recursive type */
-    /* XXX: incorrect if abstract type for functions (e.g. 'int ()') */
-    type1.t = 0; /* XXX: same as int */
+
     if (tok == '(') {
-        next();
-        /* XXX: this is not correct to modify 'ad' at this point, but
-           the syntax is not clear */
-        if (tok == TOK_ATTRIBUTE1 || tok == TOK_ATTRIBUTE2)
-            parse_attribute(ad);
-        type_decl(&type1, ad, v, td);
-        skip(')');
+	/* This is possibly a parameter type list for abstract declarators
+	   ('int ()'), use post_type for testing this.  */
+	if (!post_type(type, ad, 0, td)) {
+	    /* It's not, so it's a nested declarator, and the post operations
+	       apply to the innermost pointed to type (if any).  */
+	    /* XXX: this is not correct to modify 'ad' at this point, but
+	       the syntax is not clear */
+	    if (tok == TOK_ATTRIBUTE1 || tok == TOK_ATTRIBUTE2)
+	      parse_attribute(ad);
+	    post = type_decl(type, ad, v, td);
+	    skip(')');
+	}
+    } else if (tok >= TOK_IDENT && (td & TYPE_DIRECT)) {
+	/* type identifier */
+	*v = tok;
+	next();
     } else {
-        /* type identifier */
-        if (tok >= TOK_IDENT && (td & TYPE_DIRECT)) {
-            *v = tok;
-            next();
-        } else {
-            if (!(td & TYPE_ABSTRACT))
-                expect("identifier");
-            *v = 0;
-        }
+	if (!(td & TYPE_ABSTRACT))
+	  expect("identifier");
+	*v = 0;
     }
-    storage = type->t & VT_STORAGE;
-    type->t &= ~VT_STORAGE;
-    post_type(type, ad, storage);
-    type->t |= storage;
+    post_type(post, ad, storage, 0);
     if (tok == TOK_ATTRIBUTE1 || tok == TOK_ATTRIBUTE2)
         parse_attribute(ad);
-
-    /* Done unless this is a function declaration. */
-    if (!type1.t)
-        return;
-    /* append type at the end of type1 */
-    type2 = &type1;
-    for(;;) {
-        s = type2->ref;
-        type2 = &s->type;
-        if (!type2->t) {
-            *type2 = *type;
-            break;
-        }
-    }
-    *type = type1;
     type->t |= storage;
+    return ret;
 }
 
 /* compute the lvalue VT_LVAL_xxx needed to match type t. */
@@ -4343,6 +4333,20 @@ static void gfunc_param_typed(Sym *func, Sym *arg)
     }
 }
 
+/* parse an expression and return its type without any side effect.
+   If UNRY we parse an unary expression, otherwise a full one.  */
+static void expr_type(CType *type, int unry)
+{
+    nocode_wanted++;
+    if (unry)
+        unary();
+    else
+        gexpr();
+    *type = vtop->type;
+    vpop();
+    nocode_wanted--;
+}
+
 /* parse an expression of the form '(type)' or '(expr)' and return its
    type */
 static void parse_expr_type(CType *type)
@@ -4354,7 +4358,7 @@ static void parse_expr_type(CType *type)
     if (parse_btype(type, &ad)) {
         type_decl(type, &ad, &n, TYPE_ABSTRACT);
     } else {
-        expr_type(type);
+        expr_type(type, 0);
     }
     skip(')');
 }
@@ -4376,6 +4380,27 @@ static void vpush_tokc(int t)
     type.t = t;
     type.ref = 0;
     vsetc(&type, VT_CONST, &tokc);
+}
+
+static void parse_builtin_params(int nc, const char *args)
+{
+    char c, sep = '(';
+    CType t;
+    if (nc)
+        nocode_wanted++;
+    next();
+    while ((c = *args++)) {
+	skip(sep);
+	sep = ',';
+	switch (c) {
+	    case 'e': expr_eq(); continue;
+	    case 't': parse_type(&t); vpush(&t); continue;
+	    default: tcc_error("internal error"); break;
+	}
+    }
+    skip(')');
+    if (nc)
+        nocode_wanted--;
 }
 
 ST_FUNC void unary(void)
@@ -4568,7 +4593,7 @@ ST_FUNC void unary(void)
         t = tok;
         next();
         in_sizeof++;
-        unary_type(&type); // Perform a in_sizeof = 0;
+        expr_type(&type, 1); // Perform a in_sizeof = 0;
         size = type_size(&type, &align);
         if (t == TOK_SIZEOF) {
             if (!(type.t & VT_VLA)) {
@@ -4585,30 +4610,17 @@ ST_FUNC void unary(void)
         break;
 
     case TOK_builtin_expect:
-        {
-            /* __builtin_expect is a no-op for now */
-            next();
-            skip('(');
-            expr_eq();
-            skip(',');
-            expr_eq();
-            vpop();
-            skip(')');
-        }
+	/* __builtin_expect is a no-op for now */
+	parse_builtin_params(0, "ee");
+	vpop();
         break;
     case TOK_builtin_types_compatible_p:
-        {
-            CType type1, type2;
-            next();
-            skip('(');
-            parse_type(&type1);
-            skip(',');
-            parse_type(&type2);
-            skip(')');
-            type1.t &= ~(VT_CONSTANT | VT_VOLATILE);
-            type2.t &= ~(VT_CONSTANT | VT_VOLATILE);
-            vpushi(is_compatible_types(&type1, &type2));
-        }
+	parse_builtin_params(0, "tt");
+	vtop[-1].type.t &= ~(VT_CONSTANT | VT_VOLATILE);
+	vtop[0].type.t &= ~(VT_CONSTANT | VT_VOLATILE);
+	n = is_compatible_types(&vtop[-1].type, &vtop[0].type);
+	vtop -= 2;
+	vpushi(n);
         break;
     case TOK_builtin_choose_expr:
 	{
@@ -4638,18 +4650,10 @@ ST_FUNC void unary(void)
 	}
         break;
     case TOK_builtin_constant_p:
-        {
-            int res;
-            next();
-            skip('(');
-            nocode_wanted++;
-            expr_eq();
-            res = (vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST;
-            vpop();
-            nocode_wanted--;
-            skip(')');
-            vpushi(res);
-        }
+	parse_builtin_params(1, "e");
+	n = (vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST;
+	vtop--;
+	vpushi(n);
         break;
     case TOK_builtin_frame_address:
     case TOK_builtin_return_address:
@@ -4687,43 +4691,27 @@ ST_FUNC void unary(void)
 #ifdef TCC_TARGET_X86_64
 #ifdef TCC_TARGET_PE
     case TOK_builtin_va_start:
-        {
-            next();
-            skip('(');
-            expr_eq();
-            skip(',');
-            expr_eq();
-            skip(')');
-            if ((vtop->r & VT_VALMASK) != VT_LOCAL)
-                tcc_error("__builtin_va_start expects a local variable");
-            vtop->r &= ~VT_LVAL;
-            vtop->type = char_pointer_type;
-            vtop->c.i += 8;
-            vstore();
-        }
+	parse_builtin_params(0, "ee");
+	if ((vtop->r & VT_VALMASK) != VT_LOCAL)
+	  tcc_error("__builtin_va_start expects a local variable");
+	vtop->r &= ~VT_LVAL;
+	vtop->type = char_pointer_type;
+	vtop->c.i += 8;
+	vstore();
         break;
 #else
     case TOK_builtin_va_arg_types:
-        {
-            CType type;
-            next();
-            skip('(');
-            parse_type(&type);
-            skip(')');
-            vpushi(classify_x86_64_va_arg(&type));
-        }
+	parse_builtin_params(0, "t");
+	vpushi(classify_x86_64_va_arg(&vtop->type));
+	vswap();
+	vpop();
         break;
 #endif
 #endif
 
 #ifdef TCC_TARGET_ARM64
     case TOK___va_start: {
-        next();
-        skip('(');
-        expr_eq();
-        skip(',');
-        expr_eq();
-        skip(')');
+	parse_builtin_params(0, "ee");
         //xx check types
         gen_va_start();
         vpushi(0);
@@ -4732,24 +4720,16 @@ ST_FUNC void unary(void)
     }
     case TOK___va_arg: {
         CType type;
-        next();
-        skip('(');
-        expr_eq();
-        skip(',');
-        parse_type(&type);
-        skip(')');
+	parse_builtin_params(0, "et");
+	type = vtop->type;
+	vpop();
         //xx check types
         gen_va_arg(&type);
         vtop->type = type;
         break;
     }
     case TOK___arm64_clear_cache: {
-        next();
-        skip('(');
-        expr_eq();
-        skip(',');
-        expr_eq();
-        skip(')');
+	parse_builtin_params(0, "ee");
         gen_clear_cache();
         vpushi(0);
         vtop->type.t = VT_VOID;
@@ -4805,7 +4785,7 @@ ST_FUNC void unary(void)
         vpushsym(&s->type, s);
         next();
         break;
-    
+
     // special qnan , snan and infinity values
     case TOK___NAN__:
         vpush64(VT_DOUBLE, 0x7ff8000000000000ULL);
@@ -5439,28 +5419,6 @@ ST_FUNC void gexpr(void)
         vpop();
         next();
     }
-}
-
-/* parse an expression and return its type without any side effect. */
-static void expr_type(CType *type)
-{
-
-    nocode_wanted++;
-    gexpr();
-    *type = vtop->type;
-    vpop();
-    nocode_wanted--;
-}
-
-/* parse a unary expression and return its type without any side
-   effect. */
-static void unary_type(CType *type)
-{
-    nocode_wanted++;
-    unary();
-    *type = vtop->type;
-    vpop();
-    nocode_wanted--;
 }
 
 /* parse a constant expression and return value in vtop.  */
@@ -7046,7 +7004,7 @@ static int decl0(int l, int is_for_loop_init)
 #if 0
             {
                 char buf[500];
-                type_to_str(buf, sizeof(buf), t, get_tok_str(v, NULL));
+                type_to_str(buf, sizeof(buf), &type, get_tok_str(v, NULL));
                 printf("type = '%s'\n", buf);
             }
 #endif
