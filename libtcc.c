@@ -895,6 +895,10 @@ LIBTCCAPI TCCState *tcc_new(void)
     tcc_define_symbol(s, "__ILP32__", NULL);
 #endif
 
+#if defined(TCC_MUSL)
+    tcc_define_symbol(s, "__builtin_va_list", "void *");
+#endif /* TCC_MUSL */
+
 #ifdef TCC_TARGET_PE
     tcc_define_symbol(s, "__WCHAR_TYPE__", "unsigned short");
     tcc_define_symbol(s, "__WINT_TYPE__", "unsigned short");
@@ -1140,7 +1144,19 @@ ST_FUNC int tcc_add_file_internal(TCCState *s1, const char *filename, int flags)
             break;
 #endif
         default:
-#ifdef TCC_TARGET_PE
+#if defined(TCC_TARGET_MACHO)
+            if (s1->output_type == TCC_OUTPUT_MEMORY) {
+                ret = 0;
+#ifdef TCC_IS_NATIVE
+                if (NULL == dlopen(filename, RTLD_GLOBAL | RTLD_LAZY)) {
+                    ret = -1;
+                }
+#endif /* TCC_TARGET_MACHO */
+            } else {
+                ret = tcc_load_dll(s1, fd, filename,
+                                   (flags & AFF_REFERENCED_DLL) != 0);
+            }
+#elif defined(TCC_TARGET_PE)
             ret = pe_load_file(s1, filename, fd);
 #else
             /* as GNU ld, consider it is an ld script if not recognized */
@@ -1202,7 +1218,10 @@ ST_FUNC int tcc_add_crt(TCCState *s, const char *filename)
 /* the library name is the same as the argument of the '-l' option */
 LIBTCCAPI int tcc_add_library(TCCState *s, const char *libraryname)
 {
-#ifdef TCC_TARGET_PE
+#if defined(TCC_TARGET_MACHO)
+    const char *libs[] = { "%s/lib%s.dylib", "%s/lib%s.a", NULL };
+    const char **pp = s->static_link ? libs + 1 : libs;
+#elif defined(TCC_TARGET_PE)
     const char *libs[] = { "%s/%s.def", "%s/lib%s.def", "%s/%s.dll", "%s/lib%s.dll", "%s/lib%s.a", NULL };
     const char **pp = s->static_link ? libs + 4 : libs;
 #else

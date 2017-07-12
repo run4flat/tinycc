@@ -787,7 +787,7 @@ ST_FUNC void relocate_section(TCCState *s1, Section *s)
         tgt += rel->r_addend;
 #endif
         addr = s->sh_addr + rel->r_offset;
-	relocate(s1, rel, type, ptr, addr, tgt);
+        relocate(s1, rel, type, ptr, addr, tgt);
     }
     /* if the relocation is allocated, we change its symbol table */
     if (sr->sh_flags & SHF_ALLOC)
@@ -1718,7 +1718,7 @@ static int final_sections_reloc(TCCState *s1)
     /* XXX: ignore sections with allocated relocations ? */
     for(i = 1; i < s1->nb_sections; i++) {
         s = s1->sections[i];
-#ifdef TCC_TARGET_I386
+#if defined(TCC_TARGET_I386) || defined(TCC_MUSL)
         if (s->reloc && s != s1->got && (s->sh_flags & SHF_ALLOC)) //gr
         /* On X86 gdb 7.3 works in any case but gdb 6.6 will crash if SHF_ALLOC
         checking is removed */

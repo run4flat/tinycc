@@ -36,6 +36,21 @@ ifdef CONFIG_WIN32
  endif
  CFGWIN = -win
  NATIVE_TARGET = $(ARCH)-$(if $(eq $(ARCH),arm),wince,win32)
+else ifdef CONFIG_OSX
+ LIBS=-lm
+ ifndef CONFIG_NOLDL
+  LIBS+=-ldl
+ endif
+ # make libtcc as static or dynamic library?
+ ifeq ($(DISABLE_STATIC),yes)
+  LIBTCC=libtcc.dylib
+  ifndef DISABLE_RPATH
+   LINK_LIBTCC += -Wl,-rpath,"$(libdir)"
+   export LD_LIBRARY_PATH := $(CURDIR)/$(TOP)
+  endif
+ endif
+ CFGWIN =-unx
+ NATIVE_TARGET = $(ARCH)-osx
 else
  LIBS=-lm
  ifndef CONFIG_NOLDL
@@ -54,7 +69,7 @@ else
 endif
 
 ifeq ($(TARGETOS),Darwin)
- CFLAGS += -Wl,-flat_namespace,-undefined,warning
+ LDFLAGS += -flat_namespace -undefined warning
  export MACOSX_DEPLOYMENT_TARGET:=10.2
 endif
 
@@ -72,7 +87,9 @@ CONFIG_$(ARCH) = yes
 NATIVE_DEFINES_$(CONFIG_i386) += -DTCC_TARGET_I386
 NATIVE_DEFINES_$(CONFIG_x86_64) += -DTCC_TARGET_X86_64
 NATIVE_DEFINES_$(CONFIG_WIN32) += -DTCC_TARGET_PE
+NATIVE_DEFINES_$(CONFIG_OSX) += -DTCC_TARGET_X86_64 -DTCC_TARGET_MACHO
 NATIVE_DEFINES_$(CONFIG_uClibc) += -DTCC_UCLIBC
+NATIVE_DEFINES_$(CONFIG_musl) += -DTCC_MUSL
 NATIVE_DEFINES_$(CONFIG_arm) += -DTCC_TARGET_ARM
 NATIVE_DEFINES_$(CONFIG_arm_eabihf) += -DTCC_ARM_EABI -DTCC_ARM_HARDFLOAT
 NATIVE_DEFINES_$(CONFIG_arm_eabi) += -DTCC_ARM_EABI
@@ -91,11 +108,11 @@ TCCDOCS = tcc.1 tcc-doc.html tcc-doc.info
 all: $(PROGS) $(TCCLIBS) $(TCCDOCS)
 
 # cross compiler targets to build
-TCC_X = i386 x86_64 i386-win32 x86_64-win32 arm arm64 arm-wince c67
+TCC_X = i386 x86_64 i386-win32 x86_64-win32 x86_64-osx arm arm64 arm-wince c67
 # TCC_X += arm-fpa arm-fpa-ld arm-vfp arm-eabi
 
 # cross libtcc1.a targets to build
-LIBTCC1_X = i386 x86_64 i386-win32 x86_64-win32 arm arm64 arm-wince
+LIBTCC1_X = i386 x86_64 i386-win32 x86_64-win32 x86_64-osx arm arm64 arm-wince
 
 PROGS_CROSS = $(foreach X,$(TCC_X),$X-tcc$(EXESUF))
 LIBTCC1_CROSS = $(foreach X,$(LIBTCC1_X),libtcc1-$X.a)
@@ -122,6 +139,7 @@ DEF-i386        = -DTCC_TARGET_I386
 DEF-x86_64      = -DTCC_TARGET_X86_64
 DEF-i386-win32  = -DTCC_TARGET_PE -DTCC_TARGET_I386
 DEF-x86_64-win32= -DTCC_TARGET_PE -DTCC_TARGET_X86_64
+DEF-x86_64-osx  = -DTCC_TARGET_MACHO -DTCC_TARGET_X86_64
 DEF-arm-wince   = -DTCC_TARGET_PE -DTCC_TARGET_ARM -DTCC_ARM_EABI -DTCC_ARM_VFP -DTCC_ARM_HARDFLOAT
 DEF-arm64       = -DTCC_TARGET_ARM64
 DEF-c67         = -DTCC_TARGET_C67 -w # disable warnigs
@@ -162,6 +180,7 @@ i386_FILES = $(CORE_FILES) i386-gen.c i386-link.c i386-asm.c i386-asm.h i386-tok
 i386-win32_FILES = $(i386_FILES) tccpe.c
 x86_64_FILES = $(CORE_FILES) x86_64-gen.c x86_64-link.c i386-asm.c x86_64-asm.h
 x86_64-win32_FILES = $(x86_64_FILES) tccpe.c
+x86_64-osx_FILES = $(x86_64_FILES)
 arm_FILES = $(CORE_FILES) arm-gen.c arm-link.c arm-asm.c
 arm-wince_FILES = $(arm_FILES) tccpe.c
 arm64_FILES = $(CORE_FILES) arm64-gen.c arm64-link.c
