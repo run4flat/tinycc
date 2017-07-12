@@ -36,7 +36,9 @@
      DEF(TOK_RESTRICT2, "__restrict")
      DEF(TOK_RESTRICT3, "__restrict__")
      DEF(TOK_EXTENSION, "__extension__") /* gcc keyword */
-     
+
+     DEF(TOK_GENERIC, "_Generic")
+
      DEF(TOK_FLOAT, "float")
      DEF(TOK_DOUBLE, "double")
      DEF(TOK_BOOL, "_Bool")
@@ -85,6 +87,7 @@
      DEF(TOK___TIME__, "__TIME__")
      DEF(TOK___FUNCTION__, "__FUNCTION__")
      DEF(TOK___VA_ARGS__, "__VA_ARGS__")
+     DEF(TOK___COUNTER__, "__COUNTER__")
 
 /* special identifiers */
      DEF(TOK___FUNC__, "__func__")
