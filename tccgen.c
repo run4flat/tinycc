@@ -76,10 +76,11 @@ static int is_compatible_types(CType *type1, CType *type2);
 static int parse_btype(CType *type, AttributeDef *ad);
 static CType *type_decl(CType *type, AttributeDef *ad, int *v, int td);
 static void parse_expr_type(CType *type);
+static void init_putv(CType *type, Section *sec, unsigned long c);
 static void decl_initializer(CType *type, Section *sec, unsigned long c, int first, int size_only);
 static void block(int *bsym, int *csym, int is_expr);
 static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r, int has_init, int v, int scope);
-static int decl0(int l, int is_for_loop_init);
+static int decl0(int l, int is_for_loop_init, Sym *);
 static void expr_eq(void);
 static void vla_runtime_type_size(CType *type, int *a);
 static void vla_sp_restore(void);
@@ -302,8 +303,6 @@ ST_FUNC void put_extern_sym2(Sym *sym, Section *section,
         sh_num = SHN_UNDEF;
     else if (section == SECTION_ABS)
         sh_num = SHN_ABS;
-    else if (section == SECTION_COMMON)
-        sh_num = SHN_COMMON;
     else
         sh_num = section->sh_num;
 
@@ -1138,7 +1137,7 @@ static void gbound(void)
    register value (such as structures). */
 ST_FUNC int gv(int rc)
 {
-    int r, bit_pos, bit_size, size, align, i;
+    int r, bit_pos, bit_size, size, align;
     int rc2;
 
     /* NOTE: get_reg can modify vstack[] */
@@ -1169,44 +1168,15 @@ ST_FUNC int gv(int rc)
     } else {
         if (is_float(vtop->type.t) && 
             (vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
-            Sym *sym;
-            int *ptr;
             unsigned long offset;
-#if defined(TCC_TARGET_ARM) && !defined(TCC_ARM_VFP)
-            CValue check;
-#endif
-            
-            /* XXX: unify with initializers handling ? */
             /* CPUs usually cannot use float constants, so we store them
                generically in data segment */
             size = type_size(&vtop->type, &align);
-            offset = (data_section->data_offset + align - 1) & -align;
-            data_section->data_offset = offset;
-            /* XXX: not portable yet */
-#if defined(__i386__) || defined(__x86_64__)
-            /* Zero pad x87 tenbyte long doubles */
-            if (size == LDOUBLE_SIZE) {
-                vtop->c.tab[2] &= 0xffff;
-#if LDOUBLE_SIZE == 16
-                vtop->c.tab[3] = 0;
-#endif
-            }
-#endif
-            ptr = section_ptr_add(data_section, size);
-            size = size >> 2;
-#if defined(TCC_TARGET_ARM) && !defined(TCC_ARM_VFP)
-            check.d = 1;
-            if(check.tab[0])
-                for(i=0;i<size;i++)
-                    ptr[i] = vtop->c.tab[size-1-i];
-            else
-#endif
-            for(i=0;i<size;i++)
-                ptr[i] = vtop->c.tab[i];
-            sym = get_sym_ref(&vtop->type, data_section, offset, size << 2);
-            vtop->r |= VT_LVAL | VT_SYM;
-            vtop->sym = sym;
-            vtop->c.i = 0;
+	    offset = section_add(data_section, size, align);
+            vpush_ref(&vtop->type, data_section, offset, size);
+	    vswap();
+	    init_putv(&vtop->type, data_section, offset);
+	    vtop->r |= VT_LVAL;
         }
 #ifdef CONFIG_TCC_BCHECK
         if (vtop->r & VT_MUSTBOUND) 
@@ -2755,7 +2725,7 @@ static void type_to_str(char *buf, int buf_size,
     char buf1[256];
     const char *tstr;
 
-    t = type->t & VT_TYPE;
+    t = type->t;
     bt = t & VT_BTYPE;
     buf[0] = '\0';
     if (t & VT_CONSTANT)
@@ -2766,6 +2736,16 @@ static void type_to_str(char *buf, int buf_size,
         pstrcat(buf, buf_size, "unsigned ");
     else if (t & VT_DEFSIGN)
         pstrcat(buf, buf_size, "signed ");
+    if (t & VT_EXTERN)
+        pstrcat(buf, buf_size, "extern ");
+    if (t & VT_STATIC)
+        pstrcat(buf, buf_size, "static ");
+    if (t & VT_TYPEDEF)
+        pstrcat(buf, buf_size, "typedef ");
+    if (t & VT_INLINE)
+        pstrcat(buf, buf_size, "inline ");
+    buf_size -= strlen(buf);
+    buf += strlen(buf);
     switch(bt) {
     case VT_VOID:
         tstr = "void";
@@ -3691,7 +3671,7 @@ static void struct_decl(CType *type, AttributeDef *ad, int u)
                                       get_tok_str(v, NULL));
                         }
                         if ((type1.t & VT_BTYPE) == VT_FUNC ||
-                            (type1.t & (VT_TYPEDEF | VT_STATIC | VT_EXTERN | VT_INLINE)))
+                            (type1.t & VT_STORAGE))
                             tcc_error("invalid type for '%s'", 
                                   get_tok_str(v, NULL));
                     }
@@ -4089,7 +4069,7 @@ static int post_type(CType *type, AttributeDef *ad, int storage, int td)
                     n = tok;
                     if (n < TOK_UIDENT)
                         expect("identifier");
-                    pt.t = VT_INT;
+                    pt.t = VT_VOID; /* invalid type */
                     next();
                 }
                 convert_parameter_type(&pt);
@@ -4374,14 +4354,6 @@ static void parse_type(CType *type)
     type_decl(type, &ad, &n, TYPE_ABSTRACT);
 }
 
-static void vpush_tokc(int t)
-{
-    CType type;
-    type.t = t;
-    type.ref = 0;
-    vsetc(&type, VT_CONST, &tokc);
-}
-
 static void parse_builtin_params(int nc, const char *args)
 {
     char c, sep = '(';
@@ -4422,33 +4394,32 @@ ST_FUNC void unary(void)
     case TOK_CINT:
     case TOK_CCHAR: 
     case TOK_LCHAR:
-        vpushi(tokc.i);
+	t = VT_INT;
+ push_tokc:
+	type.t = t;
+	type.ref = 0;
+	vsetc(&type, VT_CONST, &tokc);
         next();
         break;
     case TOK_CUINT:
-        vpush_tokc(VT_INT | VT_UNSIGNED);
-        next();
-        break;
+        t = VT_INT | VT_UNSIGNED;
+        goto push_tokc;
     case TOK_CLLONG:
-        vpush_tokc(VT_LLONG);
-        next();
-        break;
+        t = VT_LLONG;
+	goto push_tokc;
     case TOK_CULLONG:
-        vpush_tokc(VT_LLONG | VT_UNSIGNED);
-        next();
-        break;
+        t = VT_LLONG | VT_UNSIGNED;
+	goto push_tokc;
     case TOK_CFLOAT:
-        vpush_tokc(VT_FLOAT);
-        next();
-        break;
+        t = VT_FLOAT;
+	goto push_tokc;
     case TOK_CDOUBLE:
-        vpush_tokc(VT_DOUBLE);
-        next();
-        break;
+        t = VT_DOUBLE;
+	goto push_tokc;
     case TOK_CLDOUBLE:
-        vpush_tokc(VT_LDOUBLE);
-        next();
-        break;
+        t = VT_LDOUBLE;
+	goto push_tokc;
+
     case TOK___FUNCTION__:
         if (!gnu_ext)
             goto tok_identifier;
@@ -5783,7 +5754,7 @@ static void block(int *bsym, int *csym, int is_expr)
         ++local_scope;
         if (tok != ';') {
             /* c99 for-loop init decl? */
-            if (!decl0(VT_LOCAL, 1)) {
+            if (!decl0(VT_LOCAL, 1, NULL)) {
                 /* no, regular for-loop init expr */
                 gexpr();
                 vpop();
@@ -5979,6 +5950,42 @@ static void block(int *bsym, int *csym, int is_expr)
     }
 }
 
+/* This skips over a stream of tokens containing balanced {} and ()
+   pairs, stopping at outer ',' ';' and '}'.  If STR then allocates
+   and stores the skipped tokens in *STR.  This doesn't check if
+   () and {} are nested correctly, i.e. "({)}" is accepted.  */
+static void skip_or_save_block(TokenString **str)
+{
+    int level = 0;
+    if (str)
+      *str = tok_str_alloc();
+
+    while ((level > 0 || (tok != '}' && tok != ',' && tok != ';'))) {
+	int t;
+	if (tok == TOK_EOF) {
+	     if (str || level > 0)
+	       tcc_error("unexpected end of file");
+	     else
+	       break;
+	}
+	if (str)
+	  tok_str_add_tok(*str);
+	t = tok;
+	next();
+	if (t == '{' || t == '(') {
+	    level++;
+	} else if (t == '}' || t == ')') {
+	    level--;
+	    if (level == 0)
+	      break;
+	}
+    }
+    if (str) {
+	tok_str_add(*str, -1);
+	tok_str_add(*str, 0);
+    }
+}
+
 #define EXPR_CONST 1
 #define EXPR_ANY   2
 
@@ -6020,7 +6027,6 @@ static void decl_designator(CType *type, Section *sec, unsigned long c,
 {
     Sym *s, *f;
     int notfirst, index, index_last, align, l, nb_elems, elem_size;
-    CType type1;
 
     notfirst = 0;
     elem_size = 0;
@@ -6072,10 +6078,7 @@ static void decl_designator(CType *type, Section *sec, unsigned long c,
                 expect("field");
             if (!notfirst)
                 *cur_field = f;
-            /* XXX: fix this mess by using explicit storage field */
-            type1 = f->type;
-            type1.t |= (type->t & ~VT_TYPE);
-            type = &type1;
+	    type = &f->type;
             c += f->c;
         }
         notfirst = 1;
@@ -6100,10 +6103,7 @@ static void decl_designator(CType *type, Section *sec, unsigned long c,
 	        *cur_field = f = f->next;
             if (!f)
                 tcc_error("too many field init");
-            /* XXX: fix this mess by using explicit storage field */
-            type1 = f->type;
-            type1.t |= (type->t & ~VT_TYPE);
-            type = &type1;
+	    type = &f->type;
             c += f->c;
         }
     }
@@ -6155,9 +6155,7 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
         gen_assign_cast(&dtype);
         bt = type->t & VT_BTYPE;
 	size = type_size(type, &align);
-        if (c + size > sec->data_allocated) {
-            section_realloc(sec, c + size);
-        }
+	section_reserve(sec, c + size);
         ptr = sec->data + c;
         /* XXX: make code faster ? */
         if (!(type->t & VT_BITFIELD)) {
@@ -6247,6 +6245,9 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
 	    case VT_SHORT:
 		*(short *)ptr |= (vtop->c.i & bit_mask) << bit_pos;
 		break;
+	    case VT_FLOAT:
+		*(float*)ptr = vtop->c.f;
+		break;
 	    case VT_DOUBLE:
 		*(double *)ptr = vtop->c.d;
 		break;
@@ -6333,7 +6334,7 @@ static void init_putz(Section *sec, unsigned long c, int size)
 static void decl_initializer(CType *type, Section *sec, unsigned long c, 
                              int first, int size_only)
 {
-    int index, array_length, n, no_oblock, nb, parlevel, parlevel1, i;
+    int index, array_length, n, no_oblock, nb, i;
     int size1, align1;
     int have_elem;
     Sym *s, *f;
@@ -6506,25 +6507,9 @@ static void decl_initializer(CType *type, Section *sec, unsigned long c,
 	   But GNU C supports it, so we need to recurse even into
 	   subfields of structs and arrays when size_only is set.  */
         /* just skip expression */
-        parlevel = parlevel1 = 0;
-        while ((parlevel > 0 || parlevel1 > 0 ||
-		(tok != '}' && tok != ',')) &&  tok != -1) {
-            if (tok == '(')
-                parlevel++;
-            else if (tok == ')') {
-		if (parlevel == 0 && parlevel1 == 0)
-		    break;
-                parlevel--;
-            }
-	    else if (tok == '{')
-		parlevel1++;
-	    else if (tok == '}') {
-		if (parlevel == 0 && parlevel1 == 0)
-		    break;
-		parlevel1--;
-	    }
-            next();
-        }
+	do {
+	    skip_or_save_block(NULL);
+	} while (tok != '}' && tok != ',' && tok != -1);
     } else {
 	if (!have_elem) {
 	    /* This should happen only when we haven't parsed
@@ -6548,8 +6533,7 @@ static void decl_initializer(CType *type, Section *sec, unsigned long c,
 static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r, 
                                    int has_init, int v, int scope)
 {
-    int size, align, addr, data_offset;
-    int level;
+    int size, align, addr;
     ParseState saved_parse_state = {0};
     TokenString *init_str = NULL;
     Section *sec;
@@ -6577,33 +6561,18 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
         if (!has_init) 
             tcc_error("unknown type size");
         /* get all init string */
-        init_str = tok_str_alloc();
         if (has_init == 2) {
+	    init_str = tok_str_alloc();
             /* only get strings */
             while (tok == TOK_STR || tok == TOK_LSTR) {
                 tok_str_add_tok(init_str);
                 next();
             }
+	    tok_str_add(init_str, -1);
+	    tok_str_add(init_str, 0);
         } else {
-            level = 0;
-            while (level > 0 || (tok != ',' && tok != ';')) {
-                if (tok < 0)
-                    tcc_error("unexpected end of file in initializer");
-                tok_str_add_tok(init_str);
-                if (tok == '{')
-                    level++;
-                else if (tok == '}') {
-                    level--;
-                    if (level <= 0) {
-                        next();
-                        break;
-                    }
-                }
-                next();
-            }
+	    skip_or_save_block(&init_str);
         }
-        tok_str_add(init_str, -1);
-        tok_str_add(init_str, 0);
         
         /* compute size */
         save_parse_state(&saved_parse_state);
@@ -6713,41 +6682,24 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
         }
 
         if (sec) {
-            data_offset = sec->data_offset;
-            data_offset = (data_offset + align - 1) & -align;
-            addr = data_offset;
-            /* very important to increment global pointer at this time
-               because initializers themselves can create new initializers */
-            data_offset += size;
+	    addr = section_add(sec, size, align);
 #ifdef CONFIG_TCC_BCHECK
             /* add padding if bound check */
             if (tcc_state->do_bounds_check)
-                data_offset++;
+                section_add(sec, 1, 1);
 #endif
-            sec->data_offset = data_offset;
-            /* allocate section space to put the data */
-            if (sec->sh_type != SHT_NOBITS && 
-                data_offset > sec->data_allocated)
-                section_realloc(sec, data_offset);
-            /* align section if needed */
-            if (align > sec->sh_addralign)
-                sec->sh_addralign = align;
         } else {
-            addr = 0; /* avoid warning */
+            addr = align; /* SHN_COMMON is special, symbol value is align */
+	    sec = common_section;
         }
 
         if (v) {
-            if (scope != VT_CONST || !sym) {
+            if (!sym) {
                 sym = sym_push(v, type, r | VT_SYM, 0);
                 sym->asm_label = ad->asm_label;
             }
             /* update symbol definition */
-            if (sec) {
-                put_extern_sym(sym, sec, addr, size);
-            } else {
-                put_extern_sym(sym, SECTION_COMMON, align, size);
-            }
-
+	    put_extern_sym(sym, sec, addr, size);
         } else {
             /* push global reference */
             sym = get_sym_ref(type, sec, addr, size);
@@ -6804,55 +6756,6 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
     if (init_str) {
         end_macro();
         restore_parse_state(&saved_parse_state);
-    }
-}
-
-/* parse an old style function declaration list */
-/* XXX: check multiple parameter */
-static void func_decl_list(Sym *func_sym)
-{
-    AttributeDef ad;
-    int v;
-    Sym *s;
-    CType btype, type;
-
-    /* parse each declaration */
-    while (tok != '{' && tok != ';' && tok != ',' && tok != TOK_EOF &&
-           tok != TOK_ASM1 && tok != TOK_ASM2 && tok != TOK_ASM3) {
-        if (!parse_btype(&btype, &ad)) 
-            expect("declaration list");
-        if (((btype.t & VT_BTYPE) == VT_ENUM ||
-             (btype.t & VT_BTYPE) == VT_STRUCT) && 
-            tok == ';') {
-            /* we accept no variable after */
-        } else {
-            for(;;) {
-                type = btype;
-                type_decl(&type, &ad, &v, TYPE_DIRECT);
-                /* find parameter in function parameter list */
-                s = func_sym->next;
-                while (s != NULL) {
-                    if ((s->v & ~SYM_FIELD) == v)
-                        goto found;
-                    s = s->next;
-                }
-                tcc_error("declaration for parameter '%s' but no such parameter",
-                      get_tok_str(v, NULL));
-            found:
-                /* check that no storage specifier except 'register' was given */
-                if (type.t & VT_STORAGE)
-                    tcc_error("storage class specified for '%s'", get_tok_str(v, NULL)); 
-                convert_parameter_type(&type);
-                /* we can add the type (NOTE: it could be local to the function) */
-                s->type = type;
-                /* accept other parameters */
-                if (tok == ',')
-                    next();
-                else
-                    break;
-            }
-        }
-        skip(';');
     }
 }
 
@@ -6949,8 +6852,9 @@ ST_FUNC void free_inline_functions(TCCState *s)
     dynarray_reset(&s->inline_fns, &s->nb_inline_fns);
 }
 
-/* 'l' is VT_LOCAL or VT_CONST to define default storage type */
-static int decl0(int l, int is_for_loop_init)
+/* 'l' is VT_LOCAL or VT_CONST to define default storage type, or VT_CMP
+   if parsing old style parameter decl list (and FUNC_SYM is set then) */
+static int decl0(int l, int is_for_loop_init, Sym *func_sym)
 {
     int v, has_init, r;
     CType type, btype;
@@ -6961,9 +6865,8 @@ static int decl0(int l, int is_for_loop_init)
         if (!parse_btype(&btype, &ad)) {
             if (is_for_loop_init)
                 return 0;
-            /* skip redundant ';' */
-            /* XXX: find more elegant solution */
-            if (tok == ';') {
+            /* skip redundant ';' if not in old parameter decl scope */
+            if (tok == ';' && l != VT_CMP) {
                 next();
                 continue;
             }
@@ -6975,7 +6878,7 @@ static int decl0(int l, int is_for_loop_init)
             }
             /* special test for old K&R protos without explicit int
                type. Only accepted when defining global data */
-            if (l == VT_LOCAL || tok < TOK_UIDENT)
+            if (l != VT_CONST || tok < TOK_UIDENT)
                 break;
             btype.t = VT_INT;
         }
@@ -7015,8 +6918,8 @@ static int decl0(int l, int is_for_loop_init)
                 /* if old style function prototype, we accept a
                    declaration list */
                 sym = type.ref;
-                if (sym->c == FUNC_OLD)
-                    func_decl_list(sym);
+                if (sym->c == FUNC_OLD && l == VT_CONST)
+                    decl0(VT_CMP, 0, sym);
             }
 
             if (gnu_ext && (tok == TOK_ASM1 || tok == TOK_ASM2 || tok == TOK_ASM3)) {
@@ -7042,16 +6945,20 @@ static int decl0(int l, int is_for_loop_init)
 	    type.t |= ad.a.visibility << VT_VIS_SHIFT;
 
             if (tok == '{') {
-                if (l == VT_LOCAL)
+                if (l != VT_CONST)
                     tcc_error("cannot use local functions");
                 if ((type.t & VT_BTYPE) != VT_FUNC)
                     expect("function definition");
 
-                /* reject abstract declarators in function definition */
+                /* reject abstract declarators in function definition
+		   make old style params without decl have int type */
                 sym = type.ref;
-                while ((sym = sym->next) != NULL)
+                while ((sym = sym->next) != NULL) {
                     if (!(sym->v & ~SYM_FIELD))
-                       expect("identifier");
+                        expect("identifier");
+		    if (sym->type.t == VT_VOID)
+		        sym->type = int_type;
+		}
                 
                 /* XXX: cannot do better now: convert extern line to static inline */
                 if ((type.t & (VT_EXTERN | VT_INLINE)) == (VT_EXTERN | VT_INLINE))
@@ -7106,7 +7013,6 @@ static int decl0(int l, int is_for_loop_init)
                    the compilation unit only if they are used */
                 if ((type.t & (VT_INLINE | VT_STATIC)) == 
                     (VT_INLINE | VT_STATIC)) {
-                    int block_level;
                     struct InlineFunc *fn;
                     const char *filename;
                            
@@ -7114,28 +7020,9 @@ static int decl0(int l, int is_for_loop_init)
                     fn = tcc_malloc(sizeof *fn + strlen(filename));
                     strcpy(fn->filename, filename);
                     fn->sym = sym;
-                    fn->func_str = tok_str_alloc();
-                    
-                    block_level = 0;
-                    for(;;) {
-                        int t;
-                        if (tok == TOK_EOF)
-                            tcc_error("unexpected end of file");
-                        tok_str_add_tok(fn->func_str);
-                        t = tok;
-                        next();
-                        if (t == '{') {
-                            block_level++;
-                        } else if (t == '}') {
-                            block_level--;
-                            if (block_level == 0)
-                                break;
-                        }
-                    }
-                    tok_str_add(fn->func_str, -1);
-                    tok_str_add(fn->func_str, 0);
-                    dynarray_add(&tcc_state->inline_fns, &tcc_state->nb_inline_fns, fn);
-
+		    skip_or_save_block(&fn->func_str);
+                    dynarray_add(&tcc_state->inline_fns,
+				 &tcc_state->nb_inline_fns, fn);
                 } else {
                     /* compute text section */
                     cur_text_section = ad.section;
@@ -7145,7 +7032,23 @@ static int decl0(int l, int is_for_loop_init)
                 }
                 break;
             } else {
-                if (type.t & VT_TYPEDEF) {
+		if (l == VT_CMP) {
+		    /* find parameter in function parameter list */
+		    for (sym = func_sym->next; sym; sym = sym->next)
+			if ((sym->v & ~SYM_FIELD) == v)
+			    goto found;
+		    tcc_error("declaration for parameter '%s' but no such parameter",
+			      get_tok_str(v, NULL));
+found:
+		    if (type.t & VT_STORAGE) /* 'register' is okay */
+		        tcc_error("storage class specified for '%s'",
+				  get_tok_str(v, NULL));
+		    if (sym->type.t != VT_VOID)
+		        tcc_error("redefinition of parameter '%s'",
+				  get_tok_str(v, NULL));
+		    convert_parameter_type(&type);
+		    sym->type = type;
+		} else if (type.t & VT_TYPEDEF) {
                     /* save typedefed type  */
                     /* XXX: test storage specifiers ? */
                     sym = sym_find(v);
@@ -7219,7 +7122,7 @@ static int decl0(int l, int is_for_loop_init)
 
 ST_FUNC void decl(int l)
 {
-    decl0(l, 0);
+    decl0(l, 0, NULL);
 }
 
 /* ------------------------------------------------------------------------- */
