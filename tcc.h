@@ -256,13 +256,15 @@
 # define DEFAULT_ELFINTERP(s) default_elfinterp(s)
 #endif
 
-/* target specific subdir for libtcc1.a */
-#ifndef TCC_ARCH_DIR
-# define TCC_ARCH_DIR ""
+/* (target specific) libtcc1.a */
+#ifndef TCC_LIBTCC1
+# define TCC_LIBTCC1 "libtcc1.a"
 #endif
 
 /* library to use with CONFIG_USE_LIBGCC instead of libtcc1.a */
+#if defined CONFIG_USE_LIBGCC && !defined TCC_LIBGCC
 #define TCC_LIBGCC USE_TRIPLET(CONFIG_SYSROOT "/" CONFIG_LDDIR) "/libgcc_s.so.1"
+#endif
 
 /* -------------------------------------------- */
 
@@ -287,6 +289,26 @@
 #endif
 /* target address type */
 #define addr_t ElfW(Addr)
+
+/* -------------------------------------------- */
+
+#ifndef PUB_FUNC /* functions used by tcc.c but not in libtcc.h */
+# define PUB_FUNC
+#endif
+
+#ifdef ONE_SOURCE
+#define ST_INLN static inline
+#define ST_FUNC static
+#define ST_DATA static
+#else
+#define ST_INLN
+#define ST_FUNC
+#define ST_DATA extern
+#endif
+
+#ifdef TCC_PROFILE /* profile all functions */
+# define static
+#endif
 
 /* -------------------------------------------- */
 /* include the target specific definitions */
@@ -438,6 +460,7 @@ typedef struct Sym {
 
 /* special flag, too */
 #define SECTION_ABS ((void *)1)
+#define SECTION_COMMON ((void *)2)
 
 typedef struct Section {
     unsigned long data_offset; /* current data offset */
@@ -625,9 +648,7 @@ struct TCCState {
     /* C language options */
     int char_is_unsigned;
     int leading_underscore;
-    int ms_extensions;		/* allow nested named struct w/o identifier behave like unnamed */
-    int old_struct_init_code;	/* use old algorithm to init array in struct when there is no '{' used.
-				   Liuux 2.4.26 can't find initrd when compiled with a new algorithm */
+    int ms_extensions;	/* allow nested named struct w/o identifier behave like unnamed */
     int dollars_in_identifiers;	/* allows '$' char in indentifiers */
     int ms_bitfields; /* if true, emulate MS algorithm for aligning bitfields */
 
@@ -1055,26 +1076,6 @@ enum tcc_token {
 /* keywords: tok >= TOK_IDENT && tok < TOK_UIDENT */
 #define TOK_UIDENT TOK_DEFINE
 
-/* -------------------------------------------- */
-
-#ifndef PUB_FUNC /* functions used by tcc.c but not in libtcc.h */
-# define PUB_FUNC
-#endif
-
-#ifdef ONE_SOURCE
-#define ST_INLN static inline
-#define ST_FUNC static
-#define ST_DATA static
-#else
-#define ST_INLN
-#define ST_FUNC
-#define ST_DATA extern
-#endif
-
-#ifdef TCC_PROFILE /* profile all functions */
-# define static
-#endif
-
 /* ------------ libtcc.c ------------ */
 
 /* use GNU C extensions */
@@ -1161,18 +1162,13 @@ ST_FUNC int tcc_add_file_internal(TCCState *s1, const char *filename, int flags)
 #define AFF_BINTYPE_AR  3
 #define AFF_BINTYPE_C67 4
 
+
 ST_FUNC int tcc_add_crt(TCCState *s, const char *filename);
-
-#ifndef TCC_TARGET_PE
 ST_FUNC int tcc_add_dll(TCCState *s, const char *filename, int flags);
-#endif
-
 ST_FUNC void tcc_add_pragma_libs(TCCState *s1);
 PUB_FUNC int tcc_add_library_err(TCCState *s, const char *f);
-
 PUB_FUNC void tcc_print_stats(TCCState *s, unsigned total_time);
 PUB_FUNC int tcc_parse_args(TCCState *s, int *argc, char ***argv, int optind);
-PUB_FUNC void tcc_set_environment(TCCState *s);
 #ifdef _WIN32
 ST_FUNC char *normalize_slashes(char *path);
 #endif
@@ -1301,8 +1297,15 @@ ST_DATA int func_vc;
 ST_DATA int last_line_num, last_ind, func_ind; /* debug last line number and pc */
 ST_DATA const char *funcname;
 
+ST_FUNC void tcc_debug_start(TCCState *s1);
+ST_FUNC void tcc_debug_end(TCCState *s1);
+ST_FUNC void tcc_debug_funcstart(TCCState *s1, Sym *sym);
+ST_FUNC void tcc_debug_funcend(TCCState *s1, int size);
+ST_FUNC void tcc_debug_line(TCCState *s1);
+
 ST_FUNC void tccgen_start(TCCState *s1);
 ST_FUNC void tccgen_end(TCCState *s1);
+
 ST_FUNC void free_inline_functions(TCCState *s);
 ST_FUNC void check_vstack(void);
 
@@ -1542,7 +1545,7 @@ ST_FUNC void gen_opl(int op);
 /* ------------ arm-gen.c ------------ */
 #ifdef TCC_TARGET_ARM
 #if defined(TCC_ARM_EABI) && !defined(CONFIG_TCC_ELFINTERP)
-ST_FUNC char *default_elfinterp(struct TCCState *s);
+PUB_FUNC char *default_elfinterp(struct TCCState *s);
 #endif
 ST_FUNC void arm_init(struct TCCState *s);
 ST_FUNC void gen_cvt_itof1(int t);

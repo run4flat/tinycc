@@ -1183,7 +1183,6 @@ static int tcc_add_library_internal(TCCState *s, const char *fmt,
     return -1;
 }
 
-#ifndef TCC_TARGET_PE
 /* find and load a dll. Return non zero if not found */
 /* XXX: add '-rpath' option support ? */
 ST_FUNC int tcc_add_dll(TCCState *s, const char *filename, int flags)
@@ -1191,7 +1190,6 @@ ST_FUNC int tcc_add_dll(TCCState *s, const char *filename, int flags)
     return tcc_add_library_internal(s, "%s/%s", filename, flags,
         s->library_paths, s->nb_library_paths);
 }
-#endif
 
 ST_FUNC int tcc_add_crt(TCCState *s, const char *filename)
 {
@@ -1364,6 +1362,8 @@ static int link_option(const char *str, const char *val, const char **ptr)
         if (*p != ',' && *p != '=')
             return 0;
         p++;
+    } else if (*p) {
+        return 0;
     }
     *ptr = p;
     return ret;
@@ -1434,6 +1434,8 @@ static int tcc_set_linker(TCCState *s, const char *option)
             ignoring = 1;
         } else if (link_option(option, "O", &p)) {
             ignoring = 1;
+        } else if (link_option(option, "export-all-symbols", &p)) {
+            s->rdynamic = 1;
         } else if (link_option(option, "rpath=", &p)) {
             copy_linker_arg(&s->rpath, p, ':');
         } else if (link_option(option, "enable-new-dtags", &p)) {
@@ -1455,7 +1457,7 @@ static int tcc_set_linker(TCCState *s, const char *option)
                 s->pe_subsystem = 1;
             } else if (!strcmp(p, "console")) {
                 s->pe_subsystem = 3;
-            } else if (!strcmp(p, "gui")) {
+            } else if (!strcmp(p, "gui") || !strcmp(p, "windows")) {
                 s->pe_subsystem = 2;
             } else if (!strcmp(p, "posix")) {
                 s->pe_subsystem = 7;
@@ -1647,7 +1649,6 @@ static const FlagDef options_f[] = {
     { offsetof(TCCState, nocommon), FD_INVERT, "common" },
     { offsetof(TCCState, leading_underscore), 0, "leading-underscore" },
     { offsetof(TCCState, ms_extensions), 0, "ms-extensions" },
-    { offsetof(TCCState, old_struct_init_code), 0, "old-struct-init-code" },
     { offsetof(TCCState, dollars_in_identifiers), 0, "dollars-in-identifiers" },
     { 0, 0, NULL }
 };
@@ -2068,22 +2069,4 @@ PUB_FUNC void tcc_print_stats(TCCState *s, unsigned total_time)
 #ifdef MEM_DEBUG
     fprintf(stderr, "* %d bytes memory used\n", mem_max_size);
 #endif
-}
-
-PUB_FUNC void tcc_set_environment(TCCState *s)
-{
-    char * path;
-
-    path = getenv("C_INCLUDE_PATH");
-    if(path != NULL) {
-        tcc_add_include_path(s, path);
-    }
-    path = getenv("CPATH");
-    if(path != NULL) {
-        tcc_add_include_path(s, path);
-    }
-    path = getenv("LIBRARY_PATH");
-    if(path != NULL) {
-        tcc_add_library_path(s, path);
-    }
 }
