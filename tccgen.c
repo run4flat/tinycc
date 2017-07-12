@@ -81,7 +81,6 @@ static void block(int *bsym, int *csym, int is_expr);
 static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r, int has_init, int v, int scope);
 static int decl0(int l, int is_for_loop_init);
 static void expr_eq(void);
-static void expr_lor_const(void);
 static void unary_type(CType *type);
 static void vla_runtime_type_size(CType *type, int *a);
 static void vla_sp_restore(void);
@@ -1100,8 +1099,6 @@ static void move_reg(int r, int s, int t)
 /* get address of vtop (vtop MUST BE an lvalue) */
 ST_FUNC void gaddrof(void)
 {
-    if (vtop->r & VT_REF)
-        gv(RC_INT);
     vtop->r &= ~VT_LVAL;
     /* tricky: if saved lvalue, then we can go back to lvalue */
     if ((vtop->r & VT_VALMASK) == VT_LLOCAL)
@@ -1311,13 +1308,7 @@ ST_FUNC int gv(int rc)
                 t = vtop->type.t;
                 t1 = t;
                 /* compute memory access type */
-                if (vtop->r & VT_REF)
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
-                    t = VT_PTR;
-#else
-                    t = VT_INT;
-#endif
-                else if (vtop->r & VT_LVAL_BYTE)
+                if (vtop->r & VT_LVAL_BYTE)
                     t = VT_BYTE;
                 else if (vtop->r & VT_LVAL_SHORT)
                     t = VT_SHORT;
@@ -3471,10 +3462,13 @@ static void struct_layout(CType *type, AttributeDef *ad)
 		int ofs = (c * 8 + bit_pos) % (typealign * 8);
 		int ofs2 = ofs + bit_size + (typealign * 8) - 1;
 		if (bit_size == 0 ||
-		    (typealign != 1 &&
+		    ((typealign != 1 || size == 1) &&
 		     (ofs2 / (typealign * 8)) > (size/typealign))) {
 		    c = (c + ((bit_pos + 7) >> 3) + typealign - 1) & -typealign;
 		    bit_pos = 0;
+		} else while (bit_pos + bit_size > size * 8) {
+		    c += size;
+		    bit_pos -= size * 8;
 		}
 		offset = c;
 		/* In PCC layout named bit-fields influence the alignment
@@ -4529,7 +4523,7 @@ ST_FUNC void unary(void)
            there and in function calls. */
         /* arrays can also be used although they are not lvalues */
         if ((vtop->type.t & VT_BTYPE) != VT_FUNC &&
-            !(vtop->type.t & VT_ARRAY) && !(vtop->type.t & VT_LLOCAL))
+            !(vtop->type.t & VT_ARRAY))
             test_lvalue();
         mk_pointer(&vtop->type);
         gaddrof();
@@ -4597,10 +4591,8 @@ ST_FUNC void unary(void)
             skip('(');
             expr_eq();
             skip(',');
-            nocode_wanted++;
-            expr_lor_const();
+            expr_eq();
             vpop();
-            nocode_wanted--;
             skip(')');
         }
         break;
@@ -4651,7 +4643,7 @@ ST_FUNC void unary(void)
             next();
             skip('(');
             nocode_wanted++;
-            gexpr();
+            expr_eq();
             res = (vtop->r & (VT_VALMASK | VT_LVAL | VT_SYM)) == VT_CONST;
             vpop();
             nocode_wanted--;
@@ -4704,7 +4696,7 @@ ST_FUNC void unary(void)
             skip(')');
             if ((vtop->r & VT_VALMASK) != VT_LOCAL)
                 tcc_error("__builtin_va_start expects a local variable");
-            vtop->r &= ~(VT_LVAL | VT_REF);
+            vtop->r &= ~VT_LVAL;
             vtop->type = char_pointer_type;
             vtop->c.i += 8;
             vstore();
@@ -5138,26 +5130,6 @@ static void expr_or(void)
         next();
         expr_xor();
         gen_op('|');
-    }
-}
-
-/* XXX: fix this mess */
-static void expr_land_const(void)
-{
-    expr_or();
-    while (tok == TOK_LAND) {
-        next();
-        expr_or();
-        gen_op(TOK_LAND);
-    }
-}
-static void expr_lor_const(void)
-{
-    expr_land_const();
-    while (tok == TOK_LOR) {
-        next();
-        expr_land_const();
-        gen_op(TOK_LOR);
     }
 }
 
@@ -6062,12 +6034,15 @@ static void parse_init_elem(int expr_type)
         global_expr = 1;
         expr_const1();
         global_expr = saved_global_expr;
-        /* NOTE: symbols are accepted */
-        if ((vtop->r & (VT_VALMASK | VT_LVAL)) != VT_CONST
+        /* NOTE: symbols are accepted, as well as lvalue for anon symbols
+	   (compound literals).  */
+        if (((vtop->r & (VT_VALMASK | VT_LVAL)) != VT_CONST
+	     && ((vtop->r & (VT_SYM|VT_LVAL)) != (VT_SYM|VT_LVAL)
+		 || vtop->sym->v < SYM_FIRST_ANOM))
 #ifdef TCC_TARGET_PE
             || (vtop->type.t & VT_IMPORT)
 #endif
-            )
+	    )
             tcc_error("initializer element is not constant");
         break;
     case EXPR_ANY:
@@ -6163,6 +6138,8 @@ static void decl_designator(CType *type, Section *sec, unsigned long c,
             c += index * type_size(type, &align);
         } else {
             f = *cur_field;
+	    while (f && (f->v & SYM_FIRST_ANOM) && (f->type.t & VT_BITFIELD))
+	        *cur_field = f = f->next;
             if (!f)
                 tcc_error("too many field init");
             /* XXX: fix this mess by using explicit storage field */
@@ -6817,6 +6794,7 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
             /* push global reference */
             sym = get_sym_ref(type, sec, addr, size);
 	    vpushsym(type, sym);
+	    vtop->r |= r;
         }
 
 #ifdef CONFIG_TCC_BCHECK
