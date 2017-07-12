@@ -571,6 +571,7 @@ typedef struct ParseState {
 typedef struct TokenString {
     int *str;
     int len;
+    int lastlen;
     int allocated_len;
     int last_line_num;
     /* used to chain token-strings with begin/end_macro() */
