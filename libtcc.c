@@ -47,10 +47,12 @@ static int nb_states;
 #ifdef TCC_TARGET_I386
 #include "i386-gen.c"
 #include "i386-link.c"
+#include "i386-asm.c"
 #endif
 #ifdef TCC_TARGET_ARM
 #include "arm-gen.c"
 #include "arm-link.c"
+#include "arm-asm.c"
 #endif
 #ifdef TCC_TARGET_ARM64
 #include "arm64-gen.c"
@@ -63,12 +65,10 @@ static int nb_states;
 #ifdef TCC_TARGET_X86_64
 #include "x86_64-gen.c"
 #include "x86_64-link.c"
+#include "i386-asm.c"
 #endif
 #ifdef CONFIG_TCC_ASM
 #include "tccasm.c"
-#if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
-#include "i386-asm.c"
-#endif
 #endif
 #ifdef TCC_TARGET_COFF
 #include "tcccoff.c"
@@ -879,12 +879,12 @@ LIBTCCAPI TCCState *tcc_new(void)
 # endif
 
     /* TinyCC & gcc defines */
-#if defined(TCC_TARGET_PE) && defined(TCC_TARGET_X86_64)
+#if defined(TCC_TARGET_PE) && PTR_SIZE == 8
     /* 64bit Windows. */
     tcc_define_symbol(s, "__SIZE_TYPE__", "unsigned long long");
     tcc_define_symbol(s, "__PTRDIFF_TYPE__", "long long");
     tcc_define_symbol(s, "__LLP64__", NULL);
-#elif defined(TCC_TARGET_X86_64) || defined(TCC_TARGET_ARM64)
+#elif PTR_SIZE == 8
     /* Other 64bit systems. */
     tcc_define_symbol(s, "__SIZE_TYPE__", "unsigned long");
     tcc_define_symbol(s, "__PTRDIFF_TYPE__", "long");
@@ -1239,7 +1239,7 @@ PUB_FUNC int tcc_add_library_err(TCCState *s, const char *libname)
     return ret;
 }
 
-/* habdle #pragma comment(lib,) */
+/* handle #pragma comment(lib,) */
 ST_FUNC void tcc_add_pragma_libs(TCCState *s1)
 {
     int i;
@@ -1350,7 +1350,7 @@ static int link_option(const char *str, const char *val, const char **ptr)
     if (*str == '-')
         str++;
 
-    /* then str & val should match (potentialy up to '=') */
+    /* then str & val should match (potentially up to '=') */
     p = str;
     q = val;
 
@@ -1428,7 +1428,7 @@ static int tcc_set_linker(TCCState *s, const char *option)
         } else if (link_option(option, "oformat=", &p)) {
 #if defined(TCC_TARGET_PE)
             if (strstart("pe-", &p)) {
-#elif defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#elif PTR_SIZE == 8
             if (strstart("elf64-", &p)) {
 #else
             if (strstart("elf32-", &p)) {
@@ -1651,6 +1651,7 @@ static const FlagDef options_W[] = {
     { offsetof(TCCState, warn_unsupported), 0, "unsupported" },
     { offsetof(TCCState, warn_write_strings), 0, "write-strings" },
     { offsetof(TCCState, warn_error), 0, "error" },
+    { offsetof(TCCState, warn_gcc_compat), 0, "gcc-compat" },
     { offsetof(TCCState, warn_implicit_function_declaration), WD_ALL,
       "implicit-function-declaration" },
     { 0, 0, NULL }

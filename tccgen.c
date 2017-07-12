@@ -257,7 +257,7 @@ ST_FUNC void tccgen_end(TCCState *s1)
 }
 
 /* ------------------------------------------------------------------------- */
-/* apply storage attibutes to Elf symbol */
+/* apply storage attributes to Elf symbol */
 
 static void update_storage(Sym *sym)
 {
@@ -404,10 +404,12 @@ ST_FUNC void greloca(Section *s, Sym *sym, unsigned long offset, int type,
     put_elf_reloca(symtab_section, s, offset, type, c, addend);
 }
 
+#if PTR_SIZE == 4
 ST_FUNC void greloc(Section *s, Sym *sym, unsigned long offset, int type)
 {
     greloca(s, sym, offset, type, 0);
 }
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* symbol allocator */
@@ -970,7 +972,7 @@ ST_FUNC void save_reg_upstack(int r, int n)
                 type = &p->type;
                 if ((p->r & VT_LVAL) ||
                     (!is_float(type->t) && (type->t & VT_BTYPE) != VT_LLONG))
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
                     type = &char_pointer_type;
 #else
                     type = &int_type;
@@ -987,7 +989,7 @@ ST_FUNC void save_reg_upstack(int r, int n)
                     o(0xd8dd); /* fstp %st(0) */
                 }
 #endif
-#if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 4
                 /* special long long case */
                 if ((type->t & VT_BTYPE) == VT_LLONG) {
                     sv.c.i += 4;
@@ -1202,7 +1204,7 @@ ST_FUNC int gv(int rc)
         if (r >= VT_CONST
          || (vtop->r & VT_LVAL)
          || !(reg_classes[r] & rc)
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
          || ((vtop->type.t & VT_BTYPE) == VT_QLONG && !(reg_classes[vtop->r2] & rc2))
          || ((vtop->type.t & VT_BTYPE) == VT_QFLOAT && !(reg_classes[vtop->r2] & rc2))
 #else
@@ -1211,7 +1213,7 @@ ST_FUNC int gv(int rc)
             )
         {
             r = get_reg(rc);
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
             if (((vtop->type.t & VT_BTYPE) == VT_QLONG) || ((vtop->type.t & VT_BTYPE) == VT_QFLOAT)) {
                 int addr_type = VT_LLONG, load_size = 8, load_type = ((vtop->type.t & VT_BTYPE) == VT_QLONG) ? VT_LLONG : VT_DOUBLE;
 #else
@@ -1223,7 +1225,7 @@ ST_FUNC int gv(int rc)
                 original_type = vtop->type.t;
                 /* two register type load : expand to two words
                    temporarily */
-#if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 4
                 if ((vtop->r & (VT_VALMASK | VT_LVAL)) == VT_CONST) {
                     /* load constant */
                     ll = vtop->c.i;
@@ -1359,7 +1361,7 @@ static int reg_fret(int t)
     return REG_FRET;
 }
 
-#if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 4
 /* expand 64bit on stack in two ints */
 static void lexpand(void)
 {
@@ -1410,7 +1412,7 @@ ST_FUNC void lexpand_nr(void)
 }
 #endif
 
-#if !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_ARM64)
+#if PTR_SIZE == 4
 /* build a long long from two ints */
 static void lbuild(int t)
 {
@@ -1429,7 +1431,7 @@ static void gv_dup(void)
     SValue sv;
 
     t = vtop->type.t;
-#if !defined(TCC_TARGET_X86_64) && !defined(TCC_TARGET_ARM64)
+#if PTR_SIZE == 4
     if ((t & VT_BTYPE) == VT_LLONG) {
         lexpand();
         gv_dup();
@@ -1491,7 +1493,7 @@ ST_FUNC int gvtst(int inv, int t)
     return gtst(inv, t);
 }
 
-#if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 4
 /* generate CPU independent (unsigned) long long operations */
 static void gen_opl(int op)
 {
@@ -1605,7 +1607,7 @@ static void gen_opl(int op)
             c = (int)vtop->c.i;
             /* constant: simpler */
             /* NOTE: all comments are for SHL. the other cases are
-               done by swaping words */
+               done by swapping words */
             vpop();
             if (op != TOK_SHL)
                 vswap();
@@ -2045,11 +2047,11 @@ redo:
 	goto redo;
     } else if (bt1 == VT_PTR || bt2 == VT_PTR) {
         /* at least one operand is a pointer */
-        /* relationnal op: must be both pointers */
+        /* relational op: must be both pointers */
         if (op >= TOK_ULT && op <= TOK_LOR) {
             check_comparison_pointer_types(vtop - 1, vtop, op);
             /* pointers are handled are unsigned */
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
             t = VT_LLONG | VT_UNSIGNED;
 #else
             t = VT_INT | VT_UNSIGNED;
@@ -2070,7 +2072,7 @@ redo:
             vrott(3);
             gen_opic(op);
             /* set to integer type */
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
             vtop->type.t = VT_LLONG;
 #else
             vtop->type.t = VT_INT; 
@@ -2099,7 +2101,7 @@ redo:
                 u = pointed_size(&vtop[-1].type);
                 if (u < 0)
                     tcc_error("unknown array element size");
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
                 vpushll(u);
 #else
                 /* XXX: cast to int ? (long long case) */
@@ -2158,23 +2160,23 @@ redo:
         goto std_op;
     } else if (op == TOK_SHR || op == TOK_SAR || op == TOK_SHL) {
         t = bt1 == VT_LLONG ? VT_LLONG : VT_INT;
-        if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (t | VT_UNSIGNED))
+        if ((t1 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (t | VT_UNSIGNED))
           t |= VT_UNSIGNED;
         goto std_op;
     } else if (bt1 == VT_LLONG || bt2 == VT_LLONG) {
         /* cast to biggest op */
         t = VT_LLONG;
         /* convert to unsigned if it does not fit in a long long */
-        if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_LLONG | VT_UNSIGNED) ||
-            (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_LLONG | VT_UNSIGNED))
+        if ((t1 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_LLONG | VT_UNSIGNED) ||
+            (t2 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_LLONG | VT_UNSIGNED))
             t |= VT_UNSIGNED;
         goto std_op;
     } else {
         /* integer operations */
         t = VT_INT;
         /* convert to unsigned if it does not fit in an integer */
-        if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED) ||
-            (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED))
+        if ((t1 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_INT | VT_UNSIGNED) ||
+            (t2 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_INT | VT_UNSIGNED))
             t |= VT_UNSIGNED;
     std_op:
         /* XXX: currently, some unsigned operations are explicit, so
@@ -2209,7 +2211,7 @@ redo:
         else
             gen_opic(op);
         if (op >= TOK_ULT && op <= TOK_GT) {
-            /* relationnal op: the result is an int */
+            /* relational op: the result is an int */
             vtop->type.t = VT_INT;
         } else {
             vtop->type.t = t;
@@ -2370,7 +2372,7 @@ static void gen_cast(CType *type)
                     ;
                 else if (sbt & VT_UNSIGNED)
                     vtop->c.i = (uint32_t)vtop->c.i;
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
                 else if (sbt == VT_PTR)
                     ;
 #endif
@@ -2382,7 +2384,7 @@ static void gen_cast(CType *type)
                     ;
                 else if (dbt == VT_BOOL)
                     vtop->c.i = (vtop->c.i != 0);
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
                 else if (dbt == VT_PTR)
                     ;
 #endif
@@ -2424,7 +2426,7 @@ static void gen_cast(CType *type)
                         gen_cast(type);
                     }
                 }
-#if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 4
             } else if ((dbt & VT_BTYPE) == VT_LLONG) {
                 if ((sbt & VT_BTYPE) != VT_LLONG) {
                     /* scalar to long long */
@@ -2482,7 +2484,7 @@ static void gen_cast(CType *type)
                     tcc_warning("nonportable conversion from pointer to char/short");
                 }
                 force_charshort_cast(dbt);
-#if !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 4
             } else if ((dbt & VT_BTYPE) == VT_INT) {
                 /* scalar to int */
                 if ((sbt & VT_BTYPE) == VT_LLONG) {
@@ -2875,7 +2877,7 @@ static void gen_assign_cast(CType *dt)
             goto type_ok;
         }
         type1 = pointed_type(dt);
-        /* a function is implicitely a function pointer */
+        /* a function is implicitly a function pointer */
         if (sbt == VT_FUNC) {
             if ((type1->t & VT_BTYPE) != VT_VOID &&
                 !is_compatible_types(pointed_type(dt), st))
@@ -3067,7 +3069,7 @@ ST_FUNC void vstore(void)
             if ((vtop[-1].r & VT_VALMASK) == VT_LLOCAL) {
                 SValue sv;
                 t = get_reg(RC_INT);
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
                 sv.type.t = VT_PTR;
 #else
                 sv.type.t = VT_INT;
@@ -3078,7 +3080,7 @@ ST_FUNC void vstore(void)
                 vtop[-1].r = t | VT_LVAL;
             }
             /* two word case handling : store second register at word + 4 (or +8 for x86-64)  */
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
             if (((ft & VT_BTYPE) == VT_QLONG) || ((ft & VT_BTYPE) == VT_QFLOAT)) {
                 int addr_type = VT_LLONG, load_size = 8, load_type = ((vtop->type.t & VT_BTYPE) == VT_QLONG) ? VT_LLONG : VT_DOUBLE;
 #else
@@ -3369,6 +3371,9 @@ static void struct_layout(CType *type, AttributeDef *ad)
 {
     int align, maxalign, offset, c, bit_pos, bt, prevbt, prev_bit_size;
     int pcc = !tcc_state->ms_bitfields;
+    int packwarn = tcc_state->warn_gcc_compat;
+    int typealign, bit_size, size;
+
     Sym *f;
     if (ad->a.aligned)
       maxalign = 1 << (ad->a.aligned - 1);
@@ -3379,9 +3384,10 @@ static void struct_layout(CType *type, AttributeDef *ad)
     bit_pos = 0;
     prevbt = VT_STRUCT; /* make it never match */
     prev_bit_size = 0;
+    size = 0;
+
     for (f = type->ref->next; f; f = f->next) {
-	int typealign, bit_size;
-	int size = type_size(&f->type, &typealign);
+	size = type_size(&f->type, &typealign);
 	if (f->type.t & VT_BITFIELD)
 	  bit_size = (f->type.t >> (VT_STRUCT_SHIFT + 6)) & 0x3f;
 	else
@@ -3442,13 +3448,20 @@ static void struct_layout(CType *type, AttributeDef *ad)
 		int ofs = (c * 8 + bit_pos) % (typealign * 8);
 		int ofs2 = ofs + bit_size + (typealign * 8) - 1;
 		if (bit_size == 0 ||
-		    ((typealign != 1 || size == 1) &&
+		    (typealign != 1 &&
 		     (ofs2 / (typealign * 8)) > (size/typealign))) {
 		    c = (c + ((bit_pos + 7) >> 3) + typealign - 1) & -typealign;
 		    bit_pos = 0;
-		} else while (bit_pos + bit_size > size * 8) {
-		    c += size;
-		    bit_pos -= size * 8;
+		} else if (bit_pos + bit_size > size * 8) {
+		    c += bit_pos >> 3;
+		    bit_pos &= 7;
+                    if (bit_pos + bit_size > size * 8) {
+                        c += 1, bit_pos = 0;
+                        if ((ad->a.packed || f->r) && packwarn) {
+                            tcc_warning("struct layout not compatible with GCC (internal limitation)");
+                            packwarn = 0;
+                        }
+                    }
 		}
 		offset = c;
 		/* In PCC layout named bit-fields influence the alignment
@@ -3491,8 +3504,8 @@ static void struct_layout(CType *type, AttributeDef *ad)
 	if (align > maxalign)
 	  maxalign = align;
 #if 0
-	printf("set field %s offset=%d c=%d",
-	       get_tok_str(f->v & ~SYM_FIELD, NULL), offset, c);
+	printf("set field %s offset=%d",
+	       get_tok_str(f->v & ~SYM_FIELD, NULL), offset);
 	if (f->type.t & VT_BITFIELD) {
 	    printf(" pos=%d size=%d",
 		   (f->type.t >> VT_STRUCT_SHIFT) & 0x3f,
@@ -3542,6 +3555,8 @@ static void struct_layout(CType *type, AttributeDef *ad)
     type->ref->c = (c + (pcc ? (bit_pos + 7) >> 3 : 0)
 		    + maxalign - 1) & -maxalign;
     type->ref->r = maxalign;
+    if (offset + size > type->ref->c && type->ref->c)
+        tcc_warning("will touch memory past end of the struct (internal limitation)");
 }
 
 /* enum/struct/union declaration. u is either VT_ENUM or VT_STRUCT */
@@ -3606,7 +3621,7 @@ static void struct_decl(CType *type, AttributeDef *ad, int u)
                 next();
                 if (tok == '=') {
                     next();
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
 		    c = expr_const64();
 #else
 		    /* We really want to support long long enums
@@ -3699,7 +3714,7 @@ static void struct_decl(CType *type, AttributeDef *ad, int u)
                     } else if (ad1.a.packed || ad->a.packed) {
                         alignoverride = 1;
                     } else if (*tcc_state->pack_stack_ptr) {
-                        if (align > *tcc_state->pack_stack_ptr)
+                        if (align >= *tcc_state->pack_stack_ptr)
                             alignoverride = *tcc_state->pack_stack_ptr;
                     }
                     if (bit_size >= 0) {
@@ -3984,11 +3999,10 @@ the_end:
 
     /* long is never used as type */
     if ((t & VT_BTYPE) == VT_LONG)
-#if (!defined TCC_TARGET_X86_64 && !defined TCC_TARGET_ARM64) || \
-    defined TCC_TARGET_PE
-        t = (t & ~VT_BTYPE) | VT_INT;
-#else
+#if PTR_SIZE == 8 && !defined TCC_TARGET_PE
         t = (t & ~VT_BTYPE) | VT_LLONG;
+#else
+        t = (t & ~VT_BTYPE) | VT_INT;
 #endif
     type->t = t;
     return type_found;
@@ -4665,9 +4679,12 @@ ST_FUNC void unary(void)
 #ifdef TCC_TARGET_PE
     case TOK_builtin_va_start:
 	parse_builtin_params(0, "ee");
-	if ((vtop->r & VT_VALMASK) != VT_LOCAL)
-	  tcc_error("__builtin_va_start expects a local variable");
-	vtop->r &= ~VT_LVAL;
+        r = vtop->r & VT_VALMASK;
+        if (r == VT_LLOCAL)
+            r = VT_LOCAL;
+        if (r != VT_LOCAL)
+            tcc_error("__builtin_va_start expects a local variable");
+        vtop->r = r;
 	vtop->type = char_pointer_type;
 	vtop->c.i += 8;
 	vstore();
@@ -5269,8 +5286,8 @@ static void expr_cond(void)
                 /* cast to biggest op */
                 type.t = VT_LLONG;
                 /* convert to unsigned if it does not fit in a long long */
-                if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_LLONG | VT_UNSIGNED) ||
-                    (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_LLONG | VT_UNSIGNED))
+                if ((t1 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_LLONG | VT_UNSIGNED) ||
+                    (t2 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_LLONG | VT_UNSIGNED))
                     type.t |= VT_UNSIGNED;
             } else if (bt1 == VT_PTR || bt2 == VT_PTR) {
 		/* If one is a null ptr constant the result type
@@ -5296,8 +5313,8 @@ static void expr_cond(void)
                 /* integer operations */
                 type.t = VT_INT;
                 /* convert to unsigned if it does not fit in an integer */
-                if ((t1 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED) ||
-                    (t2 & (VT_BTYPE | VT_UNSIGNED)) == (VT_INT | VT_UNSIGNED))
+                if ((t1 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_INT | VT_UNSIGNED) ||
+                    (t2 & (VT_BTYPE | VT_UNSIGNED | VT_BITFIELD)) == (VT_INT | VT_UNSIGNED))
                     type.t |= VT_UNSIGNED;
             }
             /* keep structs lvalue by transforming `(expr ? a : b)` to `*(expr ? &a : &b)` so
@@ -6170,7 +6187,7 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
         }
 	if ((vtop->r & (VT_SYM|VT_CONST)) == (VT_SYM|VT_CONST) &&
 	    vtop->sym->v >= SYM_FIRST_ANOM &&
-	    /* XXX This rejects compount literals like
+	    /* XXX This rejects compound literals like
 	       '(void *){ptr}'.  The problem is that '&sym' is
 	       represented the same way, which would be ruled out
 	       by the SYM_FIRST_ANOM check above, but also '"string"'
@@ -6211,7 +6228,7 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
 				   c + rel->r_offset - esym->st_value,
 				   ELFW(R_TYPE)(rel->r_info),
 				   ELFW(R_SYM)(rel->r_info),
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
 				   rel->r_addend
 #else
 				   0
@@ -6256,7 +6273,16 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
                 if (sizeof(long double) == LDOUBLE_SIZE)
 		    *(long double *)ptr = vtop->c.ld;
 		else if (sizeof(double) == LDOUBLE_SIZE)
-		    *(double *)ptr = vtop->c.ld;
+		    *(double *)ptr = (double)vtop->c.ld;
+#if (defined __i386__ || defined __x86_64__) && (defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64)
+                else if (sizeof (long double) >= 10)
+                    memcpy(memset(ptr, 0, LDOUBLE_SIZE), &vtop->c.ld, 10);
+#ifdef __TINYC__
+                else if (sizeof (long double) == sizeof (double))
+                    __asm__("fldl %1\nfstpt %0\n" : "=m"
+                        (memset(ptr, 0, LDOUBLE_SIZE), ptr) : "m" (vtop->c.ld));
+#endif
+#endif
 		else
                     tcc_error("can't cross compile long double constants");
 		break;
@@ -6270,7 +6296,7 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
 	    case VT_PTR:
 		{
 		    addr_t val = (vtop->c.i & bit_mask) << bit_pos;
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
 		    if (vtop->r & VT_SYM)
 		      greloca(sec, vtop->sym, c, R_DATA_PTR, val);
 		    else
@@ -6285,7 +6311,7 @@ static void init_putv(CType *type, Section *sec, unsigned long c)
 	    default:
 		{
 		    int val = (vtop->c.i & bit_mask) << bit_pos;
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
 		    if (vtop->r & VT_SYM)
 		      greloca(sec, vtop->sym, c, R_DATA_PTR, val);
 		    else
@@ -6680,7 +6706,7 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
         if (tcc_state->do_bounds_check) {
             addr_t *bounds_ptr;
 
-            greloc(bounds_section, sym, bounds_section->data_offset, R_DATA_PTR);
+            greloca(bounds_section, sym, bounds_section->data_offset, R_DATA_PTR, 0);
             /* then add global bound info */
             bounds_ptr = section_ptr_add(bounds_section, 2 * sizeof(addr_t));
             bounds_ptr[0] = 0; /* relocated */
@@ -7042,7 +7068,8 @@ found:
                     has_init = (tok == '=');
                     if (has_init && (type.t & VT_VLA))
                         tcc_error("variable length array cannot be initialized");
-                    if ((type.t & VT_EXTERN) || ((type.t & VT_BTYPE) == VT_FUNC) ||
+                    if (((type.t & VT_EXTERN) && (!has_init || l != VT_CONST)) ||
+			((type.t & VT_BTYPE) == VT_FUNC) ||
                         ((type.t & VT_ARRAY) && (type.t & VT_STATIC) &&
                          !has_init && l == VT_CONST && type.ref->c < 0)) {
                         /* external variable or function */

@@ -124,28 +124,16 @@
 
 /* target selection */
 /* #define TCC_TARGET_I386   *//* i386 code generator */
+/* #define TCC_TARGET_X86_64 *//* x86-64 code generator */
 /* #define TCC_TARGET_ARM    *//* ARMv4 code generator */
 /* #define TCC_TARGET_ARM64  *//* ARMv8 code generator */
 /* #define TCC_TARGET_C67    *//* TMS320C67xx code generator */
-/* #define TCC_TARGET_X86_64 *//* x86-64 code generator */
 
 /* default target is I386 */
 #if !defined(TCC_TARGET_I386) && !defined(TCC_TARGET_ARM) && \
     !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_C67) && \
     !defined(TCC_TARGET_X86_64)
 #define TCC_TARGET_I386
-#endif
-
-#if !defined(TCC_UCLIBC) && !defined(TCC_TARGET_ARM) && \
-    !defined(TCC_TARGET_ARM64) && !defined(TCC_TARGET_C67) && \
-    !defined(CONFIG_USE_LIBGCC) && !defined(TCC_MUSL)
-#define CONFIG_TCC_BCHECK /* enable bound checking code */
-#endif
-
-/* define it to include assembler support */
-#if !defined(TCC_TARGET_ARM) && !defined(TCC_TARGET_ARM64) && \
-    !defined(TCC_TARGET_C67)
-#define CONFIG_TCC_ASM
 #endif
 
 /* object format selection */
@@ -168,6 +156,10 @@
 
 #if defined TCC_IS_NATIVE && !defined CONFIG_TCCBOOT
 # define CONFIG_TCC_BACKTRACE
+# if (defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64) \
+  && !defined TCC_UCLIBC && !defined TCC_MUSL
+# define CONFIG_TCC_BCHECK /* enable bound checking code */
+# endif
 #endif
 
 /* ------------ path configuration ------------ */
@@ -284,24 +276,6 @@
 #include "elf.h"
 #include "stab.h"
 
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
-# define ELFCLASSW ELFCLASS64
-# define ElfW(type) Elf##64##_##type
-# define ELFW(type) ELF##64##_##type
-# define ElfW_Rel ElfW(Rela)
-# define SHT_RELX SHT_RELA
-# define REL_SECTION_FMT ".rela%s"
-#else
-# define ELFCLASSW ELFCLASS32
-# define ElfW(type) Elf##32##_##type
-# define ELFW(type) ELF##32##_##type
-# define ElfW_Rel ElfW(Rel)
-# define SHT_RELX SHT_REL
-# define REL_SECTION_FMT ".rel%s"
-#endif
-/* target address type */
-#define addr_t ElfW(Addr)
-
 /* -------------------------------------------- */
 
 #ifndef PUB_FUNC /* functions used by tcc.c but not in libtcc.h */
@@ -337,6 +311,7 @@
 #ifdef TCC_TARGET_ARM
 # include "arm-gen.c"
 # include "arm-link.c"
+# include "arm-asm.c"
 #endif
 #ifdef TCC_TARGET_ARM64
 # include "arm64-gen.c"
@@ -348,6 +323,26 @@
 # include "c67-link.c"
 #endif
 #undef TARGET_DEFS_ONLY
+
+/* -------------------------------------------- */
+
+#if PTR_SIZE == 8
+# define ELFCLASSW ELFCLASS64
+# define ElfW(type) Elf##64##_##type
+# define ELFW(type) ELF##64##_##type
+# define ElfW_Rel ElfW(Rela)
+# define SHT_RELX SHT_RELA
+# define REL_SECTION_FMT ".rela%s"
+#else
+# define ELFCLASSW ELFCLASS32
+# define ElfW(type) Elf##32##_##type
+# define ELFW(type) ELF##32##_##type
+# define ElfW_Rel ElfW(Rel)
+# define SHT_RELX SHT_REL
+# define REL_SECTION_FMT ".rel%s"
+#endif
+/* target address type */
+#define addr_t ElfW(Addr)
 
 /* -------------------------------------------- */
 
@@ -611,7 +606,7 @@ typedef struct ExprValue {
 
 #define MAX_ASM_OPERANDS 30
 typedef struct ASMOperand {
-    int id; /* GCC 3 optionnal identifier (0 if number only supported */
+    int id; /* GCC 3 optional identifier (0 if number only supported */
     char *constraint;
     char asm_str[16]; /* computed asm string for operand */
     SValue *vt; /* C value of the expression */
@@ -661,7 +656,7 @@ struct TCCState {
     int char_is_unsigned;
     int leading_underscore;
     int ms_extensions;	/* allow nested named struct w/o identifier behave like unnamed */
-    int dollars_in_identifiers;	/* allows '$' char in indentifiers */
+    int dollars_in_identifiers;	/* allows '$' char in identifiers */
     int ms_bitfields; /* if true, emulate MS algorithm for aligning bitfields */
 
     /* warning switches */
@@ -670,6 +665,7 @@ struct TCCState {
     int warn_error;
     int warn_none;
     int warn_implicit_function_declaration;
+    int warn_gcc_compat;
 
     /* compile with debug symbol (and use them if error during execution) */
     int do_debug;
@@ -778,7 +774,7 @@ struct TCCState {
     Section *dynsymtab_section;
     /* exported dynamic symbol section */
     Section *dynsym;
-    /* copy of the gobal symtab_section variable */
+    /* copy of the global symtab_section variable */
     Section *symtab;
     /* extra attributes (eg. GOT/PLT value) for symtab symbols */
     struct sym_attr *sym_attrs;
@@ -967,7 +963,7 @@ struct filespec {
 #define TOK_SHL   0x01 /* shift left */
 #define TOK_SAR   0x02 /* signed shift right */
   
-/* assignement operators : normal operator or 0x80 */
+/* assignment operators : normal operator or 0x80 */
 #define TOK_A_MOD 0xa5
 #define TOK_A_AND 0xa6
 #define TOK_A_MUL 0xaa
@@ -990,7 +986,7 @@ struct filespec {
 #define TOK_EOF       (-1)  /* end of file */
 #define TOK_LINEFEED  10    /* line feed */
 
-/* all identificators and strings have token above that */
+/* all identifiers and strings have token above that */
 #define TOK_IDENT 256
 
 #define DEF_ASM(x) DEF(TOK_ASM_ ## x, #x)
@@ -1266,7 +1262,7 @@ ST_FUNC int tcc_preprocess(TCCState *s1);
 ST_FUNC void skip(int c);
 ST_FUNC NORETURN void expect(const char *msg);
 
-/* space exlcuding newline */
+/* space excluding newline */
 static inline int is_space(int ch) {
     return ch == ' ' || ch == '\t' || ch == '\v' || ch == '\f' || ch == '\r';
 }
@@ -1414,7 +1410,9 @@ ST_FUNC Section *new_symtab(TCCState *s1, const char *symtab_name, int sh_type, 
 
 ST_FUNC void put_extern_sym2(Sym *sym, Section *section, addr_t value, unsigned long size, int can_add_underscore);
 ST_FUNC void put_extern_sym(Sym *sym, Section *section, addr_t value, unsigned long size);
+#if PTR_SIZE == 4
 ST_FUNC void greloc(Section *s, Sym *sym, unsigned long offset, int type);
+#endif
 ST_FUNC void greloca(Section *s, Sym *sym, unsigned long offset, int type, addr_t addend);
 
 ST_FUNC int put_elf_str(Section *s, const char *sym);
@@ -1559,7 +1557,7 @@ ST_FUNC void gen_opl(int op);
 /* ------------ arm-gen.c ------------ */
 #ifdef TCC_TARGET_ARM
 #if defined(TCC_ARM_EABI) && !defined(CONFIG_TCC_ELFINTERP)
-PUB_FUNC char *default_elfinterp(struct TCCState *s);
+PUB_FUNC const char *default_elfinterp(struct TCCState *s);
 #endif
 ST_FUNC void arm_init(struct TCCState *s);
 ST_FUNC void gen_cvt_itof1(int t);

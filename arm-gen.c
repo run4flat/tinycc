@@ -34,8 +34,8 @@
 #define NB_REGS             9
 #endif
 
-#ifndef TCC_ARM_VERSION
-# define TCC_ARM_VERSION 5
+#ifndef TCC_CPU_VERSION
+# define TCC_CPU_VERSION 5
 #endif
 
 /* a register can belong to several classes. The classes must be
@@ -179,6 +179,7 @@ ST_FUNC void arm_init(struct TCCState *s)
 #define func_ldouble_type func_old_type
 ST_FUNC void arm_init(struct TCCState *s)
 {
+#if 0
 #if !defined (TCC_ARM_VFP)
     tcc_warning("Support for FPA is deprecated and will be removed in next"
                 " release");
@@ -186,6 +187,7 @@ ST_FUNC void arm_init(struct TCCState *s)
 #if !defined (TCC_ARM_EABI)
     tcc_warning("Support for OABI is deprecated and will be removed in next"
                 " release");
+#endif
 #endif
 }
 #endif
@@ -201,7 +203,7 @@ static int regmask(int r) {
 /******************************************************/
 
 #if defined(TCC_ARM_EABI) && !defined(CONFIG_TCC_ELFINTERP)
-char *default_elfinterp(struct TCCState *s)
+const char *default_elfinterp(struct TCCState *s)
 {
     if (s->float_abi == ARM_HARD_FLOAT)
         return "/lib/ld-linux-armhf.so.3";
@@ -811,7 +813,7 @@ struct avail_regs {
    and the parameter is a single float.
 
    avregs: opaque structure to keep track of available VFP co-processor regs
-   align: alignment contraints for the param, as returned by type_size()
+   align: alignment constraints for the param, as returned by type_size()
    size: size of the parameter, as returned by type_size() */
 int assign_vfpreg(struct avail_regs *avregs, int align, int size)
 {
@@ -821,7 +823,7 @@ int assign_vfpreg(struct avail_regs *avregs, int align, int size)
     return -1;
   if (align >> 3) { /* double alignment */
     first_reg = avregs->first_free_reg;
-    /* alignment contraint not respected so use next reg and record hole */
+    /* alignment constraint not respected so use next reg and record hole */
     if (first_reg & 1)
       avregs->avail[avregs->last_hole++] = first_reg++;
   } else { /* no special alignment (float or array of float) */
@@ -1651,7 +1653,7 @@ static int is_zero(int i)
 }
 
 /* generate a floating point operation 'v = t1 op t2' instruction. The
- *    two operands are guaranted to have the same floating point type */
+ *    two operands are guaranteed to have the same floating point type */
 void gen_opf(int op)
 {
   uint32_t x;
@@ -2147,7 +2149,3 @@ ST_FUNC void gen_vla_alloc(CType *type, int align) {
 /*************************************************************/
 #endif
 /*************************************************************/
-
-#ifndef TCC_IS_NATIVE
-#include "arm-asm.c"
-#endif

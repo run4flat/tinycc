@@ -8,6 +8,7 @@
 #define R_JMP_SLOT  R_X86_64_JUMP_SLOT
 #define R_GLOB_DAT  R_X86_64_GLOB_DAT
 #define R_COPY      R_X86_64_COPY
+#define R_RELATIVE  R_X86_64_RELATIVE
 
 #define R_NUM       R_X86_64_NUM
 
@@ -29,18 +30,24 @@ int code_reloc (int reloc_type)
         case R_X86_64_32:
         case R_X86_64_32S:
         case R_X86_64_64:
+        case R_X86_64_GOTPC32:
+        case R_X86_64_GOTPC64:
         case R_X86_64_GOTPCREL:
         case R_X86_64_GOTPCRELX:
         case R_X86_64_REX_GOTPCRELX:
         case R_X86_64_GOTTPOFF:
         case R_X86_64_GOT32:
+        case R_X86_64_GOT64:
         case R_X86_64_GLOB_DAT:
         case R_X86_64_COPY:
-	case R_X86_64_RELATIVE:
+        case R_X86_64_RELATIVE:
+        case R_X86_64_GOTOFF64:
             return 0;
 
         case R_X86_64_PC32:
+        case R_X86_64_PC64:
         case R_X86_64_PLT32:
+        case R_X86_64_PLTOFF64:
         case R_X86_64_JUMP_SLOT:
             return 1;
     }
@@ -49,7 +56,7 @@ int code_reloc (int reloc_type)
     return -1;
 }
 
-/* Returns an enumerator to describe wether and when the relocation needs a
+/* Returns an enumerator to describe whether and when the relocation needs a
    GOT and/or PLT entry to be created. See tcc.h for a description of the
    different values. */
 int gotplt_entry_type (int reloc_type)
@@ -58,7 +65,7 @@ int gotplt_entry_type (int reloc_type)
         case R_X86_64_GLOB_DAT:
         case R_X86_64_JUMP_SLOT:
         case R_X86_64_COPY:
-	case R_X86_64_RELATIVE:
+        case R_X86_64_RELATIVE:
             return NO_GOTPLT_ENTRY;
 
 	/* The following relocs wouldn't normally need GOT or PLT
@@ -68,16 +75,22 @@ int gotplt_entry_type (int reloc_type)
         case R_X86_64_32S:
         case R_X86_64_64:
         case R_X86_64_PC32:
+        case R_X86_64_PC64:
             return AUTO_GOTPLT_ENTRY;
 
         case R_X86_64_GOTTPOFF:
             return BUILD_GOT_ONLY;
 
         case R_X86_64_GOT32:
+        case R_X86_64_GOT64:
+        case R_X86_64_GOTPC32:
+        case R_X86_64_GOTPC64:
+        case R_X86_64_GOTOFF64:
         case R_X86_64_GOTPCREL:
         case R_X86_64_GOTPCRELX:
-	case R_X86_64_REX_GOTPCRELX:
+        case R_X86_64_REX_GOTPCRELX:
         case R_X86_64_PLT32:
+        case R_X86_64_PLTOFF64:
             return ALWAYS_GOTPLT_ENTRY;
     }
 
@@ -94,7 +107,7 @@ ST_FUNC unsigned create_plt_entry(TCCState *s1, unsigned got_offset, struct sym_
 
     modrm = 0x25;
 
-    /* empty PLT: create PLT0 entry that pushes the library indentifier
+    /* empty PLT: create PLT0 entry that pushes the library identifier
        (GOT + PTR_SIZE) and jumps to ld.so resolution routine
        (GOT + 2 * PTR_SIZE) */
     if (plt->data_offset == 0) {
@@ -170,12 +183,12 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
                 qrel->r_offset = rel->r_offset;
                 if (esym_index) {
                     qrel->r_info = ELFW(R_INFO)(esym_index, R_X86_64_64);
-		    qrel->r_addend = rel->r_addend;
+                    qrel->r_addend = rel->r_addend;
                     qrel++;
                     break;
                 } else {
-		    qrel->r_info = ELFW(R_INFO)(0, R_X86_64_RELATIVE);
-		    qrel->r_addend = read64le(ptr) + val;
+                    qrel->r_info = ELFW(R_INFO)(0, R_X86_64_RELATIVE);
+                    qrel->r_addend = read64le(ptr) + val;
                     qrel++;
                 }
             }
@@ -210,10 +223,10 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
             goto plt32pc32;
 
         case R_X86_64_PLT32:
-	    /* fallthrough: val already holds the PLT slot address */
+            /* fallthrough: val already holds the PLT slot address */
 
-	plt32pc32:
-	{
+        plt32pc32:
+        {
             long long diff;
             diff = (long long)val - addr;
             if (diff < -2147483648LL || diff > 2147483647LL) {
@@ -222,16 +235,42 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
             add32le(ptr, diff);
         }
             break;
+
+        case R_X86_64_PLTOFF64:
+            add64le(ptr, val - s1->got->sh_addr + rel->r_addend);
+            break;
+
+        case R_X86_64_PC64:
+            if (s1->output_type == TCC_OUTPUT_DLL) {
+                /* DLL relocation */
+                esym_index = s1->sym_attrs[sym_index].dyn_index;
+                if (esym_index) {
+                    qrel->r_offset = rel->r_offset;
+                    qrel->r_info = ELFW(R_INFO)(esym_index, R_X86_64_PC64);
+                    qrel->r_addend = read64le(ptr) + rel->r_addend;
+                    qrel++;
+                    break;
+                }
+            }
+            add64le(ptr, val - addr);
+            break;
+
         case R_X86_64_GLOB_DAT:
         case R_X86_64_JUMP_SLOT:
             /* They don't need addend */
             write64le(ptr, val - rel->r_addend);
             break;
         case R_X86_64_GOTPCREL:
-	case R_X86_64_GOTPCRELX:
-	case R_X86_64_REX_GOTPCRELX:
+        case R_X86_64_GOTPCRELX:
+        case R_X86_64_REX_GOTPCRELX:
             add32le(ptr, s1->got->sh_addr - addr +
                          s1->sym_attrs[sym_index].got_offset - 4);
+            break;
+        case R_X86_64_GOTPC32:
+            add32le(ptr, s1->got->sh_addr - addr + rel->r_addend);
+            break;
+        case R_X86_64_GOTPC64:
+            add64le(ptr, s1->got->sh_addr - addr + rel->r_addend);
             break;
         case R_X86_64_GOTTPOFF:
             add32le(ptr, val - s1->got->sh_addr);
@@ -239,6 +278,13 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
         case R_X86_64_GOT32:
             /* we load the got offset */
             add32le(ptr, s1->sym_attrs[sym_index].got_offset);
+            break;
+        case R_X86_64_GOT64:
+            /* we load the got offset */
+            add64le(ptr, s1->sym_attrs[sym_index].got_offset);
+            break;
+        case R_X86_64_GOTOFF64:
+            add64le(ptr, val - s1->got->sh_addr);
             break;
         case R_X86_64_RELATIVE:
             /* do nothing */

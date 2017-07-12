@@ -381,7 +381,7 @@ struct pe_info {
 
 static const char *pe_export_name(TCCState *s1, ElfW(Sym) *sym)
 {
-    const char *name = symtab_section->link->data + sym->st_name;
+    const char *name = (char*)symtab_section->link->data + sym->st_name;
     if (s1->leading_underscore && name[0] == '_' && !(sym->st_other & ST_PE_STDCALL))
         return name + 1;
     return name;
@@ -835,7 +835,7 @@ static void pe_build_imports(struct pe_info *pe)
                 int sym_index = p->symbols[k]->sym_index;
                 ElfW(Sym) *imp_sym = (ElfW(Sym) *)pe->s1->dynsymtab_section->data + sym_index;
                 ElfW(Sym) *org_sym = (ElfW(Sym) *)symtab_section->data + iat_index;
-                const char *name = pe->s1->dynsymtab_section->link->data + imp_sym->st_name;
+                const char *name = (char*)pe->s1->dynsymtab_section->link->data + imp_sym->st_name;
                 int ordinal;
 
                 org_sym->st_value = thk_ptr;
@@ -965,7 +965,7 @@ static void pe_build_exports(struct pe_info *pe)
     } else {
         fprintf(op, "LIBRARY %s\n\nEXPORTS\n", dllname);
         if (pe->s1->verbose)
-            printf("<- %s (%d symbol%s)\n", buf, sym_count, "s" + (sym_count < 2));
+            printf("<- %s (%d symbol%s)\n", buf, sym_count, &"s"[sym_count < 2]);
     }
 #endif
 
@@ -1237,7 +1237,7 @@ static int pe_check_symbols(struct pe_info *pe)
         sym = (ElfW(Sym) *)symtab_section->data + sym_index;
         if (sym->st_shndx == SHN_UNDEF) {
 
-            const char *name = symtab_section->link->data + sym->st_name;
+            const char *name = (char*)symtab_section->link->data + sym->st_name;
             unsigned type = ELFW(ST_TYPE)(sym->st_info);
             int imp_sym = pe_find_import(pe->s1, sym);
             struct import_symbol *is;
@@ -1333,7 +1333,7 @@ static int pe_check_symbols(struct pe_info *pe)
 #ifdef PE_PRINT_SECTIONS
 static void pe_print_section(FILE * f, Section * s)
 {
-    /* just if you'r curious */
+    /* just if you're curious */
     BYTE *p, *e, b;
     int i, n, l, m;
     p = s->data;
@@ -1648,7 +1648,7 @@ static int pe_load_res(TCCState *s1, int fd)
 
     if (hdr.filehdr.Machine != IMAGE_FILE_MACHINE
         || hdr.filehdr.NumberOfSections != 1
-        || strcmp(hdr.sectionhdr.Name, ".rsrc") != 0)
+        || strcmp((char*)hdr.sectionhdr.Name, ".rsrc") != 0)
         goto quit;
 
     rsrc_section = new_section(s1, ".rsrc", SHT_PROGBITS, SHF_ALLOC);
@@ -1976,7 +1976,7 @@ ST_FUNC int pe_output_file(TCCState *s1, const char *filename)
 
     tcc_add_bcheck(s1);
     pe_add_runtime(s1, &pe);
-    relocate_common_syms(); /* assign bss adresses */
+    relocate_common_syms(); /* assign bss addresses */
     tcc_add_linker_symbols(s1);
     pe_set_options(s1, &pe);
 

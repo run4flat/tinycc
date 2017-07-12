@@ -151,7 +151,7 @@ ST_FUNC Section *new_section(TCCState *s1, const char *name, int sh_type, int sh
         sec->sh_addralign = 1;
         break;
     default:
-        sec->sh_addralign =  PTR_SIZE; /* gcc/pcc default aligment */
+        sec->sh_addralign =  PTR_SIZE; /* gcc/pcc default alignment */
         break;
     }
 
@@ -679,7 +679,8 @@ static void sort_syms(TCCState *s1, Section *s)
         p++;
     }
     /* save the number of local symbols in section header */
-    s->sh_info = q - new_syms;
+    if( s->sh_size )    /* this 'if' makes IDA happy */
+        s->sh_info = q - new_syms;
 
     /* then second pass for non local symbols */
     p = (ElfW(Sym) *)s->data;
@@ -870,7 +871,7 @@ static void build_got(TCCState *s1)
    relocation, use 'size' and 'info' for the corresponding symbol metadata.
    Returns the offset of the GOT or (if any) PLT entry. */
 static struct sym_attr * put_got_entry(TCCState *s1, int dyn_reloc_type,
-                                       int reloc_type, unsigned long size,
+                                       unsigned long size,
                                        int info, int sym_index)
 {
     int need_plt_entry;
@@ -906,11 +907,30 @@ static struct sym_attr * put_got_entry(TCCState *s1, int dyn_reloc_type,
     name = (char *) symtab_section->link->data + sym->st_name;
 
     if (s1->dynsym) {
-        if (0 == attr->dyn_index)
-            attr->dyn_index = set_elf_sym(s1->dynsym, sym->st_value, size,
-                                          info, 0, sym->st_shndx, name);
-        put_elf_reloc(s1->dynsym, s1->got, got_offset, dyn_reloc_type,
-                      attr->dyn_index);
+	if (ELFW(ST_BIND)(sym->st_info) == STB_LOCAL) {
+	    /* Hack alarm.  We don't want to emit dynamic symbols
+	       and symbol based relocs for STB_LOCAL symbols, but rather
+	       want to resolve them directly.  At this point the symbol
+	       values aren't final yet, so we must defer this.  We will later
+	       have to create a RELATIVE reloc anyway, so we misuse the
+	       relocation slot to smuggle the symbol reference until
+	       fill_local_got_entries.  Not that the sym_index is
+	       relative to symtab_section, not s1->dynsym!  Nevertheless
+	       we use s1->dyn_sym so that if this is the first call
+	       that got->reloc is correctly created.  Also note that
+	       RELATIVE relocs are not normally created for the .got,
+	       so the types serves as a marker for later (and is retained
+	       also for the final output, which is okay because then the
+	       got is just normal data).  */
+	    put_elf_reloc(s1->dynsym, s1->got, got_offset, R_RELATIVE,
+			  sym_index);
+	} else {
+	    if (0 == attr->dyn_index)
+                attr->dyn_index = set_elf_sym(s1->dynsym, sym->st_value, size,
+					      info, 0, sym->st_shndx, name);
+	    put_elf_reloc(s1->dynsym, s1->got, got_offset, dyn_reloc_type,
+			  attr->dyn_index);
+	}
     } else {
         put_elf_reloc(symtab_section, s1->got, got_offset, dyn_reloc_type,
                       sym_index);
@@ -1006,8 +1026,9 @@ ST_FUNC void build_got_entries(TCCState *s1)
             }
 
 #ifdef TCC_TARGET_X86_64
-            if (type == R_X86_64_PLT32 &&
-                ELFW(ST_VISIBILITY)(sym->st_other) != STV_DEFAULT) {
+            if ((type == R_X86_64_PLT32 || type == R_X86_64_PC32) &&
+                (ELFW(ST_VISIBILITY)(sym->st_other) != STV_DEFAULT ||
+		 ELFW(ST_BIND)(sym->st_info) == STB_LOCAL)) {
                 rel->r_info = ELFW(R_INFO)(sym_index, R_X86_64_PC32);
                 continue;
             }
@@ -1024,7 +1045,7 @@ ST_FUNC void build_got_entries(TCCState *s1)
             if (gotplt_entry == BUILD_GOT_ONLY)
                 continue;
 
-            attr = put_got_entry(s1, reloc_type, type, sym->st_size, sym->st_info,
+            attr = put_got_entry(s1, reloc_type, sym->st_size, sym->st_info,
                                  sym_index);
 
             if (reloc_type == R_JMP_SLOT)
@@ -1267,6 +1288,30 @@ ST_FUNC void fill_got(TCCState *s1)
                     break;
             }
         }
+    }
+}
+
+/* See put_got_entry for a description.  This is the second stage
+   where GOT references to local defined symbols are rewritten.  */
+static void fill_local_got_entries(TCCState *s1)
+{
+    ElfW_Rel *rel;
+    for_each_elem(s1->got->reloc, 0, rel, ElfW_Rel) {
+	if (ELFW(R_TYPE)(rel->r_info) == R_RELATIVE) {
+	    int sym_index = ELFW(R_SYM) (rel->r_info);
+	    ElfW(Sym) *sym = &((ElfW(Sym) *) symtab_section->data)[sym_index];
+	    struct sym_attr *attr = get_sym_attr(s1, sym_index, 0);
+	    unsigned offset = attr->got_offset;
+	    if (offset != rel->r_offset - s1->got->sh_addr)
+	      tcc_error_noabort("huh");
+	    rel->r_info = ELFW(R_INFO)(0, R_RELATIVE);
+#if SHT_RELX == SHT_RELA
+	    rel->r_addend = sym->st_value;
+#else
+	    /* All our REL architectures also happen to be 32bit LE.  */
+	    write32le(s1->got->data + offset, sym->st_value);
+#endif
+	}
     }
 }
 
@@ -1693,7 +1738,7 @@ static void fill_dynamic(TCCState *s1, struct dyn_inf *dyninf)
     put_dt(dynamic, DT_SYMTAB, s1->dynsym->sh_addr);
     put_dt(dynamic, DT_STRSZ, dyninf->dynstr->data_offset);
     put_dt(dynamic, DT_SYMENT, sizeof(ElfW(Sym)));
-#if defined(TCC_TARGET_ARM64) || defined(TCC_TARGET_X86_64)
+#if PTR_SIZE == 8
     put_dt(dynamic, DT_RELA, dyninf->rel_addr);
     put_dt(dynamic, DT_RELASZ, dyninf->rel_size);
     put_dt(dynamic, DT_RELAENT, sizeof(ElfW_Rel));
@@ -1941,10 +1986,11 @@ static void tidy_section_headers(TCCState *s1, int *sec_order)
     for_each_elem(symtab_section, 1, sym, ElfW(Sym))
 	if (sym->st_shndx != SHN_UNDEF && sym->st_shndx < SHN_LORESERVE)
 	    sym->st_shndx = backmap[sym->st_shndx];
-    for_each_elem(s1->dynsym, 1, sym, ElfW(Sym))
-	if (sym->st_shndx != SHN_UNDEF && sym->st_shndx < SHN_LORESERVE)
-	    sym->st_shndx = backmap[sym->st_shndx];
-
+    if( !s1->static_link ) {
+        for_each_elem(s1->dynsym, 1, sym, ElfW(Sym))
+	    if (sym->st_shndx != SHN_UNDEF && sym->st_shndx < SHN_LORESERVE)
+	        sym->st_shndx = backmap[sym->st_shndx];
+    }
     for (i = 0; i < s1->nb_sections; i++)
 	sec_order[i] = i;
     tcc_free(s1->sections);
@@ -2129,6 +2175,8 @@ static int elf_output_file(TCCState *s1, const char *filename)
     /* Perform relocation to GOT or PLT entries */
     if (file_type == TCC_OUTPUT_EXE && s1->static_link)
         fill_got(s1);
+    else if (s1->got)
+        fill_local_got_entries(s1);
 
     /* Create the ELF file with name 'filename' */
     ret = tcc_write_elf_file(s1, filename, phnum, phdr, file_offset, sec_order);
@@ -2194,7 +2242,7 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
 {
     ElfW(Ehdr) ehdr;
     ElfW(Shdr) *shdr, *sh;
-    int size, i, j, offset, offseti, nb_syms, sym_index, ret;
+    int size, i, j, offset, offseti, nb_syms, sym_index, ret, seencompressed;
     unsigned char *strsec, *strtab;
     int *old_to_new_syms;
     char *sh_name, *name;
@@ -2232,6 +2280,7 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
     symtab = NULL;
     strtab = NULL;
     nb_syms = 0;
+    seencompressed = 0;
     for(i = 1; i < ehdr.e_shnum; i++) {
         sh = &shdr[i];
         if (sh->sh_type == SHT_SYMTAB) {
@@ -2249,6 +2298,8 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
             sh = &shdr[sh->sh_link];
             strtab = load_data(fd, file_offset + sh->sh_offset, sh->sh_size);
         }
+	if (sh->sh_flags & SHF_COMPRESSED)
+	    seencompressed = 1;
     }
 
     /* now examine each section and try to merge its content with the
@@ -2272,6 +2323,12 @@ ST_FUNC int tcc_load_object_file(TCCState *s1,
             strcmp(sh_name, ".stabstr")
             )
             continue;
+	if (seencompressed
+	    && (!strncmp(sh_name, ".debug_", sizeof(".debug_")-1)
+		|| (sh->sh_type == SHT_RELX
+		    && !strncmp((char*)strsec + shdr[sh->sh_info].sh_name,
+			        ".debug_", sizeof(".debug_")-1))))
+	  continue;
         if (sh->sh_addralign < 1)
             sh->sh_addralign = 1;
         /* find corresponding section, if any */

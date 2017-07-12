@@ -8,6 +8,7 @@
 #define R_JMP_SLOT  R_ARM_JUMP_SLOT
 #define R_GLOB_DAT  R_ARM_GLOB_DAT
 #define R_COPY      R_ARM_COPY
+#define R_RELATIVE  R_ARM_RELATIVE
 
 #define R_NUM       R_ARM_NUM
 
@@ -61,7 +62,7 @@ int code_reloc (int reloc_type)
     return -1;
 }
 
-/* Returns an enumerator to describe wether and when the relocation needs a
+/* Returns an enumerator to describe whether and when the relocation needs a
    GOT and/or PLT entry to be created. See tcc.h for a description of the
    different values. */
 int gotplt_entry_type (int reloc_type)
@@ -108,7 +109,7 @@ ST_FUNC unsigned create_plt_entry(TCCState *s1, unsigned got_offset, struct sym_
     unsigned plt_offset;
 
     /* when building a DLL, GOT entry accesses must be done relative to
-       start of GOT (see x86_64 examble above)  */
+       start of GOT (see x86_64 example above)  */
     if (s1->output_type == TCC_OUTPUT_DLL)
         tcc_error("DLLs unimplemented!");
 
@@ -189,7 +190,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
                 if (x & 0x800000)
                     x -= 0x1000000;
                 x <<= 2;
-                blx_avail = (TCC_ARM_VERSION >= 5);
+                blx_avail = (TCC_CPU_VERSION >= 5);
                 is_thumb = val & 1;
                 is_bl = (*(unsigned *) ptr) >> 24 == 0xeb;
                 is_call = (type == R_ARM_CALL || (type == R_ARM_PC24 && is_bl));

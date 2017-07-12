@@ -7,6 +7,7 @@
 #define R_JMP_SLOT R_AARCH64_JUMP_SLOT
 #define R_GLOB_DAT R_AARCH64_GLOB_DAT
 #define R_COPY     R_AARCH64_COPY
+#define R_RELATIVE R_AARCH64_RELATIVE
 
 #define R_NUM      R_AARCH64_NUM
 
@@ -50,7 +51,7 @@ int code_reloc (int reloc_type)
     return -1;
 }
 
-/* Returns an enumerator to describe wether and when the relocation needs a
+/* Returns an enumerator to describe whether and when the relocation needs a
    GOT and/or PLT entry to be created. See tcc.h for a description of the
    different values. */
 int gotplt_entry_type (int reloc_type)

@@ -225,7 +225,7 @@ static const ASMInstr asm_instrs[] = {
 /* This constructs instr_type from opcode, type and group.  */
 #define T(o,i,g) ((i) | ((g) << OPC_GROUP_SHIFT) | ((((o) & 0xff00) == 0x0f00) ? OPC_0F : 0))
 #define DEF_ASM_OP0(name, opcode)
-#define DEF_ASM_OP0L(name, opcode, group, instr_type) { TOK_ASM_ ## name, O(opcode), T(opcode, instr_type, group), 0 },
+#define DEF_ASM_OP0L(name, opcode, group, instr_type) { TOK_ASM_ ## name, O(opcode), T(opcode, instr_type, group), 0, { 0 } },
 #define DEF_ASM_OP1(name, opcode, group, instr_type, op0) { TOK_ASM_ ## name, O(opcode), T(opcode, instr_type, group), 1, { op0 }},
 #define DEF_ASM_OP2(name, opcode, group, instr_type, op0, op1) { TOK_ASM_ ## name, O(opcode), T(opcode, instr_type, group), 2, { op0, op1 }},
 #define DEF_ASM_OP3(name, opcode, group, instr_type, op0, op1, op2) { TOK_ASM_ ## name, O(opcode), T(opcode, instr_type, group), 3, { op0, op1, op2 }},
@@ -1473,7 +1473,7 @@ ST_FUNC void subst_asm_operand(CString *add_str,
         if (r & VT_SYM) {
 	    const char *name = get_tok_str(sv->sym->v, NULL);
 	    if (sv->sym->v >= SYM_FIRST_ANOM) {
-		/* In case of anonymuous symbols ("L.42", used
+		/* In case of anonymous symbols ("L.42", used
 		   for static data labels) we can't find them
 		   in the C symbol table when later looking up
 		   this name.  So enter them now into the asm label
