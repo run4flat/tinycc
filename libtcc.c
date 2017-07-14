@@ -267,7 +267,7 @@ struct mem_debug_header {
     int line_num;
     char file_name[MEM_DEBUG_FILE_LEN + 1];
     unsigned magic2;
-    __attribute__((aligned(16))) unsigned magic3;
+    ALIGNED(16) unsigned magic3;
 };
 
 typedef struct mem_debug_header mem_debug_header_t;
@@ -584,10 +584,7 @@ ST_FUNC void tcc_open_bf(TCCState *s1, const char *filename, int initlen)
     bf->buf_end = bf->buffer + initlen;
     bf->buf_end[0] = CH_EOB; /* put eob symbol */
     pstrcpy(bf->filename, sizeof(bf->filename), filename);
-    pstrcpy(bf->filename2, sizeof(bf->filename2), filename);
-#ifdef _WIN32
-    normalize_slashes(bf->filename);
-#endif
+    bf->true_filename = bf->filename;
     bf->line_num = 1;
     bf->ifdef_stack_ptr = s1->ifdef_stack_ptr;
     bf->fd = -1;
@@ -602,6 +599,8 @@ ST_FUNC void tcc_close(void)
         close(bf->fd);
         total_lines += bf->line_num;
     }
+    if (bf->true_filename != bf->filename)
+        tcc_free(bf->true_filename);
     file = bf->prev;
     tcc_free(bf);
 }
@@ -618,8 +617,10 @@ ST_FUNC int tcc_open(TCCState *s1, const char *filename)
                (int)(s1->include_stack_ptr - s1->include_stack), "", filename);
     if (fd < 0)
         return -1;
-
     tcc_open_bf(s1, filename, 0);
+#ifdef _WIN32
+    normalize_slashes(file->filename);
+#endif
     file->fd = fd;
     return fd;
 }
@@ -781,6 +782,7 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->alacarte_link = 1;
     s->nocommon = 1;
     s->warn_implicit_function_declaration = 1;
+    s->ms_extensions = 1;
 
 #ifdef CHAR_IS_UNSIGNED
     s->char_is_unsigned = 1;
