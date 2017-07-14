@@ -89,7 +89,7 @@ typedef struct extended_symtab {
 /******************************************************************************/
 
 void dump_sym_names(TCCState *state);
-void copy_extended_symbols_to_exsymtab(TCCState *state);
+void copy_global_identifiers_to_exsymtab(TCCState *state);
 /* tcc_get_extended_symbol_table in libtcc.h */
 /* tcc_get_extended_tokensym in libtcc.h */
 /* tcc_get_extended_symbol in libtcc.h */

@@ -250,8 +250,9 @@ static int tcc_relocate_ex(TCCState *s1, void *ptr)
     }
 
 /* #ifdef CONFIG_TCC_EXSYMTAB */
-    /* If they have an extended symbol table, copy the symbol pointers. */
-    if (s1->exsymtab > (extended_symtab*)1) copy_extended_symbols_to_exsymtab(s1);
+    /* If they have an extended symbol table, copy the symbol pointers
+     * for global identifiers (like functions and global variables). */
+    if (s1->exsymtab > (extended_symtab*)1) copy_global_identifiers_to_exsymtab(s1);
 /* #endif */
 
     return 0;

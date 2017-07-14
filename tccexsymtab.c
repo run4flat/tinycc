@@ -531,7 +531,19 @@ char * tcc_get_next_extended_symbol_name(extended_symtab * symtab, int * poffset
     return NULL;
 }
 
-void copy_extended_symbols_to_exsymtab(TCCState *state)
+/* This is called at the end of the tcc_relocate_ex.  Its job is to
+ * store pointers to global identifiers in such a way that they can be
+ * found by name later. Such pointers aren't finalized until relocation,
+ * which is why this should be called at the end of tcc_relocate_ex.
+ * 
+ * Changes to this implementation should be mirrored with changes to
+ * tcc_get_extended_symbol, defined below, which essentially performs
+ * the reverse process.
+ * 
+ * The current implementation stores the pointer in the TokenSym's
+ * hash_next slot. This slot is a pointer slot that is not presently
+ * used by the exsymtab system. */
+void copy_global_identifiers_to_exsymtab(TCCState *state)
 {
     Section * s;
     ElfW(Sym) *sym;
@@ -571,7 +583,6 @@ void copy_extended_symbols_to_exsymtab(TCCState *state)
  * be created, but the state hasn't compiled yet. Otherwise, we have a fully
  * formed extended symbol table, which we can return. In that case, we assume
  * that the user takes responsibility for cleaning it up. */
-
 LIBTCCAPI extended_symtab * tcc_get_extended_symbol_table(TCCState * s)
 {
     extended_symtab * to_return;
@@ -585,12 +596,24 @@ LIBTCCAPI extended_symtab * tcc_get_extended_symbol_table(TCCState * s)
     return to_return;
 }
 
+/* Given a name, return the TokenSym. Since token_string_hash_get_ref
+ * always returns a pointer to a valid memory location, the dereference
+ * is always safe. However, the TokenSym pointer that is returned may
+ * be a null pointer. */
 LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name)
 {
-    /* delegate to the symtab's trie */
+    /* delegate to the symtab's hash */
     return (TokenSym*)(*token_string_hash_get_ref(symtab->tsh, name));
 }
 
+/* Return the actual pointer to the global identifier associated with
+ * this name in this exsymtab, or null. This is used when "linking"
+ * against an extended symbol table; actually such linking is handled
+ * by the symtab_sym_used_callback function. The mapping from name to
+ * pointer is an implementaiton detail, and tcc_get_extended_symbol
+ * abstracts the that lookup process.
+ * 
+ * See sym_used() in tests/exsymtab/test_setup.h for an example. */
 LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * name)
 {
     TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
@@ -623,6 +646,8 @@ LIBTCCAPI void tcc_save_extended_symtab(TCCState * s) {
     if (s->exsymtab == NULL) s->exsymtab = (extended_symtab*)1;
 }
 
+/* Given an old symbol, find or create the associated new Sym in the
+ * given ram hash. */
 Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
 {
     void ** Sym_ref;
