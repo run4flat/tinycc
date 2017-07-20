@@ -469,7 +469,7 @@ void dump_sym_names(TCCState *state)
 char * type_lookup_table[16] = {
     "void", "char", "short", "int",
     "long long", "pointer", "func", "struct",
-    "enum", "float", "double", "long double",
+    "float", "double", "long double",
     "bool", "long", "qlong", "qfloat"
 };
 

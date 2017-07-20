@@ -26,7 +26,6 @@ void compare_two_syms (exsymtabSym * decl, exsymtabSym * def, int indentation) {
     compare(a.visibility, "SymAttr visibility");
     compare(a.dllexport, "SymAttr dllexport");
     compare(a.dllimport, "SymAttr dllimport");
-    compare(a.unsigned_enum, "SymAttr unsigned_enum");
 	
 	/* members of FuncAttr */
     compare(f.func_call, "FuncAttr func_call");
