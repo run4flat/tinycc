@@ -12,6 +12,51 @@
 char definition_code[] = "double foo(int bar, double *baz) { return 0; }\n";
 char declaration_code[] = "double foo(int bar, double *baz);\n";
 
+void compare_two_syms (exsymtabSym * decl, exsymtabSym * def, int indentation) {
+    #define compare(field, descr) is_i(decl-> field, def-> field, "    " descr " agree" + 4 - indentation)
+    /* Basic members of the Sym */
+    compare(r, "associated registers");
+    compare(c, "associated numbers/Elf symbol indexes");
+    compare(type.t, "type.t values");
+    
+    /* members of SymAttr */
+    compare(a.aligned, "SymAttr allignment");
+    compare(a.packed, "SymAttr packing");
+    compare(a.weak, "SymAttr weak");
+    compare(a.visibility, "SymAttr visibility");
+    compare(a.dllexport, "SymAttr dllexport");
+    compare(a.dllimport, "SymAttr dllimport");
+    compare(a.unsigned_enum, "SymAttr unsigned_enum");
+	
+	/* members of FuncAttr */
+    compare(f.func_call, "FuncAttr func_call");
+    compare(f.func_type, "FuncAttr func_type");
+    if (indentation == 1) {
+		ok(def->f.func_body != decl->f.func_body,
+			"    FuncAttr func_body do NOT AGREE, as expected" + 4 - indentation);
+	}
+	else compare(f.func_body, "FuncAttr func_body");
+    compare(f.func_args, "FuncAttr func_args");
+	
+	/* next field */
+	if (decl->next != NULL && def->next != NULL) {
+		printf("%s", "    Comparing next fields...\n" + 4 - indentation);
+		compare_two_syms (decl->next, def->next, indentation + 1);
+	}
+	else if (decl->next != NULL || def->next != NULL) {
+		fail("    next fields are not both null (or both non-null)" + 4 - indentation);
+	}
+	
+	/* type.ref field */
+	if (decl->type.ref != NULL && def->type.ref != NULL) {
+		printf("%s", "    Comparing type.ref fields...\n" + 4 - indentation);
+		compare_two_syms (decl->type.ref, def->type.ref, indentation + 1);
+	}
+	else if (decl->type.ref != NULL || def->type.ref != NULL) {
+		fail("    type.ref fields are not both null (or both non-null)" + 4 - indentation);
+	}
+}
+
 int main(int argc, char **argv)
 {
     TCCState *s_decl = tcc_new();
@@ -59,7 +104,7 @@ int main(int argc, char **argv)
     pass("Built definition compiler state's symbol table");
 
     /* get the symbol table layouts of the two */
-    TokenSym * ts = tcc_get_extended_tokensym(decl_symtab, "foo");
+    exsymtabTokenSym * ts = tcc_get_extended_tokensym(decl_symtab, "foo");
     if (ts == NULL) {
         printf("could not find foo tokensym in declaration symtab\n");
         return(1);
@@ -69,7 +114,7 @@ int main(int argc, char **argv)
         return(1);
     }
 
-    Sym * foo_decl = ts->sym_identifier;
+    exsymtabSym * foo_decl = ts->sym_identifier;
 
     ts = tcc_get_extended_tokensym(def_symtab, "foo");
     if (ts == NULL) {
@@ -81,44 +126,10 @@ int main(int argc, char **argv)
         return(1);
     }
 
-    Sym * foo_def = ts->sym_identifier;
+    exsymtabSym * foo_def = ts->sym_identifier;
 
     /* ---- Compare them ---- */
-
-    is_i(foo_decl->r, foo_def->r, "foo->r agree");
-    is_i(foo_decl->c, foo_def->c, "foo->c agree");
-    is_i(foo_decl->type.t, foo_def->type.t, "foo->type.t agree");
-
-    Sym * def_ret = foo_def->type.ref;
-    Sym * dec_ret = foo_decl->type.ref;
-
-    /* This is the only difference. The value 0x10000 indicates "This is just a
-     * prototype," which means a later definition is allowed. I do not want a
-     * later redefinition for functions that have been defined in an earlier
-     * context, so these are allowed (and encouraged) to differ.
-     */
-    is_i(dec_ret->r, 0x1000, "declaration ret->r is 0x01000");
-    is_i(def_ret->r, 0x11000,  "definition  ret->r is 0x11000");
-    is_i(dec_ret->c, def_ret->c, "ret->r agree");
-    is_i(dec_ret->type.t, def_ret->type.t, "ret->type.t agree");
-
-    Sym * def_arg1 = def_ret->next;
-    Sym * dec_arg1 = dec_ret->next;
-    is_i(dec_arg1->r, def_arg1->r, "arg1->r agree");
-    is_i(dec_arg1->c, def_arg1->c, "arg1->c agree");
-    is_i(dec_arg1->type.t, def_arg1->type.t, "arg1->type.t agree");
-
-    Sym * def_arg2 = def_arg1->next;
-    Sym * dec_arg2 = dec_arg1->next;
-    is_i(dec_arg2->r, def_arg2->r, "arg2->r agree");
-    is_i(dec_arg2->c, def_arg2->c, "arg2->c agree");
-    is_i(dec_arg2->type.t, def_arg2->type.t, "arg2->type.t agree");
-
-    Sym * def_arg2pt = def_arg2->type.ref;
-    Sym * dec_arg2pt = dec_arg2->type.ref;
-    is_i(dec_arg2pt->r, def_arg2pt->r, "arg2pt->r agree");
-    is_i(dec_arg2pt->c, def_arg2pt->c, "arg2pt->c agree");
-    is_i(dec_arg2pt->type.t, def_arg2pt->type.t, "arg2pt->type.t agree");
+    compare_two_syms(foo_decl, foo_def, 0);
 
     /* Clean up */
     tcc_delete_extended_symbol_table(def_symtab);

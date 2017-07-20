@@ -47,7 +47,7 @@ typedef struct {
 	extended_symtab_p first_symtab;
 } second_callback_data;
 
-TokenSym_p lookup_by_name (char * name, int len, void * data,
+exsymtabTokenSym_p lookup_by_name (char * name, int len, void * data,
 	extended_symtab_p*containing_symtab
 ) {
 	/* Extract the name from the full string passed in */
@@ -59,7 +59,7 @@ TokenSym_p lookup_by_name (char * name, int len, void * data,
 	extended_symtab_p my_symtab = ((second_callback_data*)data)->first_symtab;
 	*containing_symtab = my_symtab;
 	/* Get the tokensym and return if found */
-	TokenSym_p ts = tcc_get_extended_tokensym(my_symtab, name_to_find);
+	exsymtabTokenSym_p ts = tcc_get_extended_tokensym(my_symtab, name_to_find);
 	if (ts != NULL) return ts;
 	/* Warn otherwise */
 	DIAG("Did not find [%s]", name_to_find);

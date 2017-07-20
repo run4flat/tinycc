@@ -18,7 +18,7 @@
 
 #include "tcc.h"
 
-/* tccgen: asm_label cleanu */
+/* tccgen: asm_label cleanup */
 //#define BEFORE_hash_opt
 
 #define FUNC_STR func_str->str
@@ -183,7 +183,6 @@ ram_hash * ram_hash_new()
 
 /* ram_hash_hash_ptr: internal function. Returns the bucket offset
  * for a given pointer, i.e. it hashes the pointer value. */
-
 uintptr_t ram_hash_hash_ptr(ram_hash * rh, void * old)
 {
     uintptr_t hashed = (uintptr_t)old;
@@ -194,7 +193,6 @@ uintptr_t ram_hash_hash_ptr(ram_hash * rh, void * old)
 
 /* ram_hash_find: internal function. Returns the ram_hash_linked_list
  * element for a given pointer, if the pointer is already in the hash. */
-
 ram_hash_linked_list* ram_hash_find(ram_hash * rh, void * old)
 {
     /* find the associated bucket */
@@ -212,7 +210,6 @@ ram_hash_linked_list* ram_hash_find(ram_hash * rh, void * old)
  * element for the given key, creating if necessary. This does not
  * check if the hash has to be rehashed, which is why it is internal
  * only. */
-
 ram_hash_linked_list * ram_hash_get(ram_hash * rh, void * key)
 {
     /* find the associated bucket */
@@ -236,7 +233,6 @@ ram_hash_linked_list * ram_hash_get(ram_hash * rh, void * key)
 
 /* ram_hash_rehash: internal function. Given a ram_hash, increments the
  * number of log_buckets and rehashes the contents. */
-
 void ram_hash_rehash(ram_hash * rh)
 {
     /* back up old-bucket data */
@@ -285,7 +281,6 @@ void ram_hash_rehash(ram_hash * rh)
  *      *p_data = create_new_data();
  *  }
 */
-
 void ** ram_hash_get_ref(ram_hash * rh, void * old)
 {
     /* Does it already exist? */
@@ -302,7 +297,6 @@ void ** ram_hash_get_ref(ram_hash * rh, void * old)
 }
 
 /* ram_hash_describe: semi-internal, describes hash table statistics */
-
 void ram_hash_describe(ram_hash * rh)
 {
     int N_filled = 0;
@@ -429,7 +423,6 @@ void ** ram_hash_iterate(ram_hash * rh, void ** p_next_data)
  * the leaves. Use ram_hash_iterate to go through the leaves and take
  * care of memory allocations stored there.
  */
-
 void ram_hash_free(ram_hash * rh)
 {
     int i;
@@ -474,10 +467,10 @@ void dump_sym_names(TCCState *state)
 }
 
 char * type_lookup_table[16] = {
-    "int", "char", "short", "void",
-    "pointer", "enum", "func", "struct",
-    "float", "double", "long double", "bool",
-    "long long", "long", "qlong", "qfloat"
+    "void", "char", "short", "int",
+    "long long", "pointer", "func", "struct",
+    "enum", "float", "double", "long double",
+    "bool", "long", "qlong", "qfloat"
 };
 
 void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile)
@@ -490,8 +483,8 @@ void tcc_dump_identifier_names(extended_symtab * symtab, char * outfile)
 
     for (i = 0; symtab->tokenSym_list + i < symtab->tokenSym_last; i++) {
         int btype;
-        TokenSym * ts;
-        Sym * curr_sym;
+        exsymtabTokenSym * ts;
+        exsymtabSym * curr_sym;
 
         ts = symtab->tokenSym_list[i];
         if (!ts->sym_identifier) continue;
@@ -522,7 +515,7 @@ char * tcc_get_next_extended_symbol_name(extended_symtab * symtab, int * poffset
     /* Increment the counter to get to the next TokenSym */
     for ((*poffset)++; symtab->tokenSym_list + *poffset < symtab->tokenSym_last; (*poffset)++)
     {
-        TokenSym * ts = symtab->tokenSym_list[*poffset];
+        exsymtabTokenSym * ts = symtab->tokenSym_list[*poffset];
         if (ts->sym_identifier) return ts->str;
     }
 
@@ -562,13 +555,13 @@ void copy_global_identifiers_to_exsymtab(TCCState *state)
         }
         else {
             /* Copy the symbol's pointer into the hash_next field of the TokenSym */
-            TokenSym * ts = tcc_get_extended_tokensym(exsymtab, name);
+            exsymtabTokenSym * ts = tcc_get_extended_tokensym(exsymtab, name);
             if (ts == NULL) {
                 tcc_warning("Global symbol %s does not exist in extended symbol table; not copying\n",
                     name);
             }
             else {
-                ts->hash_next = (void*)sym->st_value;
+                ts->global_sym = (void*)sym->st_value;
             }
         }
         /* Next iteration */
@@ -596,14 +589,14 @@ LIBTCCAPI extended_symtab * tcc_get_extended_symbol_table(TCCState * s)
     return to_return;
 }
 
-/* Given a name, return the TokenSym. Since token_string_hash_get_ref
- * always returns a pointer to a valid memory location, the dereference
- * is always safe. However, the TokenSym pointer that is returned may
- * be a null pointer. */
-LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name)
+/* Given a name, return the exsymtabTokenSym. Since
+ * token_string_hash_get_ref always returns a pointer to a valid memory
+ * location, the dereference is always safe. However, the
+ * exsymtabTokenSym pointer that is returned may be a null pointer. */
+LIBTCCAPI exsymtabTokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const char * name)
 {
     /* delegate to the symtab's hash */
-    return (TokenSym*)(*token_string_hash_get_ref(symtab->tsh, name));
+    return (exsymtabTokenSym*)(*token_string_hash_get_ref(symtab->tsh, name));
 }
 
 /* Return the actual pointer to the global identifier associated with
@@ -616,9 +609,9 @@ LIBTCCAPI TokenSym* tcc_get_extended_tokensym(extended_symtab* symtab, const cha
  * See sym_used() in tests/exsymtab/test_setup.h for an example. */
 LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab * symtab, const char * name)
 {
-    TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
+    exsymtabTokenSym * ts = tcc_get_extended_tokensym(symtab, name);
     if (ts == NULL) return NULL;
-    return (void*) ts->hash_next;
+    return ts->global_sym;
 }
 
 /******************************************************************************/
@@ -646,12 +639,12 @@ LIBTCCAPI void tcc_save_extended_symtab(TCCState * s) {
     if (s->exsymtab == NULL) s->exsymtab = (extended_symtab*)1;
 }
 
-/* Given an old symbol, find or create the associated new Sym in the
- * given ram hash. */
-Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
+/* Given a symbol from a compiled state (old), find or create the
+ * associated new exsymtabSym in the given ram hash. */
+exsymtabSym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
 {
     void ** Sym_ref;
-    Sym * to_return;
+    exsymtabSym * to_return;
     int btype;
 
     /* Handle the null case up-front */
@@ -662,56 +655,35 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
     to_return = *Sym_ref;
     if (NULL != to_return) return to_return;
 
-    /* Create new sym. Note that mallocz sets lots of things to null
-     * for me. :-) */
-    to_return = *Sym_ref = tcc_mallocz(sizeof(Sym));
-
-    /* See tcc.h around line 425 for descriptions of some of the fields.
-     * See also tccgen.c line 5987 to see what needs to happen for function
-     * declarations to work properly (and, in turn, line 446 for how to
-     * push a forward reference). */
-
-    /* Copy the v value (token id). This will not be copied later, so keep
-     * things simple for now and simply strip out the extended flag. */
+    /* Create new sym, copying the bits of the old one. */
+    to_return = *Sym_ref = tcc_malloc(sizeof(exsymtabSym));
+    
+    /* Copy the token id, stripping any SYM_EXTENDED flag from the token
+     * id. (Don't worry about this extended token showing up in 
+     * reprocessor token streams; they're transformed, too.) */
     to_return->v = old->v & ~SYM_EXTENDED;
- 
-    /* Copy the assembler label token id. Just like the v field, we copy
-     * this unmodified. */
-    /* XXX do we need to strip out SYM_EXTENDED? It seems unlikely. */
-    to_return->asm_label = old->asm_label;
-
-    /* associated register. For variables, I believe that the low bits
-     * specify the register size that can hold the value while high bits
-     * indicate storage details (VT_SYM, VT_LVAL, etc). For function types,
-     * however, this gets cast as an AttributeDef and queried for function
-     * attributes; so far, I have only seen the .r field queried for the
-     * FUNC_CALL field. It matters little; copying the whole long is easy
-     * and it seems that everything works fine when it is the same for
-     * consuming contexts as for the original compilation context. */
+    
+    /* The register and symbol table attribues get copied verbatim. */
     to_return->r = old->r;
-
-    /* Set the type. Judging by the constants in tcc.h and code that
-     * uses this field, I'm pretty sure that the low bits in the .t field
-     * tells tcc how to load the data into a register. The high bits seem to
-     * indicate storage details, such as VT_EXTERN. Since that is not
-     * something that can be extended at runtime, I should be able to copy
-     * the value as-is and add an extern flag for variables and functions. */
-    to_return->type.t = old->type.t;
-
-    /* After compilation, functions and global variables point to hard
+    to_return->a = old->a;
+    
+    /* The associated number (c) for functions must be cleared. Also,
+     * after compilation, functions and global variables point to hard
      * locations in memory. Consuming contexts should think of these as
-     * having external storage, which is reflected in the VT_EXTERN bit of
-     * the type.t field. */
+     * having external storage, which is reflected in the VT_EXTERN bit
+     * of the type.t field. */
+    to_return->enum_val = old->enum_val;
+    to_return->type.t = old->type.t;
     btype = old->type.t & VT_BTYPE;
-    if (btype == VT_FUNC || to_return->r & (VT_SYM | VT_LVAL))
+    if (btype == VT_FUNC || to_return->r & (VT_SYM | VT_LVAL)) {
+        to_return->c = 0;
         to_return->type.t |= VT_EXTERN;
+    }
 
-    /* Remove static indicator from functions */
+    /* Remove static indicator from functions. Static inline functions
+     * are the exception to this rule, so undo that work for them. */
     if ((btype == VT_FUNC) && (old->type.t & VT_STATIC))
         to_return->type.t &= ~VT_STATIC;
-
-    /* Static inline functions are the exception to this rule, so undo
-     * the above work for them. */
     if ((old->type.t & (VT_INLINE | VT_STATIC)) == (VT_INLINE | VT_STATIC))
         to_return->type.t = old->type.t;
 
@@ -721,23 +693,6 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
     if (btype == VT_PTR || btype == VT_STRUCT || btype == VT_ENUM || btype == VT_FUNC) {
         to_return->type.ref = get_new_symtab_pointer(old->type.ref, rh);
     }
-
-    /* Copy the c field, the "associated number." According to tcc-doc.texi
-     * as well as the comments just above the definition of put_extern_sym2,
-     * the c field will (for some Syms) point to an external symbol in an
-     * associated section. But this is not true for all Syms. For structs,
-     * this is the size (in bytes), and for struct members it is the byte
-     * offset of the member, according to the end of struct_decl(). For
-     * variable length arrays, this is "the location on the stack that holds
-     * the runtime sizeof for the type." For functions, I believe this is
-     * one of FUNC_NEW, FUNC_OLD, or FUNC_ELLIPSIS. At any rate, everything
-     * seems to work if I simply set it to zero for functions and global
-     * variables and copy it otherwise, so I'm going with that. This probably
-     * needs to be more nuanced. */
-    if (btype == VT_FUNC || to_return->r & (VT_SYM | VT_LVAL))
-        to_return->c = 0;
-    else
-        to_return->c = old->c;
 
     /* Copy the next symbol field. Labels and gotos are tracked in a
      * separate stack, so for these Symbols we focus on next, not
@@ -749,10 +704,10 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh)
     return to_return;
 }
 
-Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh)
+exsymtabDef * get_new_deftab_pointer (Sym * old, ram_hash * rh)
 {
     void ** Sym_ref;
-    Sym * to_return;
+    exsymtabDef * to_return;
 
     /* Handle the null case up-front */
     if (old == NULL) return NULL;
@@ -762,16 +717,15 @@ Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh)
     to_return = *Sym_ref;
     if (to_return != NULL) return to_return;
 
-    /* Create a new define object. See symtab pointer copy above for
-     * descriptions of some of the fields. */
-    to_return = *Sym_ref = tcc_mallocz(sizeof(Sym));
+    /* Create a new define object. */
+    to_return = *Sym_ref = tcc_mallocz(sizeof(exsymtabDef));
  
     /* Convert the symbol's token index. */
     to_return->v = old->v & ~SYM_EXTENDED;
 
-    /* As far as I can tell, the 'r' field is not used by
-     * preprocessor macros. Just copy it in the off-chance I'm wrong. */
-    to_return->r = old->r;
+    /* Copy the type. define_push and parse_define indicate that this
+     * will be either MACRO_OBJ or MACRO_FUNC. */
+    to_return->type_t = old->type.t;
 
     /* Copy the tokenstream if it exists */
     if (old->d != NULL) {
@@ -783,10 +737,6 @@ Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh)
          * originals, so we can just copy the token stream verbatim! */
         memcpy(to_return->d, old->d, sizeof(int) * len);
     }
-
-    /* Set the type. define_push and parse_define indicate that this
-     * will be either MACRO_OBJ or MACRO_FUNC. */
-    to_return->type.t = old->type.t;
 
     /* Copy the macro arguments. */
     to_return->next = get_new_deftab_pointer(old->next, rh);
@@ -818,7 +768,6 @@ int should_copy_TokenSym(TokenSym * to_check, int tok_start)
 
 /* Make a complete copy of the TokenSym and Sym tables, using a ram_hash
  * for the latter. */
-
 void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
 {
     int i, N_tokens, tok_start_offset;
@@ -833,7 +782,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
     /* Count the number of tokens that we'll store whose token ids come
      * before tok_start. (We know we'll at least have everything after
      * and including tok_start.) */
-
     tok_start_offset = 0;
     for (i = 0; i < tok_start - TOK_IDENT; i++) {
         if (should_copy_TokenSym(table_ident[i], tok_start)) tok_start_offset++;
@@ -859,24 +807,23 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
     {
         TokenSym * tok_copy = table_ident[i];
         int tokensym_size;
-        TokenSym * tok_sym;
+        exsymtabTokenSym * tok_sym;
 
         if (!should_copy_TokenSym(tok_copy, tok_start)) continue;
-        tokensym_size = sizeof(TokenSym) + tok_copy->len;
+        tokensym_size = sizeof(exsymtabTokenSym) + tok_copy->len;
         tok_sym = to_return->tokenSym_list[curr_tok_idx++]
                 = tcc_malloc(tokensym_size);
 
         /* Follow the code from tok_alloc_new in tccpp.c */
+        tok_sym->global_sym = NULL;
         tok_sym->tok = tok_copy->tok;
         tok_sym->sym_define
             = get_new_deftab_pointer(tok_copy->sym_define, def_rh);
-        tok_sym->sym_label = NULL; /* Not copying labels */
         tok_sym->sym_struct
             = get_new_symtab_pointer(tok_copy->sym_struct, sym_rh);
         tok_sym->sym_identifier
             = get_new_symtab_pointer(tok_copy->sym_identifier, sym_rh);
         tok_sym->len = tok_copy->len;
-        tok_sym->hash_next = NULL;
         memcpy(tok_sym->str, tok_copy->str, tok_copy->len);
         tok_sym->str[tok_copy->len] = '\0';
 
@@ -892,13 +839,13 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
     if (s->nb_inline_fns > 0)
     {
         int N;
-        InlineFunc* new_func;
+        exsymtabInlineFunc* new_func;
         InlineFunc* old_func;
 
         /* make room for the number of inline functions */
         N = s->nb_inline_fns;
         to_return->N_inline_funcs = N;
-        to_return->inline_funcs = tcc_malloc(N * sizeof(InlineFunc*));
+        to_return->inline_funcs = tcc_malloc(N * sizeof(exsymtabInlineFunc*));
 
         /* Copy each inline function verbatim. Based on the behavior of
          * get_new_deftab_pointer, I do not need to update any token ids.
@@ -914,7 +861,6 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
 
             /* Copy the token stream, WITHOUT replacement (see copy_extended_tokensym
              * for contrast) */
-
             ts_len = tokenstream_len(old_func->FUNC_STR);
             new_func->func_str = tcc_malloc(sizeof(TokenString));
             new_func->FUNC_STR = tcc_malloc(ts_len * sizeof(int));
@@ -931,21 +877,20 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
     s->exsymtab = to_return;
 }
 
-void exsymtab_free_sym (Sym * to_delete, int is_def)
+void exsymtab_free_def_contents (exsymtabDef * to_delete)
 {
     if (to_delete == NULL) return;
-    /* If it's a define Sym, delete the token stream */
-    if (is_def) tcc_free(to_delete->d);
+    /* delete the token stream */
+    tcc_free(to_delete->d);
 }
 
 /* Frees memory associated with a copied extended symbol table. For a
  * description of the structure of the allocated memory, see the copy
  * function above. */
-
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
 {
-    TokenSym** ts_to_delete;
-    TokenSym** done;
+    exsymtabTokenSym** ts_to_delete;
+    exsymtabTokenSym** done;
 
     if (symtab == NULL) return;
 
@@ -956,15 +901,13 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
 
         if (symtab->N_syms == 0)
         {
-            /* Iterate through all Syms in the ram tree */
+            /* Iterate through all Syms in the ram hash */
             if (symtab->sym_rh->N > 0)
             {
                 void * iterator_data = NULL;
                 do {
-                    void ** data_ref = ram_hash_iterate(symtab->sym_rh, &iterator_data);
-                    exsymtab_free_sym((Sym *)*data_ref, 0);
-
                     /* Clear the symbol itself */
+                    void ** data_ref = ram_hash_iterate(symtab->sym_rh, &iterator_data);
                     tcc_free(*data_ref);
                 } while (iterator_data != NULL);
             }
@@ -974,12 +917,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
         }
         else
         {
-            int i;
-            /* Iterate through all Syms in the list */
-            for (i = 0; i < symtab->N_syms; i++)
-                exsymtab_free_sym(symtab->sym_list + i, 0);
-
-            /* Clean up the sym list itself */
+            /* Clean up the sym list in one shot */
             tcc_free(symtab->sym_list);
         }
     }
@@ -993,7 +931,8 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
                 void * iterator_data = NULL;
                 do {
                     void ** data_ref = ram_hash_iterate(symtab->def_rh, &iterator_data);
-                    exsymtab_free_sym((Sym *)*data_ref, 1);
+                    /* clear each non-null token stream */
+                    exsymtab_free_def_contents(*data_ref);
                     tcc_free(*data_ref);
                 } while (iterator_data != NULL);
             }
@@ -1001,8 +940,10 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
         }
         else {
             int i;
-            for (i = 0; i < symtab->N_defs; i++)
-                exsymtab_free_sym(symtab->def_list + i, 1);
+            /* clear all token streams */
+            for (i = 0; i < symtab->N_defs; i++) {
+                exsymtab_free_def_contents(symtab->def_list + i);
+			}
             tcc_free(symtab->def_list);
         }
     }
@@ -1035,7 +976,7 @@ LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab)
 
 /* A function that performs a number of tests for me. I only export a single
  * function to avoid cluttering up the TCC API. */
-enum {
+enum TS_TEST_TYPES {
     TS_TEST_GET_TOK,
     TS_TEST_HAS_DEFINE,
     TS_TEST_HAS_STRUCT,
@@ -1044,7 +985,7 @@ enum {
 
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab_p symtab, int to_test, const char * name)
 {
-    TokenSym * ts;
+    exsymtabTokenSym * ts;
 
     /* Get the tokenSym by the given name */
     ts = *token_string_hash_get_ref(symtab->tsh, name);
@@ -1073,7 +1014,7 @@ LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab * symtab)
     int i;
     for (i = 0; i < symtab->tok_start_offset; i++)
     {
-        TokenSym * ext_ts = symtab->tokenSym_list[i];
+        exsymtabTokenSym * ext_ts = symtab->tokenSym_list[i];
         int flagless_tok = ext_ts->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED | SYM_FIRST_ANOM);
         TokenSym * local_ts = table_ident[flagless_tok - TOK_IDENT];
 
@@ -1127,7 +1068,6 @@ void local_stack_on() {
  * Note that the final symtab pointer is the symtab associated with the
  * input stream, not the output stream.
  */
-
 int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab)
 {
     int len;
@@ -1212,10 +1152,9 @@ int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab)
  * contexts and so it is simply returned. If the token id is equal to or above
  * tok_start, this obtains a pointer to a local TokenSym and returns that
  * TokenSym's token id, together with the flags of the origina, extended token id. */
-
 int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab)
 {
-    TokenSym* orig_ts;
+    exsymtabTokenSym* orig_ts;
     TokenSym* local_ts;
     int tok_start, tok_start_offset, orig_tok_no_fields, orig_tok_offset;
 
@@ -1228,7 +1167,6 @@ int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab)
 
     /* special case for ordinary tokens that exist in all compiler contexts,
      * including "data", "string", and others. */
-
     if (orig_tok_no_fields < tok_start) return orig_tok;
 
     /* figure out the offset of the extended tokensym */
@@ -1243,7 +1181,6 @@ int get_local_tok_for_extended_tok(int orig_tok, extended_symtab* symtab)
 
 /* Figures out the local TokenSym for a given extended token id. Uses
  * get_local_ts_for_extended_ts to generate a new local TokenSym if necessary. */
-
 TokenSym * get_local_tokensym_for_extended_tok(int tok, extended_symtab * symtab)
 {
     int tok_start;
@@ -1258,7 +1195,7 @@ TokenSym * get_local_tokensym_for_extended_tok(int tok, extended_symtab * symtab
          * array offset and (2) we have a function that'll create a local TokenSym
          * if one isn't already available. */
 
-        TokenSym * from_ts = symtab->tokenSym_list[tok - tok_start + symtab->tok_start_offset];
+        exsymtabTokenSym * from_ts = symtab->tokenSym_list[tok - tok_start + symtab->tok_start_offset];
         return get_local_ts_for_extended_ts(from_ts, symtab);
     }
 
@@ -1266,11 +1203,12 @@ TokenSym * get_local_tokensym_for_extended_tok(int tok, extended_symtab * symtab
     return table_ident[tok - TOK_IDENT];
 }
 
-void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym * to)
+void copy_extended_tokensym (extended_symtab* symtab, exsymtabTokenSym * from, TokenSym * to)
 {
-    /* Mark this token as extended. This will cause a symbol-used callback to be
-     * fired the first time this token is used in reference to a symbol (at
-     * which point the extended flag will be cleared). */
+    /* Mark the target token as extended. This will cause a symbol-used
+     * callback to be fired the first time this token is used in
+     * reference to a symbol (at which point the extended flag will be
+     * cleared). */
 
     to->tok |= SYM_EXTENDED;
 
@@ -1295,7 +1233,7 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
     {
         int i;
         InlineFunc* new_func;
-        InlineFunc* old_func;
+        exsymtabInlineFunc* old_func;
 
         /* Find the associated inline func, copy its contents, add to
          * current context's collection of inline functions */
@@ -1336,7 +1274,8 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
         to->sym_define = NULL;
     else
     {
-        Sym *first_arg, *curr_from_arg, *newest_arg, **p_curr_arg;
+        Sym *first_arg, *newest_arg, **p_curr_arg;
+        exsymtabDef *curr_from_arg;
 
         /* Otherwise, we need to copy it and update all of the token values. I
          * refrain from using the tok_str_* functions because I already have the
@@ -1346,11 +1285,9 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
          * compilation context rather than the original extended symbol table. */
 
         /* Copy the token stream, WITH replacement */
-
         int * from_stream = from->sym_define->d;
         int len = tokenstream_len(from_stream);
         int * to_stream = tcc_malloc(sizeof(int) * len);
-
         memcpy(to_stream, from_stream, sizeof(int) * len);
         tokenstream_copy(from_stream, to_stream, symtab);
 
@@ -1367,7 +1304,7 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
 
             /* Add the argument to the local define stack and move the chains */
             newest_arg = sym_push2(&define_stack, local_ts->tok | SYM_FIELD,
-                curr_from_arg->type.t, 0);
+                curr_from_arg->type_t, 0);
             *p_curr_arg = newest_arg;
             p_curr_arg = &newest_arg->next;
         }
@@ -1376,9 +1313,9 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
          * current compilation context. */
 
         #ifdef BEFORE_hash_opt
-          define_push     (to->tok, from->sym_define->type.t, to_stream, first_arg); /* sym_define is now set */
+          define_push     (to->tok, from->sym_define->type_t, to_stream, first_arg); /* sym_define is now set */
         #else
-          define_push_old (to->tok, from->sym_define->type.t, to_stream, first_arg); /* sym_define is now set */
+          define_push_old (to->tok, from->sym_define->type_t, to_stream, first_arg); /* sym_define is now set */
         #endif
     }
 }
@@ -1412,11 +1349,11 @@ void copy_extended_tokensym (extended_symtab * symtab, TokenSym * from, TokenSym
     else to_type.ref = NULL; \
 } while(0)
 
-Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok)
+Sym * copy_extended_sym (extended_symtab * symtab, exsymtabSym * from, int to_tok)
 {
     CType to_type;
     Sym * s;
-    Sym * from_next;
+    exsymtabSym * from_next;
     Sym **psnext;
 
     if (from == NULL) return NULL;
@@ -1427,7 +1364,8 @@ Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok)
     s = sym_push(to_tok, &to_type, from->r, from->c);
 
     /* Copy the assembler label, if present */
-	s->asm_label = get_local_tok_for_extended_tok(from->asm_label, symtab);
+    /* XXX remove once this is shown to be OK */
+/*	s->asm_label = get_local_tok_for_extended_tok(from->asm_label, symtab); */
 
     /* All done unless we have a next field to copy as well. */
     if (from->next == NULL) return s;
@@ -1483,41 +1421,68 @@ Sym * copy_extended_sym (extended_symtab * symtab, Sym * from, int to_tok)
 
 LIBTCCAPI int tcc_set_extended_symbol(extended_symtab * symtab, const char * name, const void * pointer)
 {
-    TokenSym * ts = tcc_get_extended_tokensym(symtab, name);
+    exsymtabTokenSym * ts = tcc_get_extended_tokensym(symtab, name);
     if (ts == NULL) return 0; /* failed */
 
-    ts->hash_next = (void*)pointer;
+    ts->global_sym = (void*)pointer;
 
     /* XXX working here - update sym's type.t as well??? */
     return 1; /* succeeded */
 }
 
-/* Write the total number of tokens that live on the end of this exsymtab, as
- * well as tok_start. */
-
+/* Write the cache format version, the total number of tokens that live
+ * on the end of this exsymtab, and tok_start and offset. */
 int exsymtab_serialize_init(extended_symtab * symtab, FILE * out_fh)
 {
-    int to_write[3];
+    int to_write[4];
 
-    to_write[0] = symtab->tokenSym_last - symtab->tokenSym_list; /* N_tokens */
-    to_write[1] = symtab->tok_start;
-    to_write[2] = symtab->tok_start_offset;
+    to_write[0] = EXSYMTAB_CACHE_FORMAT_VERSION;
+    to_write[1] = symtab->tokenSym_last - symtab->tokenSym_list; /* N_tokens */
+    to_write[2] = symtab->tok_start;
+    to_write[3] = symtab->tok_start_offset;
 
-    if (fwrite(to_write, sizeof(int), 3, out_fh) == 3) return 1;
+    if (fwrite(to_write, sizeof(int), 4, out_fh) == 4) return 1;
 
     /* Failed to serialize; write a message and return failure */
-    printf("Serialization failed: Unable to serialize the number of tokens, tok_start, and tok_start_offset\n");
+    printf("Serialization failed: Unable to serialize the cache file "
+		"version, number of tokens, tok_start, and tok_start_offset\n");
     return 0;
 }
 
-/* Get the total number of tokens that live on the end of this exsymtab
- * and allocate an exsymtab struct with enough room; read and set tok_start */
-
+/* Check the cache format version, tet the total number of tokens that
+ * live on the end of this exsymtab and allocate an exsymtab struct with
+ * enough room; read and set tok_start and offset. */
 extended_symtab * exsymtab_deserialize_init(FILE * in_fh)
 {
-    int N_tokens;
+    int N_tokens, cache_version;
     extended_symtab * symtab;
 
+    if (fread(&cache_version, sizeof(int), 1, in_fh) != 1) {
+		printf("Deserialization failed: Unable to get the cache file "
+			"format version\n");
+		return NULL;
+	}
+
+/* remove this, and the following stop-gap, by the time we reach v4 */
+if (EXSYMTAB_CACHE_FORMAT_VERSION > 3) {
+printf("Internal brain damage at %s line %d: this was supposed to be "
+"removed by now!\n", __FILE__, __LINE__);
+}
+	if (cache_version != EXSYMTAB_CACHE_FORMAT_VERSION) {
+/* This is a temporary stop-gap since there was no stored cache version
+ * prior to v0. Get rid of this after v3. */
+if (cache_version > 3) {
+printf("Deserialization failed: Probably using cached file that "
+"pre-dates cache versioning\n");
+return NULL;
+}
+		printf("Deserialization failed: attempting to load %ser cache "
+			"version %d (current version is %d)\n",
+			cache_version < EXSYMTAB_CACHE_FORMAT_VERSION ? "old" : "new",
+			cache_version, EXSYMTAB_CACHE_FORMAT_VERSION);
+		return NULL;
+	}
+    
     if (fread(&N_tokens, sizeof(int), 1, in_fh) != 1) {
         printf("Deserialization failed: Unable to get the number of tokens\n");
         return NULL;
@@ -1526,7 +1491,6 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh)
     /* Allocate the symtab. I use mallocz so that it is full of NULLs.
      * This way, if deserialization fails durinig a later state, I can
      * simply invoke the symtab's delete and be done. */
-
     symtab = tcc_mallocz(sizeof(extended_symtab) + sizeof(void*) * (N_tokens - 1));
     if (symtab == NULL) {
         printf("Deserialization failed: Unable to allocate symtab to hold %d tokens\n", N_tokens);
@@ -1552,7 +1516,7 @@ extended_symtab * exsymtab_deserialize_init(FILE * in_fh)
 
 /**** v, token id ****/
 
-int exsymtab_serialize_v(FILE * out_fh, Sym * curr_sym)
+int exsymtab_serialize_v(FILE * out_fh, exsymtabSymBase * curr_sym)
 {
     if (fwrite(&curr_sym->v, sizeof(int), 1, out_fh) != 1) {
         printf("Serialization failed: Unable to write Sym's token "
@@ -1562,7 +1526,7 @@ int exsymtab_serialize_v(FILE * out_fh, Sym * curr_sym)
     return 1;
 }
 
-int exsymtab_deserialize_v(FILE * in_fh, Sym * curr_sym, int i)
+int exsymtab_deserialize_v(FILE * in_fh, exsymtabSymBase * curr_sym, int i)
 {
     /* Read v */
     if (fread(&(curr_sym->v), sizeof(int), 1, in_fh) != 1) {
@@ -1575,7 +1539,7 @@ int exsymtab_deserialize_v(FILE * in_fh, Sym * curr_sym, int i)
 
 /**** Associated register ****/
 
-int exsymtab_serialize_r(FILE * out_fh, Sym * curr_sym)
+int exsymtab_serialize_r(FILE * out_fh, exsymtabSym * curr_sym)
 {
     if (fwrite(&curr_sym->r, sizeof(curr_sym->r), 1, out_fh) != 1) {
         printf("Serialization failed: Unable to write "
@@ -1585,7 +1549,7 @@ int exsymtab_serialize_r(FILE * out_fh, Sym * curr_sym)
     return 1;
 }
 
-int exsymtab_deserialize_r(FILE * in_fh, Sym * curr_sym, int i)
+int exsymtab_deserialize_r(FILE * in_fh, exsymtabSym * curr_sym, int i)
 {
     if (fread(&(curr_sym->r), sizeof(curr_sym->r), 1, in_fh) != 1) {
         printf("Deserialization failed: Unable to read associated "
@@ -1597,19 +1561,19 @@ int exsymtab_deserialize_r(FILE * in_fh, Sym * curr_sym, int i)
 
 /**** type.t ****/
 
-int exsymtab_serialize_type_t(FILE * out_fh, Sym * curr_sym)
+int exsymtab_serialize_type_t(FILE * out_fh, int t, int v)
 {
-    if (fwrite(&curr_sym->type.t, sizeof(curr_sym->type.t), 1, out_fh) != 1) {
+    if (fwrite(&t, sizeof(int), 1, out_fh) != 1) {
         printf("Serialization failed: Unable to write type.t for "
-            "Sym %d\n", curr_sym->v);
+            "Sym %d\n", v);
         return 0;
     }
     return 1;
 }
 
-int exsymtab_deserialize_type_t(FILE * in_fh, Sym * curr_sym, int i)
+int exsymtab_deserialize_type_t(FILE * in_fh, int *t_ref, int i)
 {
-    if (fread(&(curr_sym->type.t), sizeof(curr_sym->type.t), 1, in_fh) != 1) {
+    if (fread(t_ref, sizeof(int), 1, in_fh) != 1) {
         printf("Deserialization failed: Unable to read type.t for "
             "Sym number %d\n", i);
         return 0;
@@ -1619,7 +1583,7 @@ int exsymtab_deserialize_type_t(FILE * in_fh, Sym * curr_sym, int i)
 
 /**** next ****/
 
-int exsymtab_serialize_next(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
+int exsymtab_serialize_next(FILE * out_fh, exsymtabSymBase * curr_sym, ram_hash * offset_rt)
 {
     /* Default to serializing NULL */
     void * to_write = NULL;
@@ -1638,28 +1602,31 @@ int exsymtab_serialize_next(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
     return 1;
 }
 
-int exsymtab_deserialize_next(FILE * in_fh, Sym * sym_list, int i)
+#define _exsymtab_deserialize_next(in_fh, sym_list, i) \
+    uintptr_t offset; \
+    /* read the offset */ \
+    if (fread(&offset, sizeof(void*), 1, in_fh) != 1) { \
+        printf("Deserialization failed: Unable to read 'next' pointer " \
+            "for Sym number %d\n", i); \
+        return 0; \
+    } \
+    /* Set next field based on offset */ \
+    if (offset == 0) sym_list[i].next = NULL; \
+    else sym_list[i].next = sym_list + offset - 1; /* note off-by-one */ \
+    return 1; \
+	
+int exsymtab_deserialize_Sym_next(FILE * in_fh, exsymtabSym * sym_list, int i)
 {
-    Sym * curr_sym = sym_list + i;
-    uintptr_t offset;
-
-    /* read the offset */
-    if (fread(&offset, sizeof(void*), 1, in_fh) != 1) {
-        printf("Deserialization failed: Unable to read 'next' pointer "
-            "for Sym number %d\n", i);
-        return 0;
-    }
-
-    /* Set next field based on offset */
-    if (offset == 0) curr_sym->next = NULL;
-    else curr_sym->next = sym_list + offset - 1; /* note off-by-one */
-
-    return 1;
+	_exsymtab_deserialize_next(in_fh, sym_list, i)
+}
+int exsymtab_deserialize_Def_next(FILE * in_fh, exsymtabDef * sym_list, int i)
+{
+	_exsymtab_deserialize_next(in_fh, sym_list, i)
 }
 
 /**** token stream, field d ****/
 
-int exsymtab_serialize_token_stream(FILE * out_fh, Sym * curr_sym)
+int exsymtab_serialize_token_stream(FILE * out_fh, exsymtabDef * curr_sym)
 {
     /* write the length of the token stream first */
     int ts_len = 0;
@@ -1685,7 +1652,7 @@ int exsymtab_serialize_token_stream(FILE * out_fh, Sym * curr_sym)
     return 0;
 }
 
-int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i)
+int exsymtab_deserialize_token_stream(FILE * in_fh, exsymtabDef * curr_sym, int i)
 {
     /* get the length of the token stream */
     int ts_len;
@@ -1720,7 +1687,7 @@ int exsymtab_deserialize_token_stream(FILE * in_fh, Sym * curr_sym, int i)
 
 /**** type.ref ****/
 
-int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
+int exsymtab_serialize_type_ref(FILE * out_fh, exsymtabSym * curr_sym, ram_hash * offset_rt)
 {
     /* Get offset if non-null. */
     void * to_write = NULL;
@@ -1739,13 +1706,13 @@ int exsymtab_serialize_type_ref(FILE * out_fh, Sym * curr_sym, ram_hash * offset
     return 1;
 }
 
-int exsymtab_deserialize_type_ref(FILE * in_fh, Sym * sym_list, int i)
+int exsymtab_deserialize_type_ref(FILE * in_fh, exsymtabSym * sym_list, int i)
 {
     /* Unlike the case for serialization, deserializing this pointer is
      * fairly easy. If something needs external linkage, then it will be
      * null. It'll need to be patched by tcc_set_extended_symbol. */
 
-    Sym * curr_sym = sym_list + i;
+    exsymtabSym * curr_sym = sym_list + i;
     uintptr_t offset;
 
     if (fread(&offset, sizeof(void*), 1, in_fh) != 1) {
@@ -1761,22 +1728,44 @@ int exsymtab_deserialize_type_ref(FILE * in_fh, Sym * sym_list, int i)
     return 1;
 }
 
-/**** field c ****/
+/**** field a, symbol attributes ****/
 
-int exsymtab_serialize_c(FILE * out_fh, Sym * curr_sym)
+int exsymtab_serialize_a(FILE * out_fh, exsymtabSym * curr_sym)
 {
-    if (fwrite(&curr_sym->c, sizeof(curr_sym->c), 1, out_fh) != 1) {
-        printf("Serialization failed: Unable to write "
-            "field c for Sym %d\n", curr_sym->v);
+    if (fwrite(&curr_sym->a, sizeof(curr_sym->a), 1, out_fh) != 1) {
+        printf("Serialization failed: Unable to write symbol "
+            "attributes for Sym %d\n", curr_sym->v);
         return 0;
     }
     return 1;
 }
 
-int exsymtab_deserialize_c(FILE * in_fh, Sym * curr_sym, int i)
+int exsymtab_deserialize_a(FILE * in_fh, exsymtabSym * curr_sym, int i)
 {
-    if (fread(&(curr_sym->c), sizeof(curr_sym->c), 1, in_fh) != 1) {
-        printf("Deserialization failed: Unable to read field c "
+    if (fread(&(curr_sym->a), sizeof(curr_sym->a), 1, in_fh) != 1) {
+        printf("Deserialization failed: Unable to read symbol "
+			"attributes for Sym number %d\n", i);
+        return 0;
+    }
+    return 1;
+}
+
+/**** field enum_val ****/
+
+int exsymtab_serialize_enum_val(FILE * out_fh, exsymtabSym * curr_sym)
+{
+    if (fwrite(&curr_sym->enum_val, sizeof(curr_sym->enum_val), 1, out_fh) != 1) {
+        printf("Serialization failed: Unable to write field enum_val "
+            "for Sym %d\n", curr_sym->v);
+        return 0;
+    }
+    return 1;
+}
+
+int exsymtab_deserialize_enum_val(FILE * in_fh, exsymtabSym * curr_sym, int i)
+{
+    if (fread(&(curr_sym->enum_val), sizeof(curr_sym->enum_val), 1, in_fh) != 1) {
+        printf("Deserialization failed: Unable to read field enum_val "
             "for Sym number %d\n", i);
         return 0;
     }
@@ -1784,7 +1773,7 @@ int exsymtab_deserialize_c(FILE * in_fh, Sym * curr_sym, int i)
 }
 
 /**** Assembler label ****/
-
+/*
 int exsymtab_serialize_asm_label(FILE * out_fh, Sym * curr_sym)
 {
     if (fwrite(&curr_sym->asm_label, sizeof(curr_sym->asm_label), 1,
@@ -1808,33 +1797,35 @@ int exsymtab_deserialize_asm_label(FILE * in_fh, Sym * curr_sym, int i)
     }
     return 1;
 }
-
+*/
 /**** Serialize/deserialize a full Sym ****/
 
-int exsymtab_serialize_sym(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
+int exsymtab_serialize_sym(FILE * out_fh, exsymtabSym * curr_sym, ram_hash * offset_rt)
 {
-    if (!exsymtab_serialize_v(out_fh, curr_sym)) return 0;
+    if (!exsymtab_serialize_next(out_fh, (exsymtabSymBase*)curr_sym, offset_rt)) return 0;
+    if (!exsymtab_serialize_v(out_fh, (exsymtabSymBase*)curr_sym)) return 0;
     if (!exsymtab_serialize_r(out_fh, curr_sym)) return 0;
-    if (!exsymtab_serialize_type_t(out_fh, curr_sym)) return 0;
-    if (!exsymtab_serialize_next(out_fh, curr_sym, offset_rt)) return 0;
+    if (!exsymtab_serialize_a(out_fh, curr_sym)) return 0;
+    if (!exsymtab_serialize_enum_val(out_fh, curr_sym)) return 0;
+    if (!exsymtab_serialize_type_t(out_fh, curr_sym->type.t, curr_sym->v)) return 0;
     if (!exsymtab_serialize_type_ref(out_fh, curr_sym, offset_rt)) return 0;
-    if (!exsymtab_serialize_c(out_fh, curr_sym)) return 0;
-    if (!exsymtab_serialize_asm_label(out_fh, curr_sym)) return 0;
+//    if (!exsymtab_serialize_asm_label(out_fh, curr_sym)) return 0;
 
     /* Success! */
     return 1;
 }
 
-int exsymtab_deserialize_sym(FILE * in_fh, Sym * sym_list, int i)
+int exsymtab_deserialize_sym(FILE * in_fh, exsymtabSym * sym_list, int i)
 {
-    Sym * curr_sym = sym_list + i;
-    if (!exsymtab_deserialize_v(in_fh, curr_sym, i)) return 0;
+    exsymtabSym * curr_sym = sym_list + i;
+    if (!exsymtab_deserialize_Sym_next(in_fh, sym_list, i)) return 0;
+    if (!exsymtab_deserialize_v(in_fh, (exsymtabSymBase*)curr_sym, i)) return 0;
     if (!exsymtab_deserialize_r(in_fh, curr_sym, i)) return 0;
-    if (!exsymtab_deserialize_type_t(in_fh, curr_sym, i)) return 0;
-    if (!exsymtab_deserialize_next(in_fh, sym_list, i)) return 0;
+    if (!exsymtab_deserialize_a(in_fh, curr_sym, i)) return 0;
+    if (!exsymtab_deserialize_enum_val(in_fh, curr_sym, i)) return 0;
+    if (!exsymtab_deserialize_type_t(in_fh, &(curr_sym->type.t), i)) return 0;
     if (!exsymtab_deserialize_type_ref(in_fh, sym_list, i)) return 0;
-    if (!exsymtab_deserialize_c(in_fh, curr_sym, i)) return 0;
-    if (!exsymtab_deserialize_asm_label(in_fh, curr_sym, i)) return 0;
+//    if (!exsymtab_deserialize_asm_label(in_fh, curr_sym, i)) return 0;
 
     /* Success! */
     return 1;
@@ -1842,25 +1833,23 @@ int exsymtab_deserialize_sym(FILE * in_fh, Sym * sym_list, int i)
 
 /**** Serialize/deserialize a full Def ****/
 
-int exsymtab_serialize_def(FILE * out_fh, Sym * curr_sym, ram_hash * offset_rt)
+int exsymtab_serialize_def(FILE * out_fh, exsymtabDef * curr_sym, ram_hash * offset_rt)
 {
-    if (!exsymtab_serialize_v(out_fh, curr_sym)) return 0;
-    if (!exsymtab_serialize_r(out_fh, curr_sym)) return 0;
-    if (!exsymtab_serialize_type_t(out_fh, curr_sym)) return 0;
-    if (!exsymtab_serialize_next(out_fh, curr_sym, offset_rt)) return 0;
+    if (!exsymtab_serialize_next(out_fh, (exsymtabSymBase*)curr_sym, offset_rt)) return 0;
+    if (!exsymtab_serialize_v(out_fh, (exsymtabSymBase*)curr_sym)) return 0;
+    if (!exsymtab_serialize_type_t(out_fh, curr_sym->type_t, curr_sym->v)) return 0;
     if (!exsymtab_serialize_token_stream(out_fh, curr_sym)) return 0;
 
     /* Success! */
     return 1;
 }
 
-int exsymtab_deserialize_def(FILE * in_fh, Sym * sym_list, int i)
+int exsymtab_deserialize_def(FILE * in_fh, exsymtabDef * sym_list, int i)
 {
-    Sym * curr_sym = sym_list + i;
-    if (!exsymtab_deserialize_v(in_fh, curr_sym, i)) return 0;
-    if (!exsymtab_deserialize_r(in_fh, curr_sym, i)) return 0;
-    if (!exsymtab_deserialize_type_t(in_fh, curr_sym, i)) return 0;
-    if (!exsymtab_deserialize_next(in_fh, sym_list, i)) return 0;
+    exsymtabDef * curr_sym = sym_list + i;
+    if (!exsymtab_deserialize_Def_next(in_fh, sym_list, i)) return 0;
+    if (!exsymtab_deserialize_v(in_fh, (exsymtabSymBase*)curr_sym, i)) return 0;
+    if (!exsymtab_deserialize_type_t(in_fh, &(curr_sym->type_t), i)) return 0;
     if (!exsymtab_deserialize_token_stream(in_fh, curr_sym, i))
         return 0;
 
@@ -1878,31 +1867,28 @@ ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh, int 
 
     int N_syms_i;
     uintptr_t N_syms = 0;
-    ram_hash * offset_rt = ram_hash_new();
-    ram_hash * original_rt = symtab->sym_rh;
+    ram_hash * offset_rh = ram_hash_new();
+    ram_hash * original_rh = symtab->sym_rh;
 
-    if (is_def) original_rt = symtab->def_rh;
-    if (original_rt->N > 0)
+    if (is_def) original_rh = symtab->def_rh;
+    if (original_rh->N > 0)
     {
         void * iterator_data = NULL;
         N_syms = 0;
 
-        /* Iterate through all Syms in the ram tree */
+        /* Iterate through all Syms in the ram hash */
         do {
             void ** old_ref;
-            Sym * to_count;
             void ** new_ref;
 
             N_syms++;
-            /* Get the Sym pointer */
-            old_ref = ram_hash_iterate(original_rt, &iterator_data);
-            to_count = (Sym *)*old_ref;
+            /* Get the pointer to the pointer */
+            old_ref = ram_hash_iterate(original_rh, &iterator_data);
 
             /* Get and set the data slot for the mapping. Note that I do
              * not allocate any memory for this, I merely treat the void*
              * as an integer via uintptr_t. */
-
-            new_ref = ram_hash_get_ref(offset_rt, to_count);
+            new_ref = ram_hash_get_ref(offset_rh, *old_ref);
             *new_ref = (void*)N_syms; /* note 1-offset, not 0-offset */
         } while (iterator_data != NULL);
     }
@@ -1925,12 +1911,11 @@ ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh, int 
         void * iterator_data = NULL;
         do {
             /* Get the Sym pointer */
-            void ** old_ref = ram_hash_iterate(original_rt, &iterator_data);
-            Sym * to_serialize = (Sym *)*old_ref;
+            void ** to_serialize_p = ram_hash_iterate(original_rh, &iterator_data);
 
             /* Call the appropriate serialization function */
-            int result = is_def ? exsymtab_serialize_def(out_fh, to_serialize, offset_rt)
-                                : exsymtab_serialize_sym(out_fh, to_serialize, offset_rt);
+            int result = is_def ? exsymtab_serialize_def(out_fh, *to_serialize_p, offset_rh)
+                                : exsymtab_serialize_sym(out_fh, *to_serialize_p, offset_rh);
 
             /* bow out early if bad things happened */
             if (result == 0) goto FAIL;
@@ -1938,18 +1923,17 @@ ram_hash * exsymtab_serialize_syms(extended_symtab * symtab, FILE * out_fh, int 
     }
 
     /* All done, return the offset ram_hash */
-    return offset_rt;
+    return offset_rh;
 
     /* In case of failure, clean up the offset ram tree */
 FAIL:
-    ram_hash_free(offset_rt);
+    ram_hash_free(offset_rh);
     return NULL;
 }
 
 int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh, int is_def)
 {
     int N_syms;
-    Sym * new_list;
     int i;
 
     /* Get the number of syms in sym_list */
@@ -1958,32 +1942,40 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh, int is_def
         return 0;
     }
 
-    /* Allocate the sym_list array. */
-    new_list = tcc_mallocz(sizeof(Sym) * (N_syms ? N_syms : 1));
-    if (new_list == NULL) {
-        printf("Deserialization failed: Unable to allocate array to "
-            "hold %d Syms\n", N_syms);
-        return 0;
-    }
-
-    /* Corner case: if zero, set internal value of N_syms to 1 so that
-     * deallocation will work correctly. */
     if (is_def) {
-        symtab->def_list = new_list;
+		/* Allocate the sym_list array. */
+		symtab->def_list = tcc_mallocz(sizeof(exsymtabDef) * (N_syms ? N_syms : 1));
+		if (symtab->def_list == NULL) {
+			printf("Deserialization failed: Unable to allocate array to "
+				"hold %d Syms\n", N_syms);
+			return 0;
+		}
+
+		/* Corner case: if zero, set internal value of N_syms to 1 so
+		 * that deallocation will work correctly. */
         symtab->N_defs = N_syms ? N_syms : 1;
 
         /* Deserialize each def. */
         for (i = 0; i < N_syms; i++) {
-            if (!exsymtab_deserialize_def(in_fh, new_list, i)) return 0;
+            if (!exsymtab_deserialize_def(in_fh, symtab->def_list, i)) return 0;
         }
     }
     else {
-        symtab->sym_list = new_list;
+		/* Allocate the sym_list array. */
+		symtab->sym_list = tcc_mallocz(sizeof(exsymtabSym) * (N_syms ? N_syms : 1));
+		if (symtab->sym_list == NULL) {
+			printf("Deserialization failed: Unable to allocate array to "
+				"hold %d Syms\n", N_syms);
+			return 0;
+		}
+
+		/* Corner case: if zero, set internal value of N_syms to 1 so
+		 * that deallocation will work correctly. */
         symtab->N_syms = N_syms ? N_syms : 1;
 
         /* Deserialize each sym. */
         for (i = 0; i < N_syms; i++) {
-            if (!exsymtab_deserialize_sym(in_fh, new_list, i)) return 0;
+            if (!exsymtab_deserialize_sym(in_fh, symtab->sym_list, i)) return 0;
         }
     }
 
@@ -1992,12 +1984,12 @@ int exsymtab_deserialize_syms(extended_symtab * symtab, FILE * in_fh, int is_def
 
 /**** Serialize/deserialize a single TokenSym ****/
 
-int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
-    ram_hash * sym_offset_rt, ram_hash * def_offset_rt)
+int exsymtab_serialize_tokensym(exsymtabTokenSym ** ts_list, int i,
+	FILE * out_fh, ram_hash * sym_offset_rh, ram_hash * def_offset_rh)
 {
     void * offset_list[3];
     void ** offset_ref;
-    TokenSym * ts = ts_list[i];
+    exsymtabTokenSym * ts = ts_list[i];
 
     /* start with the token name length so that deserialization can
      * allocate the needed memory. */
@@ -2016,11 +2008,11 @@ int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
     }
 
     /* Serialize the Sym pointer offsets */
-    offset_ref = ram_hash_get_ref(def_offset_rt, ts->sym_define);
+    offset_ref = ram_hash_get_ref(def_offset_rh, ts->sym_define);
     offset_list[0] = *offset_ref;
-    offset_ref = ram_hash_get_ref(sym_offset_rt, ts->sym_struct);
+    offset_ref = ram_hash_get_ref(sym_offset_rh, ts->sym_struct);
     offset_list[1] = *offset_ref;
-    offset_ref = ram_hash_get_ref(sym_offset_rt, ts->sym_identifier);
+    offset_ref = ram_hash_get_ref(sym_offset_rh, ts->sym_identifier);
     offset_list[2] = *offset_ref;
 
     if (fwrite(offset_list, sizeof(void*), 3, out_fh) != 3) {
@@ -2043,7 +2035,7 @@ int exsymtab_serialize_tokensym(TokenSym ** ts_list, int i, FILE * out_fh,
 int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok, FILE * in_fh)
 {
     int ts_len;
-    TokenSym * curr_ts;
+    exsymtabTokenSym * curr_ts;
     uintptr_t offset_list[3];
 
     /* Get the full tokensym length */
@@ -2054,11 +2046,11 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok, FILE *
     }
 
     /* Allocate it */
-    curr_ts = symtab->tokenSym_list[curr_tok] = tcc_mallocz(ts_len + sizeof(TokenSym));
+    curr_ts = symtab->tokenSym_list[curr_tok] = tcc_mallocz(ts_len + sizeof(exsymtabTokenSym));
 
     if (curr_ts == NULL) {
         printf("Deserialization failed: Unable to allocate %d bytes "
-            "for TokenSym number %d\n", (int)(ts_len + sizeof(TokenSym)), curr_tok);
+            "for TokenSym number %d\n", (int)(ts_len + sizeof(exsymtabTokenSym)), curr_tok);
         return 0;
     }
 
@@ -2091,7 +2083,7 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok, FILE *
     curr_ts->str[ts_len] = '\0';
     curr_ts->len = ts_len;
 
-    /* Add this to the trie */
+    /* Add this to the hash */
     *token_string_hash_get_ref(symtab->tsh, curr_ts->str) = curr_ts;
 
     /* Success! */
@@ -2101,13 +2093,13 @@ int exsymtab_deserialize_tokensym(extended_symtab * symtab, int curr_tok, FILE *
 /**** Serialize/deserialize the full set of TokenSyms ****/
 
 int exsymtab_serialize_tokensyms(extended_symtab * symtab, FILE * out_fh,
-    ram_hash * sym_offset_rt, ram_hash * def_offset_rt)
+    ram_hash * sym_offset_rh, ram_hash * def_offset_rh)
 {
     int i;
     int N_ts = symtab->tokenSym_last - symtab->tokenSym_list;
 
     for (i = 0; i < N_ts; i++) {
-        if (!exsymtab_serialize_tokensym(symtab->tokenSym_list, i, out_fh, sym_offset_rt, def_offset_rt))
+        if (!exsymtab_serialize_tokensym(symtab->tokenSym_list, i, out_fh, sym_offset_rh, def_offset_rh))
             return 0;
     }
     return 1;
@@ -2127,7 +2119,7 @@ int exsymtab_deserialize_tokensyms(extended_symtab * symtab, FILE * in_fh)
 
 /* Serialize the filename length (not including null) and its contents */
 int exsymtab_serialize_inline_func_filename(FILE * out_fh,
-    InlineFunc * curr_func)
+    exsymtabInlineFunc * curr_func)
 {
     int len = strlen(curr_func->filename);
     if (fwrite(&len, sizeof(int), 1, out_fh) != 1) {
@@ -2150,10 +2142,10 @@ int exsymtab_serialize_inline_func_filename(FILE * out_fh,
 /* Deserialize the filename length, allocate the InlineFunc struct with
  * enough room for the filename, and deserialize the filename. */
 
-InlineFunc * exsymtab_deserialize_inline_func_filename(FILE * in_fh, int inline_offset)
+exsymtabInlineFunc * exsymtab_deserialize_inline_func_filename(FILE * in_fh, int inline_offset)
 {
     int len;
-    InlineFunc * to_return;
+    exsymtabInlineFunc * to_return;
 
     if (fread(&len, sizeof(int), 1, in_fh) != 1) {
         printf("Deserialization failed: Unable to get length "
@@ -2161,7 +2153,7 @@ InlineFunc * exsymtab_deserialize_inline_func_filename(FILE * in_fh, int inline_
         return NULL;
     }
 
-    to_return = tcc_mallocz(sizeof(InlineFunc) + len);
+    to_return = tcc_mallocz(sizeof(exsymtabInlineFunc) + len);
     if (to_return == NULL) {
         printf("Deserialization failed: Unable to allocate memory for "
             "Inline function number %d\n", inline_offset);
@@ -2183,10 +2175,10 @@ InlineFunc * exsymtab_deserialize_inline_func_filename(FILE * in_fh, int inline_
  * similar logic */
 
 int exsymtab_serialize_inline_func_sym(FILE * out_fh,
-    InlineFunc * curr_func, ram_hash * sym_offset_rt)
+    exsymtabInlineFunc * curr_func, ram_hash * sym_offset_rh)
 {
     /* Of course, serialize the sym offset, not the sym itself */
-    void * sym_offset = *ram_hash_get_ref(sym_offset_rt, curr_func->sym);
+    void * sym_offset = *ram_hash_get_ref(sym_offset_rh, curr_func->sym);
     if (fwrite(&sym_offset, sizeof(void*), 1, out_fh) != 1) {
         printf("Serialization failed: Unable to write sym offset "
             "for inline function associated with Sym %d\n", curr_func->sym->v);
@@ -2198,7 +2190,7 @@ int exsymtab_serialize_inline_func_sym(FILE * out_fh,
 }
 
 int exsymtab_deserialize_inline_func_sym(FILE * in_fh, int inline_offset,
-    InlineFunc * curr_func, extended_symtab * symtab)
+    exsymtabInlineFunc * curr_func, extended_symtab * symtab)
 {
     uintptr_t offset;
     if (fread(&offset, sizeof(void*), 1, in_fh) != 1) {
@@ -2216,7 +2208,7 @@ int exsymtab_deserialize_inline_func_sym(FILE * in_fh, int inline_offset,
 /**** Serialize/deserialize an inline function token stream ****/
 
 int exsymtab_serialize_inline_func_token_stream(FILE * out_fh,
-    InlineFunc * curr_func)
+    exsymtabInlineFunc * curr_func)
 {
     int len = tokenstream_len(curr_func->FUNC_STR);
     if (fwrite(&len, sizeof(int), 1, out_fh) != 1) {
@@ -2235,7 +2227,7 @@ int exsymtab_serialize_inline_func_token_stream(FILE * out_fh,
 }
 
 int exsymtab_deserialize_inline_func_token_stream(FILE * in_fh,
-    int inline_offset, InlineFunc * curr_func)
+    int inline_offset, exsymtabInlineFunc * curr_func)
 {
     int len;
     int * stream;
@@ -2246,7 +2238,7 @@ int exsymtab_deserialize_inline_func_token_stream(FILE * in_fh,
         return 0;
     }
 
-    curr_func->func_str = tcc_malloc(sizeof(InlineFunc));
+    curr_func->func_str = tcc_malloc(sizeof(exsymtabInlineFunc));
     if (curr_func->func_str == NULL) {
         printf("Deserialization failed: Unable to allocate memory for "
             "Inline function number %d\n", inline_offset);
@@ -2275,11 +2267,11 @@ int exsymtab_deserialize_inline_func_token_stream(FILE * in_fh,
 
 /**** Serialize/deserialize an inline function ****/
 
-int exsymtab_serialize_inline_func(FILE * out_fh, InlineFunc * curr_func,
-    ram_hash * sym_offset_rt)
+int exsymtab_serialize_inline_func(FILE * out_fh, exsymtabInlineFunc * curr_func,
+    ram_hash * sym_offset_rh)
 {
     if (exsymtab_serialize_inline_func_filename(out_fh, curr_func)
-        && exsymtab_serialize_inline_func_sym(out_fh, curr_func, sym_offset_rt)
+        && exsymtab_serialize_inline_func_sym(out_fh, curr_func, sym_offset_rh)
         && exsymtab_serialize_inline_func_token_stream(out_fh, curr_func))
     {
         return 1;
@@ -2287,13 +2279,13 @@ int exsymtab_serialize_inline_func(FILE * out_fh, InlineFunc * curr_func,
     return 0;
 }
 
-InlineFunc *  exsymtab_deserialize_inline_func(FILE * in_fh,
+exsymtabInlineFunc *  exsymtab_deserialize_inline_func(FILE * in_fh,
     int inline_offset, extended_symtab * symtab)
 {
-    InlineFunc * to_return = exsymtab_deserialize_inline_func_filename(in_fh, inline_offset);
+    exsymtabInlineFunc * to_return = exsymtab_deserialize_inline_func_filename(in_fh, inline_offset);
     if (to_return == NULL) return NULL;
 
-    if (exsymtab_deserialize_inline_func_sym(in_fh, inline_offset,to_return, symtab) == 0)
+    if (exsymtab_deserialize_inline_func_sym(in_fh, inline_offset, to_return, symtab) == 0)
         goto FAIL;
 
     if (exsymtab_deserialize_inline_func_token_stream(in_fh, inline_offset, to_return) == 1)
@@ -2306,7 +2298,7 @@ FAIL:
 /**** Serialize/deserialize all inline functions ****/
 
 int exsymtab_serialize_inline_funcs(extended_symtab * symtab, FILE * out_fh,
-    ram_hash * sym_offset_rt)
+    ram_hash * sym_offset_rh)
 {
     int i;
 
@@ -2317,7 +2309,7 @@ int exsymtab_serialize_inline_funcs(extended_symtab * symtab, FILE * out_fh,
         return 0;
     }
     for (i = 0; i < symtab->N_inline_funcs; i++) {
-        if (!exsymtab_serialize_inline_func(out_fh, symtab->inline_funcs[i], sym_offset_rt))
+        if (!exsymtab_serialize_inline_func(out_fh, symtab->inline_funcs[i], sym_offset_rh))
             return 0;
     }
     return 1;
@@ -2325,7 +2317,7 @@ int exsymtab_serialize_inline_funcs(extended_symtab * symtab, FILE * out_fh,
 
 int exsymtab_deserialize_inline_funcs(extended_symtab * symtab, FILE * in_fh) {
     int len, i;
-    InlineFunc ** inline_funcs;
+    exsymtabInlineFunc ** inline_funcs;
 
     if (fread(&len, sizeof(int), 1, in_fh) != 1) {
         printf("Deserialization failed: Unable to get number of inline "
@@ -2333,7 +2325,7 @@ int exsymtab_deserialize_inline_funcs(extended_symtab * symtab, FILE * in_fh) {
         return 0;
     }
 
-    inline_funcs = tcc_mallocz(sizeof(InlineFunc *) * len);
+    inline_funcs = tcc_mallocz(sizeof(exsymtabInlineFunc *) * len);
     if (inline_funcs == NULL) {
         printf("Deserialization failed: Unable to allocate memory for "
             "Inline function list\n");
@@ -2356,8 +2348,8 @@ int exsymtab_deserialize_inline_funcs(extended_symtab * symtab, FILE * in_fh) {
 LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char * output_filename)
 {
     FILE * out_fh;
-    ram_hash * sym_offset_rt;
-    ram_hash * def_offset_rt;
+    ram_hash * sym_offset_rh;
+    ram_hash * def_offset_rh;
 
     /* Do nothing if we have an empty symtab. */
     if (NULL == symtab) return 0;
@@ -2370,35 +2362,35 @@ LIBTCCAPI int tcc_serialize_extended_symtab(extended_symtab * symtab, const char
         return 0;
     }
 
-    /* Start the file with two useful integers: the number of tokens and
-     * the value of tok_start. */
-    if (!exsymtab_serialize_init(symtab, out_fh))
-        goto FAIL;
+    /* Start the file with a cache version and three useful integers:
+     * the number of tokens, the value of tok_start, adn the starting
+     * token offset. */
+    if (!exsymtab_serialize_init(symtab, out_fh)) goto FAIL;
 
     /* Serialize the syms and defs */
-    sym_offset_rt = exsymtab_serialize_syms(symtab, out_fh, 0);
-    if (sym_offset_rt == NULL) goto FAIL;
+    sym_offset_rh = exsymtab_serialize_syms(symtab, out_fh, 0);
+    if (sym_offset_rh == NULL) goto FAIL;
 
-    def_offset_rt = exsymtab_serialize_syms(symtab, out_fh, 1);
-    if (def_offset_rt == NULL) goto FAIL_RT;
+    def_offset_rh = exsymtab_serialize_syms(symtab, out_fh, 1);
+    if (def_offset_rh == NULL) goto FAIL_RH;
 
     /* Serialize the TokenSyms */
-    if (!exsymtab_serialize_tokensyms(symtab, out_fh, sym_offset_rt, def_offset_rt))
-        goto FAIL_RT;
+    if (!exsymtab_serialize_tokensyms(symtab, out_fh, sym_offset_rh, def_offset_rh))
+        goto FAIL_RH;
 
     /* serialize the inline functions */
-    if (!exsymtab_serialize_inline_funcs(symtab, out_fh, sym_offset_rt))
-        goto FAIL_RT;
+    if (!exsymtab_serialize_inline_funcs(symtab, out_fh, sym_offset_rh))
+        goto FAIL_RH;
 
     /* All set! */
-    ram_hash_free(sym_offset_rt);
-    ram_hash_free(def_offset_rt);
+    ram_hash_free(sym_offset_rh);
+    ram_hash_free(def_offset_rh);
     fclose(out_fh);
     return 1;
 
-FAIL_RT:
-    ram_hash_free(sym_offset_rt);
-    ram_hash_free(def_offset_rt);
+FAIL_RH:
+    ram_hash_free(sym_offset_rh);
+    ram_hash_free(def_offset_rh);
 FAIL:
     fclose(out_fh);
     return 0;
@@ -2417,13 +2409,12 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
         return NULL;
     }
 
-    /* Allocate the symtab */
+    /* Check the cache version and allocate the symtab */
     symtab = exsymtab_deserialize_init(in_fh);
     if (symtab == NULL) goto FAIL;
 
-    /* Allocate the c_trie. This may some day be serialized and
-     * deserialized with the rest of the data, but for now keep things
-     * simple. */
+    /* Allocate the token string hash. This is not serialized separately
+     * bu is instead built dynamically as we load tokenSyms. */
 
     symtab->tsh = token_string_hash_new();
     if (symtab->tsh == NULL) {
@@ -2431,7 +2422,7 @@ LIBTCCAPI extended_symtab * tcc_deserialize_extended_symtab(const char * input_f
         goto FAIL;
     }
 
-    /* load the Syms, TokenSyms, and inline functions */
+    /* load the Syms, Defs, TokenSyms, and inline functions */
     if (!exsymtab_deserialize_syms(symtab, in_fh, 0)) goto FAIL;
     if (!exsymtab_deserialize_syms(symtab, in_fh, 1)) goto FAIL;
     if (!exsymtab_deserialize_tokensyms(symtab, in_fh)) goto FAIL;

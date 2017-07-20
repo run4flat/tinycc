@@ -12,6 +12,51 @@ char definition_code[] = "double foo(int bar, double *baz) { return 0; }\n";
 char declaration_code[] = "double foo(int bar, double *baz);\n";
 char consumer_code[] = "double mult_foo(double factor) { return factor * foo(0, 0); }";
 
+void compare_two_syms (exsymtabSym * decl, exsymtabSym * def, int indentation) {
+    #define compare(field, descr) is_i(decl-> field, def-> field, "    " descr " agree" + 4 - indentation)
+    /* Basic members of the Sym */
+    compare(r, "associated registers");
+    compare(c, "associated numbers/Elf symbol indexes");
+    compare(type.t, "type.t values");
+    
+    /* members of SymAttr */
+    compare(a.aligned, "SymAttr allignment");
+    compare(a.packed, "SymAttr packing");
+    compare(a.weak, "SymAttr weak");
+    compare(a.visibility, "SymAttr visibility");
+    compare(a.dllexport, "SymAttr dllexport");
+    compare(a.dllimport, "SymAttr dllimport");
+    compare(a.unsigned_enum, "SymAttr unsigned_enum");
+	
+	/* members of FuncAttr */
+    compare(f.func_call, "FuncAttr func_call");
+    compare(f.func_type, "FuncAttr func_type");
+    if (indentation == 1) {
+		ok(def->f.func_body != decl->f.func_body,
+			"    FuncAttr func_body do NOT AGREE, as expected" + 4 - indentation);
+	}
+	else compare(f.func_body, "FuncAttr func_body");
+    compare(f.func_args, "FuncAttr func_args");
+	
+	/* next field */
+	if (decl->next != NULL && def->next != NULL) {
+		printf("%s", "    Comparing next fields...\n" + 4 - indentation);
+		compare_two_syms (decl->next, def->next, indentation + 1);
+	}
+	else if (decl->next != NULL || def->next != NULL) {
+		fail("    next fields are not both null (or both non-null)" + 4 - indentation);
+	}
+	
+	/* type.ref field */
+	if (decl->type.ref != NULL && def->type.ref != NULL) {
+		printf("%s", "    Comparing type.ref fields...\n" + 4 - indentation);
+		compare_two_syms (decl->type.ref, def->type.ref, indentation + 1);
+	}
+	else if (decl->type.ref != NULL || def->type.ref != NULL) {
+		fail("    type.ref fields are not both null (or both non-null)" + 4 - indentation);
+	}
+}
+
 void compare_funcs(Sym * foo_decl, Sym * foo_def)
 {
     is_i(foo_def->r, foo_decl->r, "foo->r agree");
@@ -78,7 +123,7 @@ int main(int argc, char **argv)
     tcc_free(s1);
 
     /* get the symbol table layouts of the two */
-    TokenSym * ts = tcc_get_extended_tokensym(decl_symtab, "foo");
+    exsymtabTokenSym * ts = tcc_get_extended_tokensym(decl_symtab, "foo");
     if (ts == NULL) {
         printf("could not find foo tokensym in declaration symtab\n");
         return(1);
@@ -87,7 +132,7 @@ int main(int argc, char **argv)
         printf("foo TokenSym in declaration has no sym_identifier\n");
         return(1);
     }
-    Sym * foo_decl = ts->sym_identifier;
+    exsymtabSym * foo_decl = ts->sym_identifier;
 
     ts = tcc_get_extended_tokensym(def_symtab, "foo");
     if (ts == NULL) {
@@ -98,10 +143,10 @@ int main(int argc, char **argv)
         printf("foo TokenSym in definition has no sym_identifier\n");
         return(1);
     }
-    Sym * foo_def = ts->sym_identifier;
+    exsymtabSym * foo_def = ts->sym_identifier;
 
     diag("Before dependent compilation");
-    compare_funcs(foo_decl, foo_def);
+    compare_two_syms(foo_decl, foo_def, 0);
 
     /* compile the dependent code block */
     TCCState *s_consumer = tcc_new();
@@ -110,19 +155,19 @@ int main(int argc, char **argv)
     setup_and_compile_second_state(s_consumer, consumer_code);
 
     diag("After dependent compilation, before symbol addition");
-    compare_funcs(foo_decl, foo_def);
+    compare_two_syms(foo_decl, foo_def, 0);
 
     tcc_add_symbol(s_consumer, "foo", foo_ptr);
 
     diag("After symbol addition, before relocation & free");
-    compare_funcs(foo_decl, foo_def);
+    compare_two_syms(foo_decl, foo_def, 0);
 
     relocate_second_state(s_consumer);
     tcc_free(s_consumer);
 
     /* ---- Compare them ---- */
     diag("After dependent compilation");
-    compare_funcs(foo_decl, foo_def);
+    compare_two_syms(foo_decl, foo_def, 0);
 
     /* Clean up */
     tcc_delete_extended_symbol_table(def_symtab);

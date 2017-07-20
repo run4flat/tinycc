@@ -56,7 +56,7 @@ void setup_mock_data (second_callback_data *mock, void * data)
     }
 }
 
-TokenSym_p my_lookup_by_name (char * name, int len, void * data, extended_symtab_p*containing_symtab)
+exsymtabTokenSym_p my_lookup_by_name (char * name, int len, void * data, extended_symtab_p*containing_symtab)
 {
     /* Simply wrap the testing infrastructure's call appropriately */
     second_callback_data mock;

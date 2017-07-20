@@ -2516,7 +2516,7 @@ static void parse_number(const char *p)
 
 /* #ifdef CONFIG_TCC_EXSYMTAB */
 /* MUST NEVER RETURN NULL (or if it does, call sites must be updated to handle that) */
-TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, extended_symtab* orig_symtab) {
+TokenSym * get_local_ts_for_extended_ts(exsymtabTokenSym* orig_symtab_ts, extended_symtab* orig_symtab) {
        /* Look up the original tokensym in the extended symbol and see if an
         * identically named symbol is already present in the current compiling
         * context's symbol table. */
@@ -2530,7 +2530,7 @@ TokenSym * get_local_ts_for_extended_ts(TokenSym* orig_symtab_ts, extended_symta
         * Fallback to original (and warn) if we get nothing. */
        if (local_ts == NULL) {
                extended_symtab * highest_precedent_symtab;
-               TokenSym* highest_precedent_ts;
+               exsymtabTokenSym* highest_precedent_ts;
                highest_precedent_ts = tcc_state->symtab_name_callback(
                        orig_symtab_ts->str, orig_symtab_ts->len,
                        tcc_state->symtab_callback_data, &highest_precedent_symtab);
@@ -2730,7 +2730,7 @@ maybe_newline:
              * just-created TokenSym. */
             if (tcc_state->symtab_name_callback) {
                 extended_symtab* containing_symtab;
-                TokenSym * extended_ts = tcc_state->symtab_name_callback(
+                exsymtabTokenSym * extended_ts = tcc_state->symtab_name_callback(
                         p1, len, tcc_state->symtab_callback_data, &containing_symtab);
                 if (extended_ts) {
                     local_stack_off(); /* backup */

@@ -108,7 +108,7 @@ LIBTCCAPI void *tcc_get_symbol(TCCState *s, const char *name);
 /* ---- Extended symbol table management ---- */
 /**********************************************/
 
-typedef struct TokenSym* TokenSym_p;
+typedef struct exsymtabTokenSym* exsymtabTokenSym_p;
 typedef struct extended_symtab* extended_symtab_p;
 
 /*** For building a symbol table ***/
@@ -118,8 +118,8 @@ LIBTCCAPI void tcc_save_extended_symtab(TCCState * s);
 LIBTCCAPI extended_symtab_p tcc_get_extended_symbol_table(TCCState * s);
 /* Free an extended symbol table */
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab_p symtab);
-/* Get a TokenSym from an extended symbol table */
-LIBTCCAPI TokenSym_p tcc_get_extended_tokensym(extended_symtab_p symtab, const char * name);
+/* Get an exsymtabTokenSym from an extended symbol table */
+LIBTCCAPI exsymtabTokenSym_p tcc_get_extended_tokensym(extended_symtab_p symtab, const char * name);
 /* Get a Symbol (i.e. function pointer) from an extended symbol table */
 LIBTCCAPI void * tcc_get_extended_symbol(extended_symtab_p symtab, const char * name);
 /* Set a Symbol pointer, i.e. handle linking by hand without needing a TCCState */
@@ -133,7 +133,7 @@ LIBTCCAPI int tcc_set_extended_symbol(extended_symtab_p symtab, const char * nam
 LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
 /* Callback function signature for lookup-by-name:
  * TokenSym_p my_callback(char * name, int len, void * data, extended_symtab_p* containing_symtab) */
-typedef TokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name,
+typedef exsymtabTokenSym_p (*extended_symtab_lookup_by_name_callback)(char * name,
        int len, void * data, extended_symtab_p* containing_symtab);
 /* Callback function signature for sym-is-used:
  * void my_callback(char * name, int len, void * data) */
