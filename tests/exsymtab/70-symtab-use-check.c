@@ -57,44 +57,6 @@ void compare_two_syms (exsymtabSym * decl, exsymtabSym * def, int indentation) {
 	}
 }
 
-void compare_funcs(Sym * foo_decl, Sym * foo_def)
-{
-    is_i(foo_def->r, foo_decl->r, "foo->r agree");
-    is_i(foo_def->c, foo_decl->c, "foo->c agree");
-    is_i(foo_def->type.t, foo_decl->type.t, "foo->type.t agree");
-
-    Sym * def_ret = foo_def->type.ref;
-    Sym * dec_ret = foo_decl->type.ref;
-
-    /* This is the only difference. The value 0x10000 indicates "This is just a
-     * prototype," which means a later definition is allowed. I do not want a
-     * later redefinition for functions that have been defined in an earlier
-     * context, so these are allowed (and encouraged) to differ.
-     */
-    is_i(dec_ret->r, 0x1000, "declaration ret->r is 0x01000");
-    is_i(def_ret->r, 0x11000,  "definition  ret->r is 0x11000");
-    is_i(def_ret->c, dec_ret->c, "ret->r agree");
-    is_i(def_ret->type.t, dec_ret->type.t, "ret->type.t agree");
-
-    Sym * def_arg1 = def_ret->next;
-    Sym * dec_arg1 = dec_ret->next;
-    is_i(def_arg1->r, dec_arg1->r, "arg1->r agree");
-    is_i(def_arg1->c, dec_arg1->c, "arg1->c agree");
-    is_i(def_arg1->type.t, dec_arg1->type.t, "arg1->type.t agree");
-
-    Sym * def_arg2 = def_arg1->next;
-    Sym * dec_arg2 = dec_arg1->next;
-    is_i(def_arg2->r, dec_arg2->r, "arg2->r agree");
-    is_i(def_arg2->c, dec_arg2->c, "arg2->c agree");
-    is_i(def_arg2->type.t, dec_arg2->type.t, "arg2->type.t agree");
-
-    Sym * def_arg2pt = def_arg2->type.ref;
-    Sym * dec_arg2pt = dec_arg2->type.ref;
-    is_i(def_arg2pt->r, dec_arg2pt->r, "arg2pt->r agree");
-    is_i(def_arg2pt->c, dec_arg2pt->c, "arg2pt->c agree");
-    is_i(def_arg2pt->type.t, dec_arg2pt->type.t, "arg2pt->type.t agree");
-}
-
 int main(int argc, char **argv)
 {
     TCCState *s_decl = tcc_new();
