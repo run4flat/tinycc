@@ -1,0 +1,9 @@
+The following files were removed by grischka. They may be important for Windows Perl builds:
+
+delete mode 100644 win32/include/winapi/intrin.h
+delete mode 100644 win32/include/winapi/reason.h
+delete mode 100644 win32/include/winapi/specstrings.h
+delete mode 100644 win32/include/winapi/stralign.h
+delete mode 100644 win32/include/winapi/winnetwk.h
+delete mode 100644 win32/include/winapi/winnls.h
+
