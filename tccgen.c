@@ -547,6 +547,10 @@ ST_INLN Sym *sym_find(int v)
             tcc_state->symtab_sym_used_callback(ts->str, ts->len,
                 tcc_state->symtab_callback_data);
         }
+        /* XXX I wonder if this needs to issue a warning for non-extern,
+         * such as static variables. C::Blocks inexplicably fails to
+         * compile when one attempts to use variables from an exsymtab
+         * that are declared as static. */
     }
 /* #endif */
 

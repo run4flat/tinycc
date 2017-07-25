@@ -1402,11 +1402,24 @@ Sym * copy_extended_sym (extended_symtab * symtab, exsymtabSym * from, int to_to
              * remaining elements of the next chain. Thus, we're done. */
             return s;
         }
+        
+        new_tok = get_local_tok_for_extended_tok(from_next->v, symtab);
+        if (from->next->type.t & VT_ENUM_VAL)
+        {
+			TokenSym * new_ts;
+			/* Enumerated symbols should have their "next" refer directly
+			 * to the corresponding token's sym_identifier. Getting that
+			 * will also cause all other .next fields to be filled out,
+			 * so we are done after this. */
+			new_tok &= ~SYM_EXTENDED;
+			new_ts = table_ident[new_tok - TOK_IDENT];
+			*psnext = new_ts->sym_identifier;
+			return s;
+		}
 
         /* Push a copy of the Sym to the local symbol stack. */
         copy_ctype(new_next_type, from_next, symtab);
-        new_tok = get_local_tok_for_extended_tok(from_next->v, symtab);
-        *psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
+		*psnext = sym_push(new_tok, &new_next_type, from_next->r, from_next->c);
 
         /* Cycle the pointers. */
         from_next = from_next->next;
