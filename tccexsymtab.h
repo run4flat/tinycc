@@ -117,7 +117,7 @@ LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, co
 /*                      Pre-compilation TokenSym Prep                        */
 /*****************************************************************************/
 
-LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab * symtab);
+/* tcc_prep_tokensym_list declared in libtcc.h */
 
 /*****************************************************************************/
 /*                      copy extended symbol into local                      */

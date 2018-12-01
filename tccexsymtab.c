@@ -1052,6 +1052,12 @@ LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab * symtab)
         int flagless_tok = ext_ts->tok & ~(SYM_STRUCT | SYM_FIELD | SYM_EXTENDED | SYM_FIRST_ANOM);
         TokenSym * local_ts = table_ident[flagless_tok - TOK_IDENT];
 
+        /* Safety check: do these refer to the same token string??? */
+        if (ext_ts->len != local_ts->len || strncmp(ext_ts->str, local_ts->str, ext_ts->len) != 0)
+            tcc_error("Extended symbol table has mis-matched universal token at offset %d:\n"
+				"  local symbol is [%s], but extended symbol is [%s]",
+				i, local_ts->str, ext_ts->str);
+        
         /* Skip if we've already copied something for this TokenSym from another
          * extended symbol table, since it'll never get looked up in this
          * extended symbol table. */
