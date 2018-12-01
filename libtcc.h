@@ -129,7 +129,9 @@ LIBTCCAPI int tcc_set_extended_symbol(extended_symtab_p symtab, const char * nam
 /* Adds details for TokenSyms whose token ids are added to *all* compilation
  * contexts, tokens like "push" and "str". NOTE: This function acts on
  * the currently compiling table of identifiers by modifying table_ident
- * directly. Only use this after you have initialized a compiler state!!!! */
+ * directly. Only use this after you have initialized a compiler state!!!!
+ * Fails via tcc_error() if an extended token symbol and local token
+ * symbol have different names. */
 LIBTCCAPI void tcc_prep_tokensym_list(extended_symtab_p symtab);
 /* Callback function signature for lookup-by-name:
  * TokenSym_p my_callback(char * name, int len, void * data, extended_symtab_p* containing_symtab) */
