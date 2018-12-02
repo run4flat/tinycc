@@ -794,9 +794,9 @@ int should_copy_TokenSym(TokenSym * to_check, int tok_start)
 /* Make a complete copy of the TokenSym and Sym tables, using a ram_hash
  * for the latter. */
 
-void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
+void copy_extended_symtab (TCCState * s, Sym * define_start)
 {
-    int i, N_tokens, tok_start_offset;
+    int i, N_tokens, tok_start_offset, tok_start;
     extended_symtab * to_return;
     int curr_tok_idx;
     ram_hash * sym_rh;
@@ -809,6 +809,7 @@ void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start)
      * before tok_start. (We know we'll at least have everything after
      * and including tok_start.) */
 
+    tok_start = s->symtab_tok_start;
     tok_start_offset = 0;
     for (i = 0; i < tok_start - TOK_IDENT; i++) {
         if (should_copy_TokenSym(table_ident[i], tok_start)) tok_start_offset++;

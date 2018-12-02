@@ -628,9 +628,6 @@ ST_FUNC int tcc_open(TCCState *s1, const char *filename)
 static int tcc_compile(TCCState *s1)
 {
     Sym *define_start;
-/* #ifdef CONFIG_TCC_EXSYMTAB */
-    int tok_start;
-/* #endif */
 
     define_start = define_stack;
     if (setjmp(s1->error_jmp_buf) == 0) {
@@ -639,8 +636,6 @@ static int tcc_compile(TCCState *s1)
 
         preprocess_start(s1);
 /* #ifdef CONFIG_TCC_EXSYMTAB */
-		/* Note where we start adding new tokens */
-		tok_start = tok_ident;
 		/* Perform tokensym preparation */
 		if (s1->symtab_prep_callback) s1->symtab_prep_callback(s1->symtab_callback_data);
 /* #endif */
@@ -662,7 +657,7 @@ static int tcc_compile(TCCState *s1)
         /* Make an extended copy of the symbol table, if requested */
         if (s1->nb_errors == 0 && s1->exsymtab == (extended_symtab*)1)
         {
-            copy_extended_symtab(s1, define_start, tok_start);
+            copy_extended_symtab(s1, define_start);
             /* Output the symbol table to a cache if requested */
             if (s1->symtab_serialize_outfile)
                 tcc_serialize_extended_symtab(s1->exsymtab, s1->symtab_serialize_outfile);
@@ -935,6 +930,13 @@ LIBTCCAPI TCCState *tcc_new(void)
     s->symtab_callback_data = NULL;
     s->symtab_serialize_outfile = NULL;
     s->dump_identifier_names_outfile = NULL;
+    /* __BASE_FILE__ is defined in preprocess_start, which is run before
+     * compilation actually begins. By defining it here, I can ensure
+     * it is contiguous contiguous in the symbol table with all other 
+     * universal symbols. */
+    tcc_define_symbol(s, "__BASE_FILE__", 0);
+    tcc_undefine_symbol(s, "__BASE_FILE__");
+    s->symtab_tok_start = tok_ident;
 /* #endif */
     /* Some GCC builtins that are simple to express as macros.  */
     tcc_define_symbol(s, "__builtin_extract_return_addr(x)", "x");

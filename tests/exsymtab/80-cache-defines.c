@@ -37,6 +37,11 @@ int main(int argc, char **argv)
     /* ---- Compile and cache the first code string ---- */
 
     TCCState *s1 = tcc_new();
+    /* define something "from the command line." This is meant to
+     * trigger disagreement between the "universal" portions of the
+     * cached and local symbol tables. */
+    tcc_define_symbol(s1, "foo", "bar");
+    /* setup */
     SIMPLE_SETUP(s1);
     tcc_save_extended_symtab(s1);
     if (tcc_compile_string(s1, def_code) == -1) return 1;
