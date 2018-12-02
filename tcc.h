@@ -792,6 +792,7 @@ struct TCCState {
     void * symtab_callback_data;
     char * symtab_serialize_outfile; /* option -serialize-symtab */
     char * dump_identifier_names_outfile; /* option -dump-identifier-names */
+    int symtab_tok_start;
 /* #endif */
 
     int option_pthread; /* -pthread option */

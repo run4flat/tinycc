@@ -106,7 +106,7 @@ Sym * get_new_symtab_pointer (Sym * old, ram_hash * rh);
 Sym * get_new_deftab_pointer (Sym * old, ram_hash * rh);
 int tokenstream_copy (int * stream, int * to_stream, extended_symtab * symtab);
 #define tokenstream_len(stream) tokenstream_copy(stream, 0, 0)
-void copy_extended_symtab (TCCState * s, Sym * define_start, int tok_start);
+void copy_extended_symtab (TCCState * s, Sym * define_start);
 LIBTCCAPI void tcc_delete_extended_symbol_table (extended_symtab * symtab);
 LIBTCCAPI int tcc_extended_symtab_test(extended_symtab * symtab, int to_test, const char * name);
 
