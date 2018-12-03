@@ -21,13 +21,25 @@ void compare_funcs(Sym * foo_decl, Sym * foo_def)
     Sym * def_ret = foo_def->type.ref;
     Sym * dec_ret = foo_decl->type.ref;
 
-    /* This is the only difference. The value 0x10000 indicates "This is just a
-     * prototype," which means a later definition is allowed. I do not want a
-     * later redefinition for functions that have been defined in an earlier
-     * context, so these are allowed (and encouraged) to differ.
+    /* Syms have a union of the "a" and "r" members. Here we focus on
+     * "a" since it applies to functions. All but one should be the same.
      */
-    is_i(dec_ret->r, 0x11000, "declaration ret->r is 0x11000");
-    is_i(def_ret->r, 0x1000,  "definition  ret->r is 0x01000");
+    #define check_attribute(field, description) \
+		is_i(dec_ret->a.field, def_ret->a.field, "foo " description " agree");
+    check_attribute(func_call, "calling covention");
+    check_attribute(aligned, "alignment");
+    check_attribute(packed, "packed (?)");
+    check_attribute(func_export, "func_export (?)");
+    check_attribute(func_import, "func_import (?)");
+    check_attribute(func_args, "number of arguments");
+    /* THE ONLY DIFFERENCE: whether the function body is present */
+    is_i(dec_ret->a.func_body, 0, "declaration does not have a function body");
+    is_i(def_ret->a.func_body, 1, "definition **does** have a function body");
+    /* the rest are the same... */
+    check_attribute(mode, "mode (whatever that means)");
+    check_attribute(weak, "weakness");
+    check_attribute(visibility, "visibility");
+    
     is_i(def_ret->c, dec_ret->c, "ret->r agree");
     is_i(def_ret->type.t, dec_ret->type.t, "ret->type.t agree");
 
